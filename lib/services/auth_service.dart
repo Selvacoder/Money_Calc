@@ -39,6 +39,10 @@ class AuthService {
     return email?.split('@')[0];
   }
 
+  Future<Map<String, dynamic>?> getCurrentUser() async {
+    return await _appwrite.getCurrentUser();
+  }
+
   Future<void> logout() async {
     await _appwrite.logout();
   }

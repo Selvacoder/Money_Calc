@@ -367,6 +367,24 @@ class AppwriteService {
     }
   }
 
+  Future<bool> updateCategory(
+    String categoryId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.categoriesCollectionId,
+        documentId: categoryId,
+        data: data,
+      );
+      return true;
+    } catch (e) {
+      print('Error updating category: $e');
+      return false;
+    }
+  }
+
   Future<bool> deleteCategory(String categoryId) async {
     try {
       // 1. Delete associated items first
@@ -390,8 +408,8 @@ class AppwriteService {
     }
   }
 
-  // Get Top Items (Sorted by usage, limited)
-  Future<List<Map<String, dynamic>>> getTopItems({int limit = 8}) async {
+  // Get Quick Items (All items, manual list)
+  Future<List<Map<String, dynamic>>> getQuickItems() async {
     try {
       final user = await account.get();
       final result = await databases.listDocuments(
@@ -399,8 +417,8 @@ class AppwriteService {
         collectionId: AppwriteConfig.itemsCollectionId,
         queries: [
           Query.equal('userId', [user.$id]),
-          Query.orderDesc('usageCount'),
-          Query.limit(limit),
+          Query.orderDesc('\$createdAt'), // Newest first
+          Query.limit(100),
         ],
       );
 
@@ -410,7 +428,7 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching top items: $e');
+      print('Error fetching quick items: $e');
       return [];
     }
   }
@@ -451,6 +469,7 @@ class AppwriteService {
         'categoryId': data['categoryId'],
         'usageCount': 0,
         'frequency': data['frequency'] ?? 'daily',
+        'icon': data['icon'],
       };
 
       final doc = await databases.createDocument(
@@ -466,6 +485,21 @@ class AppwriteService {
     } catch (e) {
       print('Error creating item: $e');
       rethrow; // Rethrow to let UI handle the error
+    }
+  }
+
+  Future<bool> updateItem(String itemId, Map<String, dynamic> data) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.itemsCollectionId,
+        documentId: itemId,
+        data: data,
+      );
+      return true;
+    } catch (e) {
+      print('Error updating item: $e');
+      return false;
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'settings/notifications_screen.dart';
 import 'settings/theme_screen.dart';
 import 'settings/privacy_screen.dart';
@@ -20,7 +21,12 @@ class AccountScreen extends StatefulWidget {
     required this.profile,
     required this.onLogout,
     required this.onUpdateProfile,
+    required this.currencySymbol,
+    required this.onUpdateCurrency,
   });
+
+  final String currencySymbol;
+  final Function(String) onUpdateCurrency;
 
   @override
   State<AccountScreen> createState() => _AccountScreenState();
@@ -168,6 +174,122 @@ class _AccountScreenState extends State<AccountScreen> {
             child: const Text('Logout'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showCurrencyDialog() async {
+    final currencies = {
+      'USD': '\$',
+      'EUR': '€',
+      'INR': '₹',
+      'GBP': '£',
+      'JPY': '¥',
+      'CAD': 'C\$',
+      'AUD': 'A\$',
+    };
+
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Currency',
+                style: GoogleFonts.inter(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: currencies.length,
+                  itemBuilder: (context, index) {
+                    final key = currencies.keys.elementAt(index);
+                    final symbol = currencies[key]!;
+                    final isSelected = widget.currencySymbol == symbol;
+
+                    return InkWell(
+                      onTap: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setString('currency_symbol', symbol);
+                        widget.onUpdateCurrency(symbol);
+                        if (mounted) Navigator.pop(context);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primaryContainer
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                symbol,
+                                style: GoogleFonts.inter(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              key,
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (isSelected)
+                              Icon(
+                                Icons.check_circle,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -328,6 +450,15 @@ class _AccountScreenState extends State<AccountScreen> {
                         )
                         .animate()
                         .fadeIn(delay: 200.ms)
+                        .slideX(begin: 0.1, end: 0),
+                    _buildSettingsOption(
+                          icon: Icons.currency_exchange,
+                          title: 'Currency',
+                          subtitle: 'Current: ${widget.currencySymbol}',
+                          onTap: _showCurrencyDialog,
+                        )
+                        .animate()
+                        .fadeIn(delay: 225.ms)
                         .slideX(begin: 0.1, end: 0),
                     _buildSettingsOption(
                           icon: Icons.palette_outlined,

@@ -7,6 +7,7 @@ class Item {
   final String categoryId;
   final int usageCount;
   final String? frequency; // 'daily' or 'monthly'
+  final String? icon;
 
   Item({
     required this.id,
@@ -17,6 +18,7 @@ class Item {
     required this.categoryId,
     this.usageCount = 0,
     this.frequency = 'daily',
+    this.icon,
   });
 
   Map<String, dynamic> toJson() {
@@ -29,6 +31,7 @@ class Item {
       'categoryId': categoryId,
       'usageCount': usageCount,
       'frequency': frequency,
+      'icon': icon,
     };
   }
 
@@ -44,6 +47,7 @@ class Item {
       categoryId: json['categoryId'] ?? '',
       usageCount: json['usageCount'] ?? 0,
       frequency: json['frequency'] ?? 'daily',
+      icon: json['icon'],
     );
   }
 }

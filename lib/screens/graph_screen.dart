@@ -207,8 +207,8 @@ class _GraphScreenState extends State<GraphScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: isSelected
-                  ? const Color(0xFF5B5FED)
-                  : Colors.grey.shade100,
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -228,7 +228,7 @@ class _GraphScreenState extends State<GraphScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -240,7 +240,7 @@ class _GraphScreenState extends State<GraphScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E1E1E),
+                  color: Theme.of(context).colorScheme.onBackground,
                 ),
               ),
               const SizedBox(height: 24),
@@ -306,13 +306,11 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5B5FED), Color(0xFF7B7FF8)],
-        ),
+        color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5B5FED).withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -439,7 +437,7 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -461,7 +459,7 @@ class _GraphScreenState extends State<GraphScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E1E1E),
+                  color: Theme.of(context).colorScheme.onBackground,
                 ),
               ),
               _buildPeriodChips(_balanceDistributionPeriod, (period) {
@@ -533,7 +531,7 @@ class _GraphScreenState extends State<GraphScreen> {
   Widget _buildStatisticsCards() {
     int transactionCount = widget.transactions.length;
     double avgTransaction = transactionCount > 0
-        ? (widget.totalIncome + widget.totalExpenses) / transactionCount
+        ? (widget.totalIncome - widget.totalExpenses) / transactionCount
         : 0;
 
     int incomeCount = widget.transactions.where((t) => !t.isExpense).length;
@@ -597,7 +595,7 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -722,7 +720,7 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -744,7 +742,7 @@ class _GraphScreenState extends State<GraphScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E1E1E),
+                  color: Theme.of(context).colorScheme.onBackground,
                 ),
               ),
               _buildPeriodChips(_spendingTrendPeriod, (period) {
@@ -807,7 +805,7 @@ class _GraphScreenState extends State<GraphScreen> {
               margin: const EdgeInsets.only(bottom: 4),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF5B5FED),
+                color: Theme.of(context).colorScheme.primary,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -824,13 +822,9 @@ class _GraphScreenState extends State<GraphScreen> {
           Container(
             width: 32,
             height: (heightPercent * 100).clamp(4.0, 100.0),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF5B5FED), Color(0xFF7B7FF8)],
-              ),
-              borderRadius: BorderRadius.all(Radius.circular(8)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
             ),
           ),
           const SizedBox(height: 8),
@@ -868,7 +862,7 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -957,7 +951,7 @@ class _GraphScreenState extends State<GraphScreen> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );
@@ -1033,13 +1027,11 @@ class _GraphScreenState extends State<GraphScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF6B6B), Color(0xFFFF8787)],
-        ),
+        color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF6B6B).withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

@@ -4,6 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import 'settings/notifications_screen.dart';
+import 'settings/theme_screen.dart';
+import 'settings/privacy_screen.dart';
+import 'settings/help_screen.dart';
+import 'settings/about_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   final UserProfile profile;
@@ -108,7 +113,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color(0xFF5B5FED),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -170,7 +175,7 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -179,10 +184,8 @@ class _AccountScreenState extends State<AccountScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(32),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF5B5FED), Color(0xFF7B7FF8)],
-                  ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 child: Column(
                   children: [
@@ -204,7 +207,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       child: Icon(
                         Icons.person,
                         size: 50,
-                        color: const Color(0xFF5B5FED),
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ).animate().scale(
                       delay: 100.ms,
@@ -241,7 +244,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       label: const Text('Edit Profile'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFF5B5FED),
+                        foregroundColor: Theme.of(context).colorScheme.primary,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 24,
                           vertical: 12,
@@ -266,7 +269,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1E1E1E),
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -307,7 +310,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1E1E1E),
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -316,17 +319,40 @@ class _AccountScreenState extends State<AccountScreen> {
                           icon: Icons.notifications_outlined,
                           title: 'Notifications',
                           subtitle: 'Manage your notifications',
-                          onTap: () {},
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const NotificationsScreen(),
+                            ),
+                          ),
                         )
                         .animate()
-                        .fadeIn(delay: 250.ms)
-                        .slideX(begin: 0.2, end: 0),
-
+                        .fadeIn(delay: 200.ms)
+                        .slideX(begin: 0.1, end: 0),
+                    _buildSettingsOption(
+                          icon: Icons.palette_outlined,
+                          title: 'Appearance',
+                          subtitle: 'Theme & Accent Color',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ThemeScreen(),
+                            ),
+                          ),
+                        )
+                        .animate()
+                        .fadeIn(delay: 225.ms)
+                        .slideX(begin: 0.1, end: 0),
                     _buildSettingsOption(
                           icon: Icons.lock_outline,
                           title: 'Privacy & Security',
                           subtitle: 'Manage your privacy settings',
-                          onTap: () {},
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PrivacyScreen(),
+                            ),
+                          ),
                         )
                         .animate()
                         .fadeIn(delay: 300.ms)
@@ -336,7 +362,12 @@ class _AccountScreenState extends State<AccountScreen> {
                           icon: Icons.help_outline,
                           title: 'Help & Support',
                           subtitle: 'Get help and support',
-                          onTap: () {},
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const HelpScreen(),
+                            ),
+                          ),
                         )
                         .animate()
                         .fadeIn(delay: 350.ms)
@@ -346,7 +377,12 @@ class _AccountScreenState extends State<AccountScreen> {
                           icon: Icons.info_outline,
                           title: 'About',
                           subtitle: 'Version 1.0.0',
-                          onTap: () {},
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AboutScreen(),
+                            ),
+                          ),
                         )
                         .animate()
                         .fadeIn(delay: 400.ms)
@@ -361,7 +397,9 @@ class _AccountScreenState extends State<AccountScreen> {
                         icon: const Icon(Icons.logout),
                         label: const Text('Logout'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6B6B),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -391,7 +429,7 @@ class _AccountScreenState extends State<AccountScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -406,10 +444,14 @@ class _AccountScreenState extends State<AccountScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF5B5FED).withOpacity(0.1),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: const Color(0xFF5B5FED), size: 24),
+            child: Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -429,7 +471,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF1E1E1E),
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
               ],
@@ -453,7 +495,7 @@ class _AccountScreenState extends State<AccountScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -483,7 +525,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1E1E1E),
+                      color: Theme.of(context).colorScheme.onBackground,
                     ),
                   ),
                   const SizedBox(height: 2),

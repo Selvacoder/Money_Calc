@@ -2,43 +2,69 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'dart:ui';
 import 'models/transaction.dart';
-import 'models/quick_entry.dart';
+import 'models/category.dart';
+import 'models/item.dart';
 import 'models/user_profile.dart';
-import 'services/storage_service.dart';
 import 'services/auth_service.dart';
+import 'services/appwrite_service.dart';
+import 'services/sound_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/graph_screen.dart';
 import 'screens/account_screen.dart';
+import 'screens/biometric_auth_screen.dart';
+import 'package:track_expense/providers/theme_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  runApp(const MoneyCalcApp());
+  // Initialize Appwrite
+  WidgetsFlutterBinding.ensureInitialized();
+  AppwriteService().init();
+
+  final themeProvider = ThemeProvider();
+
+  runApp(MoneyCalcApp(themeProvider: themeProvider));
 }
 
 class MoneyCalcApp extends StatelessWidget {
-  const MoneyCalcApp({super.key});
+  final ThemeProvider themeProvider;
+
+  const MoneyCalcApp({super.key, required this.themeProvider});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'MoneyCalc',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF5B5FED),
-          brightness: Brightness.light,
-        ),
-        textTheme: GoogleFonts.interTextTheme(),
-        useMaterial3: true,
-      ),
-      home: const AuthWrapper(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignUpScreen(),
-        '/home': (context) => const HomePage(),
+    return ListenableBuilder(
+      listenable: themeProvider,
+      builder: (context, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'MoneyCalc',
+          themeMode: themeProvider.themeMode,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: themeProvider.seedColor,
+              brightness: Brightness.light,
+            ),
+            textTheme: GoogleFonts.interTextTheme(),
+            useMaterial3: true,
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: themeProvider.seedColor,
+              brightness: Brightness.dark,
+            ),
+            textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+            useMaterial3: true,
+          ),
+          home: const AuthWrapper(),
+          routes: {
+            '/login': (context) => const LoginScreen(),
+            '/signup': (context) => const SignUpScreen(),
+            '/home': (context) => const HomePage(),
+          },
+        );
       },
     );
   }
@@ -50,8 +76,8 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: AuthService().isLoggedIn(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _checkAuthAndBiometrics(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -59,13 +85,28 @@ class AuthWrapper extends StatelessWidget {
           );
         }
 
-        if (snapshot.data == true) {
+        final data = snapshot.data;
+        if (data?['isLoggedIn'] == true) {
+          if (data?['biometricEnabled'] == true) {
+            return const BiometricAuthScreen();
+          }
           return const HomePage();
         }
 
         return const LoginScreen();
       },
     );
+  }
+
+  Future<Map<String, dynamic>> _checkAuthAndBiometrics() async {
+    final isLoggedIn = await AuthService().isLoggedIn();
+    if (!isLoggedIn) {
+      return {'isLoggedIn': false, 'biometricEnabled': false};
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final biometricEnabled = prefs.getBool('biometric_enabled') ?? false;
+    return {'isLoggedIn': true, 'biometricEnabled': biometricEnabled};
   }
 }
 
@@ -77,12 +118,17 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  final StorageService _storageService = StorageService();
+  final AppwriteService _appwriteService = AppwriteService();
   List<Transaction> _transactions = [];
-  List<QuickEntry> _quickEntries = [];
+  List<Category> _categories = [];
+  List<Item> _items = []; // Items for the selected category
+  List<Item> _quickItems = []; // Frequently used items (Global)
+  String? _selectedCategoryId;
   UserProfile _userProfile = UserProfile.getDefault();
   bool _isLoading = true;
   int _selectedIndex = 0;
+  int _recentTransactionsLimit = 5;
+  int _categoryItemsLimit = 9;
 
   @override
   void initState() {
@@ -91,14 +137,126 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _loadData() async {
-    final transactions = await _storageService.loadTransactions();
-    final quickEntries = await _storageService.loadQuickEntries();
+    setState(() => _isLoading = true);
 
-    setState(() {
-      _transactions = transactions;
-      _quickEntries = quickEntries;
-      _isLoading = false;
-    });
+    try {
+      // Load User Profile from Auth
+      final userData = await _appwriteService.getCurrentUser();
+      if (userData != null) {
+        _userProfile = UserProfile(
+          name: userData['name'],
+          email: userData['email'],
+          phone: userData['phone'],
+          photoUrl: '', // Placeholder
+          joinDate: DateTime.parse(userData['joinDate']),
+        );
+      }
+
+      // Load Transactions
+      final transactionData = await _appwriteService.getTransactions();
+      final transactions = transactionData
+          .map((data) {
+            try {
+              return Transaction.fromJson(data);
+            } catch (e) {
+              return null;
+            }
+          })
+          .whereType<Transaction>()
+          .toList();
+
+      // Load Categories
+      await _loadCategories();
+      final categories = _categories;
+
+      List<Item> items = [];
+      String? initialCategoryId;
+
+      // Load Top Items (Quick Items)
+      await _loadQuickItems();
+
+      // Load Items for the first category if available
+      if (categories.isNotEmpty) {
+        initialCategoryId = categories.first.id;
+        final itemData = await _appwriteService.getItems(initialCategoryId);
+        items = itemData
+            .map((data) {
+              try {
+                return Item.fromJson(data);
+              } catch (e) {
+                return null;
+              }
+            })
+            .whereType<Item>()
+            .toList();
+      }
+
+      if (mounted) {
+        setState(() {
+          _transactions = transactions;
+          _categories = categories;
+          _selectedCategoryId = initialCategoryId;
+          _items = items;
+          // _quickItems is already set by _loadQuickItems()
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categoryData = await _appwriteService.getCategories();
+      final categories = categoryData
+          .map((data) {
+            try {
+              return Category.fromJson(data);
+            } catch (e) {
+              return null;
+            }
+          })
+          .whereType<Category>()
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _categories = categories;
+        });
+      }
+    } catch (e) {
+      print('Error loading categories: $e');
+    }
+  }
+
+  Future<void> _loadQuickItems() async {
+    try {
+      final quickItemData = await _appwriteService.getTopItems();
+      final quickItems = quickItemData
+          .map((data) {
+            try {
+              return Item.fromJson(data);
+            } catch (e) {
+              return null;
+            }
+          })
+          .whereType<Item>()
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _quickItems = quickItems;
+        });
+      }
+    } catch (e) {
+      print('Error loading quick items: $e');
+    }
   }
 
   double get totalBalance {
@@ -128,29 +286,86 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _addTransaction(
     String title,
     double amount,
-    bool isExpense,
-  ) async {
-    final transaction = Transaction(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+    bool isExpense, {
+    String? categoryId,
+    String? itemId,
+  }) async {
+    SoundService().play(isExpense ? 'expense.mp3' : 'income.mp3');
+
+    // 1. Create locally for immediate UI update (Optimistic)
+    final tempId = DateTime.now().toString();
+    final newTransaction = Transaction(
+      id: tempId,
       title: title,
       amount: amount,
       isExpense: isExpense,
       dateTime: DateTime.now(),
+      categoryId: categoryId,
+      itemId: itemId,
     );
 
     setState(() {
-      _transactions.insert(0, transaction);
+      _transactions.insert(0, newTransaction);
     });
 
-    await _storageService.saveTransactions(_transactions);
+    // 2. Save to Appwrite
+    final result = await _appwriteService.createTransaction(
+      newTransaction.toJson(),
+    );
+
+    // 3. Update with real ID if successful, or revert if failed
+    if (result != null) {
+      setState(() {
+        final index = _transactions.indexWhere((t) => t.id == tempId);
+        if (index != -1) {
+          _transactions[index] = Transaction.fromJson(result);
+        }
+      });
+      // Refresh Quick Items (Most Used) to reflect new usage
+      _loadQuickItems();
+      await _loadCategories(); // Refresh Categories order
+    } else {
+      // Revert optimization on failure
+      setState(() {
+        _transactions.removeWhere((t) => t.id == tempId);
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save transaction')),
+        );
+      }
+    }
   }
 
   Future<void> _deleteTransaction(String id) async {
+    SoundService().play('delete.mp3');
+
+    // 1. Remove locally
+    final index = _transactions.indexWhere((t) => t.id == id);
+    final removedItem = _transactions[index];
+
     setState(() {
-      _transactions.removeWhere((t) => t.id == id);
+      _transactions.removeAt(index);
     });
 
-    await _storageService.saveTransactions(_transactions);
+    // 2. Delete from Appwrite
+    final success = await _appwriteService.deleteTransaction(id);
+
+    // 3. Revert if failed
+    if (!success) {
+      setState(() {
+        _transactions.insert(index, removedItem);
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete transaction')),
+        );
+      }
+    } else {
+      // Success: Refresh Quick Items usage
+      _loadQuickItems();
+      await _loadCategories();
+    }
   }
 
   void _showAddDialog(BuildContext context) {
@@ -173,8 +388,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.white,
-                  const Color(0xFF5B5FED).withOpacity(0.05),
+                  Theme.of(context).cardColor,
+                  Theme.of(context).colorScheme.primary.withOpacity(0.05),
                 ],
               ),
             ),
@@ -187,7 +402,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   style: GoogleFonts.inter(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E1E1E),
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -195,7 +410,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 // Transaction Type Toggle
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: Theme.of(context).colorScheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -282,15 +497,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     labelText: 'Title',
                     hintText: 'Enter transaction name',
                     filled: true,
-                    fillColor: Colors.grey.shade50,
+                    fillColor: Theme.of(context).colorScheme.surfaceVariant,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF5B5FED),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
                         width: 2,
                       ),
                     ),
@@ -307,15 +522,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     hintText: 'Enter amount',
                     prefixText: '₹',
                     filled: true,
-                    fillColor: Colors.grey.shade50,
+                    fillColor: Theme.of(context).colorScheme.surfaceVariant,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF5B5FED),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
                         width: 2,
                       ),
                     ),
@@ -355,7 +570,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         },
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: const Color(0xFF5B5FED),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -375,35 +592,34 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _addQuickEntry() async {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    bool isExpense = true;
+  Future<void> _showAddCategoryDialog() async {
+    final nameController = TextEditingController();
+    bool isExpense = true; // 'expense' or 'income'
 
-    await showDialog<bool>(
+    await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          child: Container(
+          child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Add Quick Entry',
+                  'New Category',
                   style: GoogleFonts.inter(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 20),
-
+                // Type Toggle
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: Theme.of(context).colorScheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -459,19 +675,125 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
                 TextField(
-                  controller: titleController,
+                  controller: nameController,
                   decoration: InputDecoration(
-                    labelText: 'Title',
+                    labelText: 'Category Name',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (nameController.text.isNotEmpty) {
+                        _addCategory(
+                          nameController.text,
+                          isExpense ? 'expense' : 'income',
+                        );
+                        Navigator.pop(context);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Create Category'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addCategory(String name, String type) async {
+    final newCategoryData = {
+      'name': name,
+      'type': type,
+      'icon': '57532', // Default icon
+    };
+
+    final result = await _appwriteService.createCategory(newCategoryData);
+    if (result != null) {
+      final newCategory = Category.fromJson(result);
+      setState(() {
+        _categories.add(newCategory);
+      });
+      // Auto-select the new category
+      _onCategorySelected(newCategory);
+    }
+  }
+
+  Future<void> _showAddItemDialog() async {
+    if (_categories.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please create a category first')),
+      );
+      return;
+    }
+
+    final titleController = TextEditingController();
+    final amountController = TextEditingController();
+    // bool isExpense = true; // derived from category now
+    String selectedCatId = _selectedCategoryId ?? _categories.first.id;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'New Quick Item',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: selectedCatId,
+                  items: _categories.map((c) {
+                    return DropdownMenuItem(value: c.id, child: Text(c.name));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedCatId = val);
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Item Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: amountController,
                   keyboardType: TextInputType.number,
@@ -483,41 +805,38 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (titleController.text.isNotEmpty &&
+                          amountController.text.isNotEmpty) {
+                        // Find selected category to determine type
+                        final category = _categories.firstWhere(
+                          (c) => c.id == selectedCatId,
+                        );
+                        final isExpense = category.type == 'expense';
+
+                        _addItem(
+                          titleController.text,
+                          double.parse(amountController.text),
+                          isExpense,
+                          selectedCatId,
+                        );
+                        Navigator.pop(context);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (titleController.text.isNotEmpty &&
-                              amountController.text.isNotEmpty) {
-                            final entry = QuickEntry(
-                              title: titleController.text,
-                              amount: double.parse(amountController.text),
-                              isExpense: isExpense,
-                            );
-                            setState(() {
-                              _quickEntries.add(entry);
-                            });
-                            _storageService.saveQuickEntries(_quickEntries);
-                            Navigator.pop(context, true);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF5B5FED),
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Add'),
-                      ),
-                    ),
-                  ],
+                    child: const Text('Add Item'),
+                  ),
                 ),
               ],
             ),
@@ -527,6 +846,128 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  Future<void> _addItem(
+    String title,
+    double amount,
+    bool isExpense,
+    String categoryId,
+  ) async {
+    final newItemData = {
+      'title': title,
+      'amount': amount,
+      'isExpense': isExpense,
+      'categoryId': categoryId,
+      'frequency': 'daily',
+    };
+
+    try {
+      final result = await _appwriteService.createItem(newItemData);
+      if (result != null) {
+        final newItem = Item.fromJson(result);
+        setState(() {
+          if (_selectedCategoryId == categoryId) {
+            _items.insert(0, newItem);
+          } else {
+            _selectedCategoryId = categoryId;
+            _onCategorySelected(
+              _categories.firstWhere((c) => c.id == categoryId),
+            );
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item added successfully')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add item: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _confirmDeleteCategory(Category category) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Category'),
+        content: Text(
+          'Are you sure you want to delete "${category.name}"? This will not delete transactions but might hide them from filters.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteCategory(category.id);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteCategory(String categoryId) async {
+    SoundService().play('delete.mp3');
+
+    final success = await _appwriteService.deleteCategory(categoryId);
+    if (success) {
+      if (!mounted) return;
+
+      final indexToRemove = _categories.indexWhere((c) => c.id == categoryId);
+      if (indexToRemove == -1) return;
+
+      setState(() {
+        _categories.removeAt(indexToRemove);
+
+        // If we deleted the selected category, select another one
+        if (_selectedCategoryId == categoryId) {
+          if (_categories.isNotEmpty) {
+            // Try to keep the same index, or go to the last one
+            final newIndex = indexToRemove < _categories.length
+                ? indexToRemove
+                : _categories.length - 1;
+            _onCategorySelected(_categories[newIndex]);
+          } else {
+            _selectedCategoryId = null;
+            _items = [];
+          }
+        }
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Category deleted')));
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete category')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteItem(String itemId) async {
+    SoundService().play('delete.mp3');
+    final success = await _appwriteService.deleteItem(itemId);
+    if (success) {
+      setState(() {
+        _items.removeWhere((i) => i.id == itemId);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -534,17 +975,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: _selectedIndex == 0
           ? AppBar(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).colorScheme.background,
               elevation: 0,
               title: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF5B5FED),
+                      color: Theme.of(context).colorScheme.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -557,7 +998,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   Text(
                     'MoneyCalc',
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF1E1E1E),
+                      color: Theme.of(context).colorScheme.onBackground,
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
                     ),
@@ -585,8 +1026,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             });
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF5B5FED),
+          backgroundColor: Theme.of(context).cardColor,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
           unselectedItemColor: Colors.grey.shade400,
           selectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
           unselectedLabelStyle: GoogleFonts.inter(),
@@ -623,7 +1064,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       case 0:
         return _buildHomeScreen();
       case 1:
-        return HistoryScreen(transactions: _transactions);
+        return HistoryScreen(
+          transactions: _transactions,
+          categories: _categories,
+        );
       case 2:
         return GraphScreen(
           transactions: _transactions,
@@ -633,13 +1077,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       case 3:
         return AccountScreen(
           profile: _userProfile,
-          onLogout: () {
+          onLogout: () async {
             // Handle logout
+            await _appwriteService.logout();
+
             setState(() {
               _transactions = [];
               _userProfile = UserProfile.getDefault();
             });
-            _storageService.saveTransactions([]);
+
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed('/login');
+            }
           },
           onUpdateProfile: (profile) {
             setState(() {
@@ -671,8 +1120,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
           const SizedBox(height: 24),
 
-          // Quick Entry Section
-          _buildQuickEntrySection()
+          // Category & Items Section
+          _buildCategorySection()
               .animate()
               .fadeIn(duration: 600.ms, delay: 100.ms)
               .slideY(
@@ -702,17 +1151,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Widget _buildBalanceCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF5B5FED), Color(0xFF7B7FF8)],
-        ),
+        color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5B5FED).withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -749,9 +1194,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               letterSpacing: -1,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           Container(height: 1, color: Colors.white.withOpacity(0.2)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -808,7 +1253,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             Text(
               '₹${NumberFormat('#,##0.00').format(amount)}',
               style: GoogleFonts.inter(
-                color: Colors.white,
+                color: isIncome
+                    ? const Color(0xFF4ADE80) // Green for Income
+                    : const Color(0xFFFF6B6B), // Red for Expense
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -819,61 +1266,374 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildQuickEntrySection() {
+  // --- CATEGORY & ITEMS LOGIC ---
+
+  Future<void> _onCategorySelected(Category category) async {
+    setState(() {
+      _selectedCategoryId = category.id;
+      _categoryItemsLimit = 9; // Reset limit to 3x3
+    });
+    // Fetch items for this category
+    final itemData = await _appwriteService.getItems(category.id);
+    final items = itemData
+        .map((data) {
+          try {
+            return Item.fromJson(data);
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<Item>()
+        .toList();
+
+    if (mounted) {
+      setState(() {
+        _items = items;
+      });
+    }
+  }
+
+  // --- CATEGORY & ITEMS UI ---
+
+  Widget _buildCategorySection() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Quick Items (Most Used) - Global Top Items
+        // Always show Quick Items section
+        Text(
+          'Quick Items',
+          style: GoogleFonts.inter(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onBackground,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_quickItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24.0),
+            child: Text(
+              'No frequently used items yet.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          )
+        else ...[
+          SizedBox(
+            height: 110, // Adjusted height for shadow
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _quickItems.length,
+              itemBuilder: (context, index) {
+                final item = _quickItems[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: SizedBox(
+                    width: 100, // Fixed width for square look
+                    child:
+                        _buildItemButton(
+                              item,
+                              allowDelete: false,
+                            ) // Disable delete in Quick Items
+                            .animate()
+                            .fadeIn(delay: (index * 50).ms, duration: 400.ms),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // Categories List
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Quick Entry',
+              'Categories',
               style: GoogleFonts.inter(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E1E1E),
+                color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
-            TextButton.icon(
-              onPressed: _addQuickEntry,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Button'),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF5B5FED),
+            IconButton(
+              onPressed: _showAddCategoryDialog,
+              icon: Icon(
+                Icons.add_circle,
+                color: Theme.of(context).colorScheme.primary,
               ),
+              tooltip: 'Add Category',
             ),
           ],
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 120,
+          height: 40,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: _quickEntries.length,
+            itemCount: _categories.length,
             itemBuilder: (context, index) {
-              final entry = _quickEntries[index];
-              return _buildQuickEntryButton(entry)
+              final category = _categories[index];
+              return _buildCategoryBox(category)
                   .animate()
-                  .scale(delay: (index * 50).ms, duration: 400.ms)
+                  .slideX(begin: 0.2, end: 0, delay: (index * 30).ms)
                   .fadeIn();
             },
           ),
         ),
+        const SizedBox(height: 24),
+
+        // Selected Category Items (With Add Button)
+        if (_selectedCategoryId != null) ...[
+          if (_items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+              child: Text(
+                'No items yet. Add one below:',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          // Grid of Items (Last is Add Button)
+          GridView.builder(
+            padding: const EdgeInsets.only(bottom: 24), // Add bottom padding
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.0, // Square items
+            ),
+            itemCount: (_items.length + 1) > _categoryItemsLimit
+                ? _categoryItemsLimit
+                : (_items.length + 1),
+            itemBuilder: (context, index) {
+              if (index == _items.length) {
+                return _buildAddQuickItemButton().animate().fadeIn(
+                  duration: 400.ms,
+                );
+              }
+              final item = _items[index];
+              return _buildItemButton(
+                item,
+              ).animate().fadeIn(delay: (index * 50).ms, duration: 400.ms);
+            },
+          ),
+          if ((_items.length + 1) > 9)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if ((_items.length + 1) > _categoryItemsLimit)
+                    _buildExpandButton(
+                      text: 'Show More',
+                      icon: Icons.keyboard_arrow_down,
+                      onPressed: () {
+                        setState(() {
+                          _categoryItemsLimit += 3;
+                        });
+                      },
+                    ),
+                  if ((_items.length + 1) > _categoryItemsLimit &&
+                      _categoryItemsLimit > 9)
+                    const SizedBox(width: 16),
+                  if (_categoryItemsLimit > 9)
+                    _buildExpandButton(
+                      text: 'Show Less',
+                      icon: Icons.keyboard_arrow_up,
+                      onPressed: () {
+                        setState(() {
+                          _categoryItemsLimit = 9;
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }
 
-  Widget _buildQuickEntryButton(QuickEntry entry) {
-    return GestureDetector(
-      onTap: () => _addTransaction(entry.title, entry.amount, entry.isExpense),
+  Widget _buildExpandButton({
+    required String text,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        width: 140,
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              text,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddQuickItemButton() {
+    return GestureDetector(
+      onTap: _showAddItemDialog,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: entry.isExpense
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add,
+                color: Theme.of(context).colorScheme.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add New',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryBox(Category category) {
+    final isSelected = _selectedCategoryId == category.id;
+    return GestureDetector(
+      onTap: () => _onCategorySelected(category),
+      onLongPress: () => _confirmDeleteCategory(category),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.shade200,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          category.name,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemButton(Item item, {bool allowDelete = true}) {
+    return GestureDetector(
+      onTap: () => _addTransaction(
+        item.title,
+        item.amount,
+        item.isExpense,
+        categoryId: item.categoryId,
+        itemId: item.id,
+      ),
+      onLongPress: !allowDelete
+          ? null
+          : () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Delete Item'),
+                  content: Text('Delete "${item.title}"?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        _deleteItem(item.id);
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: item.isExpense
                 ? const Color(0xFFFFE5E5)
                 : const Color(0xFFE5F5E9),
             width: 2,
@@ -888,44 +1648,49 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: entry.isExpense
-                    ? const Color(0xFFFFE5E5)
-                    : const Color(0xFFE5F5E9),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                entry.isExpense ? Icons.remove : Icons.add,
-                color: entry.isExpense
-                    ? const Color(0xFFFF6B6B)
-                    : const Color(0xFF51CF66),
-                size: 20,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: item.isExpense
+                        ? const Color(0xFFFFE5E5)
+                        : const Color(0xFFE5F5E9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    item.isExpense ? Icons.remove : Icons.add,
+                    color: item.isExpense
+                        ? const Color(0xFFFF6B6B)
+                        : const Color(0xFF51CF66),
+                    size: 16,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  entry.title,
+                  item.title,
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '₹${NumberFormat('#,##0.00').format(entry.amount)}',
+                  '₹${NumberFormat('#,##0').format(item.amount)}',
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: entry.isExpense
+                    color: item.isExpense
                         ? const Color(0xFFFF6B6B)
                         : const Color(0xFF51CF66),
                   ),
@@ -950,12 +1715,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               style: GoogleFonts.inter(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E1E1E),
+                color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
             IconButton(
               onPressed: () => _showAddDialog(context),
-              icon: const Icon(Icons.add_circle, color: Color(0xFF5B5FED)),
+              icon: Icon(
+                Icons.add_circle,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ],
         ),
@@ -983,16 +1751,51 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
           )
-        else
+        else ...[
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _transactions.length,
+            itemCount: _transactions.length > _recentTransactionsLimit
+                ? _recentTransactionsLimit
+                : _transactions.length,
             itemBuilder: (context, index) {
               final transaction = _transactions[index];
               return _buildTransactionItem(transaction, index);
             },
           ),
+          if (_transactions.length > 5)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_transactions.length > _recentTransactionsLimit)
+                    _buildExpandButton(
+                      text: 'Show More',
+                      icon: Icons.keyboard_arrow_down,
+                      onPressed: () {
+                        setState(() {
+                          _recentTransactionsLimit += 5;
+                        });
+                      },
+                    ),
+                  if (_transactions.length > _recentTransactionsLimit &&
+                      _recentTransactionsLimit > 5)
+                    const SizedBox(width: 16),
+                  if (_recentTransactionsLimit > 5)
+                    _buildExpandButton(
+                      text: 'Show Less',
+                      icon: Icons.keyboard_arrow_up,
+                      onPressed: () {
+                        setState(() {
+                          _recentTransactionsLimit = 5;
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -1012,96 +1815,88 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         alignment: Alignment.centerRight,
         child: const Icon(Icons.delete, color: Colors.white),
       ),
-      child:
-          Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: transaction.isExpense
-                            ? const Color(0xFFFFE5E5)
-                            : const Color(0xFFE5F5E9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        transaction.isExpense
-                            ? Icons.remove_circle_outline
-                            : Icons.add_circle_outline,
-                        color: transaction.isExpense
-                            ? const Color(0xFFFF6B6B)
-                            : const Color(0xFF51CF66),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            transaction.title,
-                            style: GoogleFonts.inter(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF1E1E1E),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateFormat(
-                              'MMM d, h:mm a',
-                            ).format(transaction.dateTime),
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${transaction.isExpense ? '-' : '+'}₹${NumberFormat('#,##0.00').format(transaction.amount)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: transaction.isExpense
-                            ? const Color(0xFFFF6B6B)
-                            : const Color(0xFF51CF66),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: Colors.grey.shade400,
-                      ),
-                      onPressed: () => _deleteTransaction(transaction.id),
-                    ),
-                  ],
-                ),
-              )
-              .animate()
-              .fadeIn(delay: (index * 50).ms, duration: 400.ms)
-              .slideX(
-                begin: 0.2,
-                end: 0,
-                duration: 400.ms,
-                curve: Curves.easeOut,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: transaction.isExpense
+                    ? const Color(0xFFFFE5E5)
+                    : const Color(0xFFE5F5E9),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: Icon(
+                transaction.isExpense
+                    ? Icons.remove_circle_outline
+                    : Icons.add_circle_outline,
+                color: transaction.isExpense
+                    ? const Color(0xFFFF6B6B)
+                    : const Color(0xFF51CF66),
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.title,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    DateFormat('MMM d, h:mm a').format(transaction.dateTime),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '${transaction.isExpense ? '-' : '+'}₹${NumberFormat('#,##0.00').format(transaction.amount)}',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: transaction.isExpense
+                    ? const Color(0xFFFF6B6B)
+                    : const Color(0xFF51CF66),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                color: Colors.grey.shade400,
+                size: 20,
+              ),
+              onPressed: () => _deleteTransaction(transaction.id),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

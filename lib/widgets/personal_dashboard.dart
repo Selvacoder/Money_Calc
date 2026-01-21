@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
+import '../utils/formatters.dart';
+import 'transaction_details_dialog.dart';
 import 'package:provider/provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/currency_provider.dart';
+import '../models/transaction.dart';
+import '../models/item.dart';
 
 class PersonalDashboard extends StatefulWidget {
   const PersonalDashboard({super.key});
@@ -16,8 +21,13 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
   String? _selectedCategoryId;
   bool _showMoreCategoryItems = false;
   bool _showMoreTransactions = false;
+  int _currentPage = 0;
 
   @override
+  void dispose() {
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Access transaction data
@@ -26,140 +36,37 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final income = provider.totalIncome;
-    final expense = provider.totalExpenses;
-    final totalBalance = provider.totalBalance;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Total Balance Card
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: colorScheme.primary,
-              // gradient: LinearGradient(
-              //   colors: [colorScheme.primary, colorScheme.tertiary],
-              //   begin: Alignment.topLeft,
-              //   end: Alignment.bottomRight,
-              // ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: Colors.white70,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Total Balance',
-                      style: GoogleFonts.inter(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '$currencySymbol${totalBalance.toStringAsFixed(2)}',
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
+          // Balance Cards
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _currentPage = (_currentPage + 1) % 5;
+              });
+            },
+            child: SizedBox(
+              height: 240,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_currentPage),
+                  child: _buildCurrentBalanceCard(
+                    provider,
+                    colorScheme,
+                    currencySymbol,
                   ),
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.arrow_upward_rounded,
-                                color: Colors.white70,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Income',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$currencySymbol${income.toStringAsFixed(2)}',
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFF51CF66), // Green
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(height: 40, width: 1, color: Colors.white12),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.arrow_downward_rounded,
-                                color: Colors.white70,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Expenses',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$currencySymbol${expense.toStringAsFixed(2)}',
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFFFF6B6B), // Red
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
+          const SizedBox(height: 16),
 
           const SizedBox(height: 32),
 
@@ -522,11 +429,6 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              IconButton(
-                onPressed: _showAddTransactionDialog, // Updated
-                icon: const Icon(Icons.add_circle),
-                color: colorScheme.primary,
-              ),
             ],
           ),
 
@@ -612,6 +514,15 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                         );
                       },
                       child: ListTile(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => TransactionDetailsDialog(
+                              transaction: tx,
+                              currencySymbol: currencySymbol,
+                            ),
+                          );
+                        },
                         leading: CircleAvatar(
                           backgroundColor: tx.isExpense
                               ? Colors.red.withOpacity(0.1)
@@ -739,14 +650,18 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       iconData = Icons.fitness_center;
 
     return GestureDetector(
-      onTap: () {
-        // Add transaction when tapped
+      onTap: () async {
+        // Ask for Payment Method for ALL transactions
+        String? paymentMethod = await _selectPaymentMethod();
+        if (paymentMethod == null) return; // Cancelled
+
         context.read<TransactionProvider>().addTransaction(
           item.title,
           item.amount,
           item.isExpense,
           categoryId: item.categoryId,
           itemId: item.id,
+          paymentMethod: paymentMethod,
         );
         ScaffoldMessenger.of(
           context,
@@ -862,12 +777,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
   }
 
   void _showEditItemDialog(dynamic item) {
-    // Will update _showAddItemDialog to accept editingItem parameter
-    // For now, just show the add dialog with pre-filled category
-    _showAddItemDialog(
-      preSelectedCategoryId: item.categoryId,
-      preSelectedIsExpense: item.isExpense,
-    );
+    _showAddItemDialog(editingItem: item);
   }
 
   void _showCategoryOptions(dynamic category) {
@@ -975,6 +885,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   const SizedBox(height: 24),
                   TextField(
                     controller: nameController,
+                    textCapitalization: TextCapitalization.sentences,
+                    inputFormatters: [CapitalizeFirstLetterTextFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Category Name',
                       border: OutlineInputBorder(),
@@ -1097,187 +1009,6 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  // --- Add Transaction Dialog ---
-  void _showAddTransactionDialog() {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    bool isExpense = true;
-    String? selectedCategoryId;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final categories = context.watch<TransactionProvider>().categories;
-
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'New Transaction',
-                      style: GoogleFonts.inter(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Type Toggle
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => isExpense = true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isExpense
-                                      ? Colors.red.withOpacity(0.1)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    'Expense',
-                                    style: TextStyle(
-                                      color: isExpense
-                                          ? Colors.red
-                                          : Colors.grey,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => isExpense = false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: !isExpense
-                                      ? Colors.green.withOpacity(0.1)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    'Income',
-                                    style: TextStyle(
-                                      color: !isExpense
-                                          ? Colors.green
-                                          : Colors.grey,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextField(
-                      controller: titleController,
-                      decoration: InputDecoration(
-                        labelText: 'Title',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: amountController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category Dropdown
-                    DropdownButtonFormField<String>(
-                      value: selectedCategoryId,
-                      decoration: InputDecoration(
-                        labelText: 'Category',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      items: categories
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) => selectedCategoryId = val,
-                    ),
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          if (titleController.text.isNotEmpty &&
-                              amountController.text.isNotEmpty) {
-                            context.read<TransactionProvider>().addTransaction(
-                              titleController.text,
-                              double.tryParse(amountController.text) ?? 0.0,
-                              isExpense,
-                              categoryId: selectedCategoryId,
-                            );
-                            Navigator.pop(context);
-                          }
-                        },
-                        child: const Text('Add Transaction'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   // --- Add Category Dialog ---
   void _showAddCategoryDialog() {
     final nameController = TextEditingController();
@@ -1373,6 +1104,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
                   TextField(
                     controller: nameController,
+                    textCapitalization: TextCapitalization.sentences,
+                    inputFormatters: [CapitalizeFirstLetterTextFormatter()],
                     decoration: InputDecoration(
                       labelText: 'Category Name',
                       border: OutlineInputBorder(
@@ -1415,19 +1148,55 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  // --- Add Quick Entry Dialog ---
+  // --- Add/Edit Quick Entry Dialog ---
   void _showAddItemDialog({
     String? preSelectedCategoryId,
     bool? preSelectedIsExpense,
     bool? preSelectedIsDaily,
+    Item? editingItem, // New parameter for editing
   }) {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
+    // Mode State
+    bool isOneTime =
+        editingItem ==
+        null; // Default to One Time if adding new, or Entry if editing?
+    // Wait, user said "In one time give same as Entry". Usually Quick Entry is the frequent action.
+    // Let's default to Quick Entry if user clicked "+" on Quick Entry list, but user removed the random add button.
+    // "remove the new transaction add button". So the ONLY way to add transaction is via this dialog?
+    // Or via Quick Entry tap.
+    // Currently this dialog is called by:
+    // 1. _showAddItemDialog (Quick Entry "Add" button placeholder?) - Wait, the grid has an "Add Item" cell if category empty or via _showAddCategoryDialog?
+    // Actually, there is NO explicit "Add Quick Entry" button on the main dashboard anymore except the empty category cell.
+    // Re-reading: "now in new quick entry add a one time as toogle at top".
+    // So when opening the "Add Quick Entry" dialog (which is triggered how? Ah, likely via the "Add Category" -> "Add Item" flow or if I missed a trigger).
+    // Let's assume default is 'Entry' (Quick Entry) as before, but allow switching to 'One Time'.
+
+    // Actually, I'll initialize isOneTime to false (Entry Mode) by default to match "Quick Entry" context,
+    // unless user explicitly wants One Time default? "add a one time as toogle at top".
+    // I'll stick to isOneTime = false (Entry Mode) as default.
+
+    final titleController = TextEditingController(text: editingItem?.title);
+    final amountController = TextEditingController(
+      text: editingItem != null
+          ? (editingItem.amount.toStringAsFixed(
+              editingItem.amount.truncateToDouble() == editingItem.amount
+                  ? 0
+                  : 2,
+            ))
+          : '',
+    );
     bool isDaily =
-        preSelectedIsDaily ?? _isDaily; // Use dashboard's current tab
-    String? selectedCategoryId = preSelectedCategoryId;
-    bool isExpense = preSelectedIsExpense ?? true;
-    String selectedIcon = 'star';
+        preSelectedIsDaily ??
+        (editingItem?.frequency == 'daily'
+            ? true
+            : (editingItem?.frequency == 'monthly' ? false : _isDaily));
+    String? selectedCategoryId =
+        editingItem?.categoryId ?? preSelectedCategoryId;
+    bool isExpense = editingItem?.isExpense ?? preSelectedIsExpense ?? true;
+    String selectedIcon = editingItem?.icon ?? 'star';
+
+    // New: Payment Method for One Time mode
+    String? selectedPaymentMethod;
+    final paymentMethods = ['Cash', 'UPI', 'Debit Card', 'Credit Card'];
 
     final iconOptions = [
       'star',
@@ -1492,8 +1261,79 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Mode Toggle (Entry / One Time) - Only if NOT editing an existing item
+                    if (editingItem == null) ...[
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isOneTime = false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: !isOneTime
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Quick Entry',
+                                      style: GoogleFonts.inter(
+                                        color: !isOneTime
+                                            ? Colors.white
+                                            : Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isOneTime = true),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isOneTime
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'One Time',
+                                      style: GoogleFonts.inter(
+                                        color: isOneTime
+                                            ? Colors.white
+                                            : Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
                     Text(
-                      'New Quick Entry',
+                      editingItem != null
+                          ? 'Edit Quick Entry'
+                          : (isOneTime ? 'Add Transaction' : 'New Quick Entry'),
                       style: GoogleFonts.inter(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -1533,59 +1373,60 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Icon Selector
-                    SizedBox(
-                      height: 60,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: iconOptions.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final iconName = iconOptions[index];
-                          // Map string to IconData (simplified mapping for demo, usually need a map)
-                          // Using a helper or assumes specific set. For now, using generic Icons based on index/name logic?
-                          // In a real app we need a String -> IconData map.
-                          // I'll stick to a simple circle selector highlighting the selected one.
-                          // Since I don't have the map handy here, I will use a placeholder map or logic.
-                          IconData iconData = Icons.star;
-                          if (iconName == 'shopping_cart')
-                            iconData = Icons.shopping_cart;
-                          else if (iconName == 'restaurant')
-                            iconData = Icons.restaurant;
-                          else if (iconName == 'commute')
-                            iconData = Icons.commute;
-                          else if (iconName == 'home')
-                            iconData = Icons.home;
-                          else if (iconName == 'medical_services')
-                            iconData = Icons.medical_services;
-                          else if (iconName == 'school')
-                            iconData = Icons.school;
-                          else if (iconName == 'fitness_center')
-                            iconData = Icons.fitness_center;
+                    // Icon Selector - Hide for One Time Mode
+                    if (!isOneTime) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 60,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: iconOptions.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
+                          itemBuilder: (context, index) {
+                            final iconName = iconOptions[index];
+                            IconData iconData = Icons.star;
+                            if (iconName == 'shopping_cart')
+                              iconData = Icons.shopping_cart;
+                            else if (iconName == 'restaurant')
+                              iconData = Icons.restaurant;
+                            else if (iconName == 'commute')
+                              iconData = Icons.commute;
+                            else if (iconName == 'home')
+                              iconData = Icons.home;
+                            else if (iconName == 'medical_services')
+                              iconData = Icons.medical_services;
+                            else if (iconName == 'school')
+                              iconData = Icons.school;
+                            else if (iconName == 'fitness_center')
+                              iconData = Icons.fitness_center;
 
-                          final isSelected = selectedIcon == iconName;
+                            final isSelected = selectedIcon == iconName;
 
-                          return GestureDetector(
-                            onTap: () =>
-                                setState(() => selectedIcon = iconName),
-                            child: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Colors.grey.withOpacity(0.1),
+                            return GestureDetector(
+                              onTap: () =>
+                                  setState(() => selectedIcon = iconName),
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.withOpacity(0.1),
+                                ),
+                                child: Icon(
+                                  iconData,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
                               ),
-                              child: Icon(
-                                iconData,
-                                color: isSelected ? Colors.white : Colors.grey,
-                              ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 16),
 
                     // Type Toggle (Daily vs One Time) matches request "toggle daily or expanse below that one time option"
@@ -1680,6 +1521,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
                     TextField(
                       controller: titleController,
+                      textCapitalization: TextCapitalization.sentences,
+                      inputFormatters: [CapitalizeFirstLetterTextFormatter()],
                       decoration: InputDecoration(
                         labelText: 'Title',
                         border: OutlineInputBorder(
@@ -1703,80 +1546,107 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                     const SizedBox(height: 16),
 
                     // Frequency Toggle (Daily/Monthly)
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                    const SizedBox(height: 16),
+
+                    // Toggle: Frequency (Daily/Monthly) OR Payment Method (One Time)
+                    if (isOneTime) ...[
+                      // Payment Method Dropdown
+                      DropdownButtonFormField<String>(
+                        value: selectedPaymentMethod,
+                        decoration: InputDecoration(
+                          labelText: 'Payment Method',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.payment),
+                        ),
+                        items: paymentMethods
+                            .map(
+                              (m) => DropdownMenuItem(value: m, child: Text(m)),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setState(() => selectedPaymentMethod = value),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => isDaily = true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDaily
-                                      ? Theme.of(
-                                          context,
-                                        ).colorScheme.primary.withOpacity(0.1)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    'Daily',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: isDaily
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                          : Colors.grey,
+                    ] else ...[
+                      // Frequency Toggle (Daily/Monthly)
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isDaily = true),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDaily
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary.withOpacity(0.1)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Daily',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isDaily
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary
+                                            : Colors.grey,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => isDaily = false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: !isDaily
-                                      ? Theme.of(
-                                          context,
-                                        ).colorScheme.primary.withOpacity(0.1)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    'Monthly',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: !isDaily
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                          : Colors.grey,
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isDaily = false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: !isDaily
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary.withOpacity(0.1)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Monthly',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: !isDaily
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary
+                                            : Colors.grey,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
 
                     const SizedBox(height: 24),
 
@@ -1798,55 +1668,68 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                           if (titleController.text.isNotEmpty &&
                               amountController.text.isNotEmpty &&
                               selectedCategoryId != null) {
-                            // Add as Quick Item (Recurring)
-                            final itemData = {
-                              'title': titleController.text,
-                              'amount':
-                                  double.tryParse(amountController.text) ?? 0.0,
-                              'frequency': isDaily ? 'daily' : 'monthly',
-                              'categoryId':
-                                  selectedCategoryId == 'other_virtual'
-                                  ? null
-                                  : selectedCategoryId,
-                              'isExpense': isExpense,
-                              'icon': selectedIcon,
-                            };
-                            context.read<TransactionProvider>().addItem(
-                              itemData,
-                            );
-                            Navigator.pop(context);
+                            if (isOneTime) {
+                              // Add One-Time Transaction
+                              context
+                                  .read<TransactionProvider>()
+                                  .addTransaction(
+                                    titleController.text,
+                                    double.tryParse(amountController.text) ??
+                                        0.0,
+                                    isExpense,
+                                    categoryId:
+                                        selectedCategoryId == 'other_virtual'
+                                        ? null
+                                        : selectedCategoryId,
+                                    paymentMethod: selectedPaymentMethod,
+                                  );
+                              Navigator.pop(context);
+                            } else {
+                              // Add/Update Quick Entry (Recurring)
+                              final itemData = {
+                                'title': titleController.text,
+                                'amount':
+                                    double.tryParse(amountController.text) ??
+                                    0.0,
+                                'frequency': isDaily ? 'daily' : 'monthly',
+                                'categoryId':
+                                    selectedCategoryId == 'other_virtual'
+                                    ? null
+                                    : selectedCategoryId,
+                                'isExpense': isExpense,
+                                'icon': selectedIcon,
+                                // userId handled by backend service
+                              };
+
+                              if (editingItem != null) {
+                                // Update existing item
+                                context.read<TransactionProvider>().updateItem(
+                                  editingItem.id,
+                                  itemData,
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Updated ${titleController.text}',
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                // Add new item
+                                context.read<TransactionProvider>().addItem(
+                                  itemData,
+                                );
+                              }
+                              Navigator.pop(context);
+                            }
                           }
                         },
-                        child: const Text('Save Quick Entry'),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Secondary Action: One Time Only
-                    TextButton(
-                      onPressed: () {
-                        if (titleController.text.isNotEmpty &&
-                            amountController.text.isNotEmpty &&
-                            selectedCategoryId != null) {
-                          // Add as One Time Transaction (Confirm)
-                          context.read<TransactionProvider>().addTransaction(
-                            titleController.text,
-                            double.tryParse(amountController.text) ?? 0.0,
-                            isExpense,
-                            categoryId: selectedCategoryId == 'other_virtual'
-                                ? null
-                                : selectedCategoryId,
-                          );
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: Text(
-                        'Just Add as One-Time Transaction',
-                        style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.7),
+                        child: Text(
+                          editingItem != null
+                              ? 'Update Entry'
+                              : (isOneTime
+                                    ? 'Add Transaction'
+                                    : 'Save Quick Entry'),
                         ),
                       ),
                     ),
@@ -1856,6 +1739,334 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildBalanceCard({
+    required String title,
+    required double balance,
+    required double income,
+    required double expense,
+    required ColorScheme colorScheme,
+    required String currencySymbol,
+  }) {
+    return Container(
+      // margin removed to match LedgerDashboard and fix shade mismatch
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.primary,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.primary.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.account_balance_wallet_outlined,
+                color: Colors.white70,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$currencySymbol${balance.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.arrow_upward_rounded,
+                          color: Colors.white70,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Income',
+                          style: GoogleFonts.inter(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$currencySymbol${income.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF51CF66), // Green
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(height: 40, width: 1, color: Colors.white12),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.arrow_downward_rounded,
+                          color: Colors.white70,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Expenses',
+                          style: GoogleFonts.inter(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$currencySymbol${expense.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFFF6B6B), // Red
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentBalanceCard(
+    TransactionProvider provider,
+    ColorScheme colorScheme,
+    String currencySymbol,
+  ) {
+    switch (_currentPage) {
+      case 0:
+        return _buildBalanceCard(
+          title: 'Total Balance',
+          balance: provider.totalBalance,
+          income: provider.totalIncome,
+          expense: provider.totalExpenses,
+          colorScheme: colorScheme,
+          currencySymbol: currencySymbol,
+        );
+      case 1:
+        return _buildBalanceCard(
+          title: 'Yearly Balance',
+          balance: _calculateBalance(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year;
+          }),
+          income: _calculateIncome(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year;
+          }),
+          expense: _calculateExpense(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year;
+          }),
+          colorScheme: colorScheme,
+          currencySymbol: currencySymbol,
+        );
+      case 2:
+        return _buildBalanceCard(
+          title: 'Monthly Balance',
+          balance: _calculateBalance(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year && t.dateTime.month == now.month;
+          }),
+          income: _calculateIncome(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year && t.dateTime.month == now.month;
+          }),
+          expense: _calculateExpense(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year && t.dateTime.month == now.month;
+          }),
+          colorScheme: colorScheme,
+          currencySymbol: currencySymbol,
+        );
+      case 3:
+        return _buildBalanceCard(
+          title: 'Weekly Balance',
+          balance: _calculateBalance(provider.transactions, (t) {
+            final now = DateTime.now();
+            final weekAgo = now.subtract(const Duration(days: 7));
+            return t.dateTime.isAfter(weekAgo);
+          }),
+          income: _calculateIncome(provider.transactions, (t) {
+            final now = DateTime.now();
+            final weekAgo = now.subtract(const Duration(days: 7));
+            return t.dateTime.isAfter(weekAgo);
+          }),
+          expense: _calculateExpense(provider.transactions, (t) {
+            final now = DateTime.now();
+            final weekAgo = now.subtract(const Duration(days: 7));
+            return t.dateTime.isAfter(weekAgo);
+          }),
+          colorScheme: colorScheme,
+          currencySymbol: currencySymbol,
+        );
+      case 4:
+      default:
+        return _buildBalanceCard(
+          title: 'Daily Balance',
+          balance: _calculateBalance(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year &&
+                t.dateTime.month == now.month &&
+                t.dateTime.day == now.day;
+          }),
+          income: _calculateIncome(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year &&
+                t.dateTime.month == now.month &&
+                t.dateTime.day == now.day;
+          }),
+          expense: _calculateExpense(provider.transactions, (t) {
+            final now = DateTime.now();
+            return t.dateTime.year == now.year &&
+                t.dateTime.month == now.month &&
+                t.dateTime.day == now.day;
+          }),
+          colorScheme: colorScheme,
+          currencySymbol: currencySymbol,
+        );
+    }
+  }
+
+  // Helper methods for calculations
+  double _calculateBalance(
+    List<Transaction> transactions,
+    bool Function(Transaction) filter,
+  ) {
+    double total = 0;
+    for (var t in transactions) {
+      if (filter(t)) {
+        if (t.isExpense) {
+          total -= t.amount;
+        } else {
+          total += t.amount;
+        }
+      }
+    }
+    return total;
+  }
+
+  double _calculateIncome(
+    List<Transaction> transactions,
+    bool Function(Transaction) filter,
+  ) {
+    return transactions
+        .where((t) => !t.isExpense && filter(t))
+        .fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  double _calculateExpense(
+    List<Transaction> transactions,
+    bool Function(Transaction) filter,
+  ) {
+    return transactions
+        .where((t) => t.isExpense && filter(t))
+        .fold(0.0, (sum, t) => sum + t.amount);
+  }
+
+  Future<String?> _selectPaymentMethod() {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Select Payment Method',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildPaymentOption(context, 'Cash', Icons.money),
+            const SizedBox(height: 12),
+            _buildPaymentOption(context, 'UPI', Icons.qr_code),
+            const SizedBox(height: 12),
+            _buildPaymentOption(context, 'Debit Card', Icons.credit_card),
+            const SizedBox(height: 12),
+            _buildPaymentOption(context, 'Credit Card', Icons.credit_score),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentOption(
+    BuildContext context,
+    String method,
+    IconData icon,
+  ) {
+    return InkWell(
+      onTap: () => Navigator.pop(context, method),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            Text(
+              method,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

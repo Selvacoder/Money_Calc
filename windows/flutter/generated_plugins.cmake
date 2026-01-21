@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   desktop_webview_window
   local_auth_windows
+  printing
   share_plus
   url_launcher_windows
   window_to_front

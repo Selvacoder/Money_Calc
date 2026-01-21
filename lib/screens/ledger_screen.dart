@@ -229,12 +229,18 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                   ? phoneController.text
                                   : '$selectedCountryCode${phoneController.text}');
 
+                        final userProvider = context.read<UserProvider>();
+                        final currentUser = userProvider.user;
+
                         context.read<LedgerProvider>().addLedgerTransaction(
                           nameController.text,
                           phoneStr,
                           double.tryParse(amountController.text) ?? 0.0,
                           descController.text,
                           isReceived: isReceived,
+                          currentUserId: currentUser?.userId ?? '',
+                          currentUserName: currentUser?.name ?? '',
+                          currentUserPhone: currentUser?.phone ?? '',
                         );
                         Navigator.pop(context);
                       }
@@ -645,12 +651,18 @@ class _LedgerScreenState extends State<LedgerScreen> {
               currentUserContact: currentUserContact,
               onAddTransaction:
                   (name, phone, amount, desc, {isReceived = false}) {
+                    final userProvider = context.read<UserProvider>();
+                    final currentUser = userProvider.user;
+
                     context.read<LedgerProvider>().addLedgerTransaction(
                       name,
                       phone,
                       amount,
                       desc,
                       isReceived: isReceived,
+                      currentUserId: currentUser?.userId ?? '',
+                      currentUserName: currentUser?.name ?? '',
+                      currentUserPhone: currentUser?.phone ?? '',
                     );
                   },
               onRemind: () {

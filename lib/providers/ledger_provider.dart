@@ -16,11 +16,17 @@ class LedgerProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   late Box<LedgerTransaction> _ledgerBox;
+  late Box<String> _hiddenPeopleBox;
   bool _isHiveInitialized = false;
+  List<String> _hiddenPeople = [];
+
+  List<String> get hiddenPeople => _hiddenPeople;
 
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
     _ledgerBox = await Hive.openBox<LedgerTransaction>('ledger');
+    _hiddenPeopleBox = await Hive.openBox<String>('hidden_people');
+    _hiddenPeople = _hiddenPeopleBox.values.toList();
     _isHiveInitialized = true;
   }
 
@@ -38,13 +44,16 @@ class LedgerProvider extends ChangeNotifier {
 
       // 2. Fetch from Network
       final data = await _appwriteService.getLedgerTransactions();
-      final networkTx = data.map((e) => LedgerTransaction.fromJson(e)).toList();
 
-      if (networkTx.isNotEmpty) {
+      if (data != null) {
+        // Success (Empty list or Data)
+        final networkTx = data
+            .map((e) => LedgerTransaction.fromJson(e))
+            .toList();
         _ledgerTransactions = networkTx;
         _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
-        // Update Cache
+        // Update Cache (Clear and Replace)
         await _ledgerBox.clear();
         await _ledgerBox.putAll({for (var t in _ledgerTransactions) t.id: t});
       }
@@ -62,41 +71,66 @@ class LedgerProvider extends ChangeNotifier {
     double amount,
     String description, {
     required bool isReceived,
+    required String currentUserId,
+    required String currentUserName,
+    required String currentUserPhone,
   }) async {
-    try {
-      // Optimistic Update?
-      // Ledger logic is simple, maybe just wait for API?
-      // But for consistency with Offline-First, we should ideally support it.
-      // However, we need a temp ID.
-      // For now, let's keep it Online-Required for Write, but Cache for Read.
-      // This is safer for shared ledger correctness.
-      // But user asked for Offline-First.
-      // If I write to Hive, it's local only.
-      // Let's stick to API-first for Ledger writes to avoid sync conflicts with other person.
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
 
+    // 1. Create and Add Optimistic Transaction
+    final optimisticTx = LedgerTransaction(
+      id: tempId,
+      senderId: isReceived ? 'other' : currentUserId, // Simplified ID logic
+      senderName: isReceived ? name : currentUserName,
+      senderPhone: isReceived ? (phone ?? '') : currentUserPhone,
+      receiverName: isReceived ? currentUserName : name,
+      receiverPhone: isReceived ? currentUserPhone : (phone ?? ''),
+      amount: amount,
+      description: description,
+      dateTime: now,
+    );
+
+    _ledgerTransactions.insert(0, optimisticTx);
+    notifyListeners();
+
+    try {
       final result = await _appwriteService.createLedgerTransaction({
         'name': name,
         'email': phone,
         'amount': amount,
         'description': description,
-        'dateTime': DateTime.now().toIso8601String(),
+        'dateTime': now.toIso8601String(),
         'isReceived': isReceived,
       });
 
       if (result != null) {
-        final newTx = LedgerTransaction.fromJson(result);
-        _ledgerTransactions.insert(0, newTx);
-
-        if (_isHiveInitialized) {
-          _ledgerBox.put(newTx.id, newTx);
+        // Replace optimistic with real
+        final realTx = LedgerTransaction.fromJson(result);
+        final index = _ledgerTransactions.indexWhere((t) => t.id == tempId);
+        if (index != -1) {
+          _ledgerTransactions[index] = realTx;
+        } else {
+          // Should not happen, but fallback
+          _ledgerTransactions.add(realTx);
+          _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
         }
 
+        if (_isHiveInitialized) {
+          _ledgerBox.put(realTx.id, realTx);
+        }
         notifyListeners();
         return true;
+      } else {
+        // Failed: Remove optimistic
+        _ledgerTransactions.removeWhere((t) => t.id == tempId);
+        notifyListeners();
+        return false;
       }
-      return false;
     } catch (e) {
       print('Error adding ledger tx: $e');
+      _ledgerTransactions.removeWhere((t) => t.id == tempId);
+      notifyListeners();
       return false;
     }
   }
@@ -109,6 +143,87 @@ class LedgerProvider extends ChangeNotifier {
         _ledgerBox.delete(id);
       }
       notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  // ... (fetchLedgerTransactions)
+
+  // ... (addLedgerTransaction)
+
+  // ... (deleteLedgerTransaction)
+
+  Future<void> hidePerson(String name) async {
+    if (!_hiddenPeople.contains(name)) {
+      _hiddenPeople.add(name);
+      await _hiddenPeopleBox.add(name);
+      notifyListeners();
+    }
+  }
+
+  Future<void> unhidePerson(String name) async {
+    if (_hiddenPeople.contains(name)) {
+      _hiddenPeople.remove(name);
+
+      // Hive doesn't support easy remove mostly by value without index loops
+      // Simple way: clear and rewrite or find key.
+      // Since it's a simple list, let's just clear and rewriting or find key.
+
+      final Map<dynamic, String> boxMap = _hiddenPeopleBox
+          .toMap()
+          .cast<dynamic, String>();
+      var keyToDelete;
+      boxMap.forEach((key, value) {
+        if (value == name) {
+          keyToDelete = key;
+        }
+      });
+
+      if (keyToDelete != null) {
+        await _hiddenPeopleBox.delete(keyToDelete);
+      }
+
+      notifyListeners();
+    }
+  }
+
+  // Edit Person (Batch Update)
+  Future<bool> updatePerson({
+    required String oldName,
+    required String oldPhone,
+    required String newName,
+    required String newPhone,
+  }) async {
+    final success = await _appwriteService.updateLedgerPerson(
+      oldName: oldName,
+      oldPhone: oldPhone,
+      newName: newName,
+      newPhone: newPhone,
+    );
+
+    if (success) {
+      // Refresh to get updated transactions
+      // Or we could try to update local state manually, but it's complex with many transactions.
+      await fetchLedgerTransactions();
+      return true;
+    }
+    return false;
+  }
+
+  // Delete Person (Batch Delete)
+  Future<bool> deletePerson({
+    required String name,
+    required String phone,
+  }) async {
+    final success = await _appwriteService.deleteLedgerPerson(
+      name: name,
+      phone: phone,
+    );
+
+    if (success) {
+      // Refresh to clear deleted transactions
+      await fetchLedgerTransactions();
       return true;
     }
     return false;

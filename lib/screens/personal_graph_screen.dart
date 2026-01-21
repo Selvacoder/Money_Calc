@@ -18,6 +18,16 @@ class PersonalGraphScreen extends StatefulWidget {
 
 class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
   String _selectedPeriod = 'W'; // D, W, M, Y, All
+  int _insightIndex =
+      2; // 0: Daily, 1: Weekly, 2: Monthly, 3: Yearly, 4: Overall
+  final List<String> _insightPeriods = [
+    'Daily',
+    'Weekly',
+    'Monthly',
+    'Yearly',
+    'Overall',
+  ];
+  int _incomeVsExpenseIndex = 2; // Default to Monthly
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +72,11 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
               const SizedBox(height: 24),
 
               // Income vs Expenses Card
+              // Income vs Expenses Card
               _buildIncomeExpenseCard(
                 theme,
                 currencySymbol,
-                totalIncome,
-                totalExpense,
+                provider.transactions,
               ),
               const SizedBox(height: 24),
 
@@ -90,10 +100,11 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
               const SizedBox(height: 24),
 
               // Spending Insights Card
+              // Spending Insights Card
               _buildSpendingInsights(
                 theme,
                 currencySymbol,
-                expenseTransactions,
+                provider.transactions, // Pass ALL transactions
                 provider.categories,
               ),
             ],
@@ -136,107 +147,179 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
   Widget _buildIncomeExpenseCard(
     ThemeData theme,
     String currency,
-    double income,
-    double expense,
+    List<Transaction> allTransactions,
   ) {
+    final period = _insightPeriods[_incomeVsExpenseIndex];
+    final now = DateTime.now();
+    List<Transaction> filteredTransactions = allTransactions;
+
+    switch (period) {
+      case 'Daily':
+        filteredTransactions = allTransactions
+            .where(
+              (t) =>
+                  t.dateTime.year == now.year &&
+                  t.dateTime.month == now.month &&
+                  t.dateTime.day == now.day,
+            )
+            .toList();
+        break;
+      case 'Weekly':
+        final weekAgo = now.subtract(const Duration(days: 7));
+        filteredTransactions = allTransactions
+            .where((t) => t.dateTime.isAfter(weekAgo))
+            .toList();
+        break;
+      case 'Monthly':
+        filteredTransactions = allTransactions
+            .where(
+              (t) =>
+                  t.dateTime.year == now.year && t.dateTime.month == now.month,
+            )
+            .toList();
+        break;
+      case 'Yearly':
+        filteredTransactions = allTransactions
+            .where((t) => t.dateTime.year == now.year)
+            .toList();
+        break;
+      case 'Overall':
+      default:
+        break;
+    }
+
+    final income = filteredTransactions
+        .where((t) => !t.isExpense)
+        .fold(0.0, (sum, t) => sum + t.amount);
+    final expense = filteredTransactions
+        .where((t) => t.isExpense)
+        .fold(0.0, (sum, t) => sum + t.amount);
+
     final total = income + expense;
     final incomePercent = total > 0 ? (income / total) * 100 : 0.0;
     final expensePercent = total > 0 ? (expense / total) * 100 : 0.0;
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primary,
-            theme.colorScheme.primary.withOpacity(0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Income vs Expenses',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _incomeVsExpenseIndex =
+              (_incomeVsExpenseIndex + 1) % _insightPeriods.length;
+        });
+      },
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: Container(
+          key: ValueKey<int>(_incomeVsExpenseIndex),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withOpacity(0.8),
+              ],
             ),
+            borderRadius: BorderRadius.circular(24),
           ),
-          const SizedBox(height: 20),
-          Row(
+          child: Column(
             children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      '${incomePercent.toStringAsFixed(1)}%',
-                      style: GoogleFonts.inter(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.pie_chart, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Income vs Expenses ($period)',
+                        style: GoogleFonts.inter(
+                          fontSize: 16, // Slightly reduced to fit
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Income',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$currency${income.toStringAsFixed(0)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const Icon(Icons.touch_app, color: Colors.white54, size: 16),
+                ],
               ),
-              Container(
-                width: 1,
-                height: 80,
-                color: Colors.white.withOpacity(0.3),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      '${expensePercent.toStringAsFixed(1)}%',
-                      style: GoogleFonts.inter(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          '${incomePercent.toStringAsFixed(1)}%',
+                          style: GoogleFonts.inter(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Income',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$currency${income.toStringAsFixed(0)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Expenses',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 80,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          '${expensePercent.toStringAsFixed(1)}%',
+                          style: GoogleFonts.inter(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Expenses',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$currency${expense.toStringAsFixed(0)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$currency${expense.toStringAsFixed(0)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -620,129 +703,185 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
   Widget _buildSpendingInsights(
     ThemeData theme,
     String currency,
-    List<Transaction> expenses,
+    List<Transaction> allTransactions,
     List<Category> categories,
   ) {
-    final thisMonth = expenses.where((t) {
-      final now = DateTime.now();
-      return t.dateTime.year == now.year && t.dateTime.month == now.month;
-    }).toList();
+    final period = _insightPeriods[_insightIndex];
 
-    final monthTotal = thisMonth.fold(0.0, (sum, t) => sum + t.amount);
-    final avgDaily = thisMonth.isEmpty ? 0.0 : monthTotal / DateTime.now().day;
-    final avgPerTransaction = thisMonth.isEmpty
-        ? 0.0
-        : monthTotal / thisMonth.length;
+    // Filter expenses based on independent insight period
+    final now = DateTime.now();
+    List<Transaction> filteredExpenses = allTransactions
+        .where((t) => t.isExpense)
+        .toList();
 
-    // Find highest and lowest spending days
-    Map<String, double> dailyTotals = {};
-    for (var t in thisMonth) {
-      final key = DateFormat('yyyy-MM-dd').format(t.dateTime);
-      dailyTotals[key] = (dailyTotals[key] ?? 0) + t.amount;
+    switch (period) {
+      case 'Daily':
+        filteredExpenses = filteredExpenses
+            .where(
+              (t) =>
+                  t.dateTime.year == now.year &&
+                  t.dateTime.month == now.month &&
+                  t.dateTime.day == now.day,
+            )
+            .toList();
+        break;
+      case 'Weekly':
+        final weekAgo = now.subtract(const Duration(days: 7));
+        filteredExpenses = filteredExpenses
+            .where((t) => t.dateTime.isAfter(weekAgo))
+            .toList();
+        break;
+      case 'Monthly':
+        filteredExpenses = filteredExpenses
+            .where(
+              (t) =>
+                  t.dateTime.year == now.year && t.dateTime.month == now.month,
+            )
+            .toList();
+        break;
+      case 'Yearly':
+        filteredExpenses = filteredExpenses
+            .where((t) => t.dateTime.year == now.year)
+            .toList();
+        break;
+      case 'Overall':
+      default:
+        // Already all expenses
+        break;
     }
 
-    final sortedDays = dailyTotals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final highestDay = sortedDays.isNotEmpty
-        ? DateFormat('EEE').format(DateTime.parse(sortedDays.first.key))
-        : 'N/A';
-    final highestAmount = sortedDays.isNotEmpty ? sortedDays.first.value : 0.0;
-    final lowestDay = sortedDays.isNotEmpty
-        ? DateFormat('EEE').format(DateTime.parse(sortedDays.last.key))
-        : 'N/A';
-    final lowestAmount = sortedDays.isNotEmpty ? sortedDays.last.value : 0.0;
+    final total = filteredExpenses.fold(0.0, (sum, t) => sum + t.amount);
+    final count = filteredExpenses.length;
+    final avg = count > 0 ? total / count : 0.0;
 
-    // Most spent category
-    Map<String, double> categoryTotals = {};
-    for (var t in thisMonth) {
-      if (t.categoryId != null) {
-        categoryTotals[t.categoryId!] =
-            (categoryTotals[t.categoryId] ?? 0) + t.amount;
+    // Find highest and lowest spending days (Only relevant for > 1 day periods, but we can show top tx for daily)
+    String highestLabel = 'Highest Day';
+    String highestVal = 'N/A';
+    String lowestLabel = 'Lowest Day';
+    String lowestVal = 'N/A';
+
+    if (period == 'Daily') {
+      highestLabel = 'Highest Transaction';
+      lowestLabel = 'Lowest Transaction';
+      if (filteredExpenses.isNotEmpty) {
+        final sorted = List<Transaction>.from(filteredExpenses)
+          ..sort((a, b) => b.amount.compareTo(a.amount));
+        highestVal = '$currency${sorted.first.amount.toStringAsFixed(0)}';
+        lowestVal = '$currency${sorted.last.amount.toStringAsFixed(0)}';
+      }
+    } else {
+      Map<String, double> dailyTotals = {};
+      for (var t in filteredExpenses) {
+        final key = DateFormat('yyyy-MM-dd').format(t.dateTime);
+        dailyTotals[key] = (dailyTotals[key] ?? 0) + t.amount;
+      }
+      final sortedDays = dailyTotals.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      if (sortedDays.isNotEmpty) {
+        final hDate = DateTime.parse(sortedDays.first.key);
+        final lDate = DateTime.parse(sortedDays.last.key);
+        final fmt = period == 'Yearly' ? 'MMM d' : 'EEE';
+        highestVal =
+            '${DateFormat(fmt).format(hDate)} ($currency${sortedDays.first.value.toStringAsFixed(0)})';
+        lowestVal =
+            '${DateFormat(fmt).format(lDate)} ($currency${sortedDays.last.value.toStringAsFixed(0)})';
       }
     }
-    final topCategory = categoryTotals.entries.isEmpty
-        ? null
-        : categoryTotals.entries.reduce((a, b) => a.value > b.value ? a : b);
 
-    String topCategoryName = 'N/A';
-    if (topCategory != null && categories.isNotEmpty) {
+    // Most spent category
+    Map<String, double> catTotals = {};
+    for (var t in filteredExpenses) {
+      if (t.categoryId != null) {
+        catTotals[t.categoryId!] = (catTotals[t.categoryId] ?? 0) + t.amount;
+      }
+    }
+    final topCatEntry = catTotals.entries.isEmpty
+        ? null
+        : catTotals.entries.reduce((a, b) => a.value > b.value ? a : b);
+
+    String topCatName = 'N/A';
+    double topCatVal = 0.0;
+
+    if (topCatEntry != null && categories.isNotEmpty) {
       final found = categories.firstWhere(
-        (c) => c.id == topCategory.key,
+        (c) => c.id == topCatEntry.key,
         orElse: () => categories.first,
       );
-      topCategoryName = found.name;
+      topCatName = found.name;
+      topCatVal = topCatEntry.value;
     }
 
-    final topCategoryTotal = topCategory?.value ?? 0.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primary.withOpacity(0.8),
-            theme.colorScheme.primary,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _insightIndex = (_insightIndex + 1) % _insightPeriods.length;
+        });
+      },
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: Container(
+          key: ValueKey<int>(_insightIndex),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary.withOpacity(0.8),
+                theme.colorScheme.primary,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.insights, color: Colors.white, size: 24),
-              const SizedBox(width: 8),
-              Text(
-                'Spending Insights',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.insights, color: Colors.white, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Insights ($period)',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Icon(Icons.touch_app, color: Colors.white54, size: 16),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildInsightRow(
+                'Total Spent',
+                total > 0 ? '$currency${total.toStringAsFixed(0)}' : 'N/A',
+              ),
+              _buildInsightRow(
+                'Avg Per Tx',
+                '$currency${avg.toStringAsFixed(0)}',
+              ),
+              _buildInsightRow('Total Transactions', count.toString()),
+              const Divider(color: Colors.white24, height: 24),
+              _buildInsightRow(highestLabel, highestVal),
+              _buildInsightRow(lowestLabel, lowestVal),
+              const Divider(color: Colors.white24, height: 24),
+              _buildInsightRow('Top Category', topCatName),
+              _buildInsightRow(
+                'Category Total',
+                topCatVal > 0
+                    ? '$currency${topCatVal.toStringAsFixed(0)}'
+                    : 'N/A',
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildInsightRow(
-            'This Month Total',
-            monthTotal > 0
-                ? '$currency${monthTotal.toStringAsFixed(0)}'
-                : 'N/A',
-          ),
-          _buildInsightRow(
-            'Average Daily Spend',
-            '$currency${avgDaily.toStringAsFixed(0)}',
-          ),
-          _buildInsightRow(
-            'Average Per Transaction',
-            avgPerTransaction > 0
-                ? '$currency${avgPerTransaction.toStringAsFixed(0)}'
-                : 'N/A',
-          ),
-          _buildInsightRow('Total Transactions', thisMonth.length.toString()),
-          _buildInsightRow('Highest Spending Day', highestDay),
-          _buildInsightRow(
-            'Amount on Highest Day',
-            highestAmount > 0
-                ? '$currency${highestAmount.toStringAsFixed(0)}'
-                : 'N/A',
-          ),
-          _buildInsightRow('Lowest Spending Day', lowestDay),
-          _buildInsightRow(
-            'Amount on Lowest Day',
-            lowestAmount > 0
-                ? '$currency${lowestAmount.toStringAsFixed(0)}'
-                : 'N/A',
-          ),
-          _buildInsightRow('Most Spent Category', topCategoryName),
-          _buildInsightRow(
-            'Category Total',
-            topCategoryTotal > 0
-                ? '$currency${topCategoryTotal.toStringAsFixed(0)}'
-                : 'N/A',
-          ),
-        ],
+        ),
       ),
     );
   }

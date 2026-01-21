@@ -250,8 +250,8 @@ class AccountScreen extends StatelessWidget {
                       icon: const Icon(Icons.logout),
                       label: const Text('Logout'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.errorContainer,
-                        foregroundColor: theme.colorScheme.onErrorContainer,
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        foregroundColor: theme.colorScheme.onPrimaryContainer,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),

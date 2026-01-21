@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:flutter/services.dart';
+import '../utils/formatters.dart';
 
 import '../models/ledger_transaction.dart';
 import '../services/appwrite_service.dart';
@@ -80,6 +82,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
+                          textCapitalization: TextCapitalization.sentences,
+                          inputFormatters: [
+                            CapitalizeFirstLetterTextFormatter(),
+                          ],
                           decoration: InputDecoration(
                             labelText: isReceived
                                 ? 'Lender Name'
@@ -145,12 +151,18 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         final phoneStr = phoneController.text.isEmpty
                             ? null
                             : '$selectedCountryCode${phoneController.text}';
+                        final userProvider = context.read<UserProvider>();
+                        final currentUser = userProvider.user;
+
                         context.read<LedgerProvider>().addLedgerTransaction(
                           nameController.text,
                           phoneStr,
                           double.tryParse(amountController.text) ?? 0.0,
                           descController.text,
                           isReceived: isReceived,
+                          currentUserId: currentUser?.userId ?? '',
+                          currentUserName: currentUser?.name ?? '',
+                          currentUserPhone: currentUser?.phone ?? '',
                         );
                         Navigator.pop(context);
                       }
@@ -247,20 +259,47 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             ],
           ),
           const SizedBox(height: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'People',
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  // Color will be handled by theme usually, but explicit request means ensure visible
                 ),
               ),
-              const SizedBox(height: 16),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'hidden') {
+                    _showHiddenPeopleDialog();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'hidden',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.visibility_off,
+                          size: 20,
+                          color: Colors.grey,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Hidden People'),
+                      ],
+                    ),
+                  ),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Icon(Icons.more_horiz),
+                ),
+              ),
             ],
           ),
+          const SizedBox(height: 16),
+
           _buildPeopleGrid(transactions, currentUserContact, currencySymbol),
           const SizedBox(height: 80),
         ],
@@ -306,6 +345,8 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               transactions,
               currentUserContact,
               currencySymbol,
+              onLongPress: () =>
+                  _showPersonOptions(b['name'], b['phone'], currentUserContact),
             );
           },
         ),
@@ -316,6 +357,34 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           ),
       ],
     );
+  }
+
+  // Refactored helper to get transactions for a specific person
+  List<LedgerTransaction> _getPersonTransactions(
+    List<LedgerTransaction> allTx,
+    String personName,
+    String personPhone,
+    String currentUserContact,
+  ) {
+    return allTx.where((t) {
+      final isMeSender = _arePhonesEqual(t.senderPhone, currentUserContact);
+      final isMeReceiver = _arePhonesEqual(t.receiverPhone, currentUserContact);
+
+      if (isMeSender) {
+        // I sent, checking if receiver is this person
+        if (personPhone.isNotEmpty && t.receiverPhone != null) {
+          return _arePhonesEqual(t.receiverPhone, personPhone);
+        }
+        return t.receiverName == personName;
+      } else if (isMeReceiver) {
+        // I received, checking if sender is this person
+        if (personPhone.isNotEmpty && t.senderPhone != null) {
+          return _arePhonesEqual(t.senderPhone, personPhone);
+        }
+        return t.senderName == personName;
+      }
+      return false;
+    }).toList();
   }
 
   bool _arePhonesEqual(String? p1, String? p2) {
@@ -333,20 +402,40 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     List<LedgerTransaction> transactions,
     String currentUserContact,
   ) {
-    // Simplified for brevity, assume similar logic to original file
-    // Actually, I should probably copy the logic to avoid bugs
+    // Filter hidden people
+    final hiddenPeople = context.read<LedgerProvider>().hiddenPeople;
+
     Map<String, double> balances = {};
     Map<String, String> names = {};
+    Map<String, String> phones = {};
+
     for (var t in transactions) {
       final isSent = _arePhonesEqual(t.senderPhone, currentUserContact);
       final otherName = isSent ? t.receiverName : t.senderName;
+      final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
+
+      // Skip if hidden
+      if (hiddenPeople.contains(otherName)) continue;
+
       // Simple keying by name for now if phone is missing, but ideally phone
       final key = otherName;
       names[key] = otherName;
+
+      // Store phone if available (prefer non-empty)
+      if (otherPhone != null && otherPhone.isNotEmpty) {
+        phones[key] = otherPhone;
+      }
+
       balances[key] = (balances[key] ?? 0) + (isSent ? t.amount : -t.amount);
     }
     return balances.entries
-        .map((e) => {'name': names[e.key], 'phone': '', 'balance': e.value})
+        .map(
+          (e) => {
+            'name': names[e.key],
+            'phone': phones[e.key] ?? '',
+            'balance': e.value,
+          },
+        )
         .toList();
   }
 
@@ -510,30 +599,13 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     double bal,
     List<LedgerTransaction> tx,
     String cur,
-    String currencySymbol,
-  ) {
+    String currencySymbol, {
+    VoidCallback? onLongPress,
+  }) {
     return GestureDetector(
+      onLongPress: onLongPress,
       onTap: () {
-        final personTransactions = tx.where((t) {
-          final isMeSender = _arePhonesEqual(t.senderPhone, cur);
-          final isMeReceiver = _arePhonesEqual(t.receiverPhone, cur);
-
-          if (isMeSender) {
-            // I sent, checking if receiver is this person
-            // If phone is available check phone, else check name
-            if (phone.isNotEmpty && t.receiverPhone != null) {
-              return _arePhonesEqual(t.receiverPhone, phone);
-            }
-            return t.receiverName == name;
-          } else if (isMeReceiver) {
-            // I received, checking if sender is this person
-            if (phone.isNotEmpty && t.senderPhone != null) {
-              return _arePhonesEqual(t.senderPhone, phone);
-            }
-            return t.senderName == name;
-          }
-          return false;
-        }).toList();
+        final personTransactions = _getPersonTransactions(tx, name, phone, cur);
 
         Navigator.push(
           context,
@@ -547,12 +619,18 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               currentUserContact: cur,
               onAddTransaction:
                   (pName, pPhone, amount, desc, {isReceived = false}) {
+                    final userProvider = context.read<UserProvider>();
+                    final currentUser = userProvider.user;
+
                     context.read<LedgerProvider>().addLedgerTransaction(
                       pName,
                       pPhone,
                       amount,
                       desc,
                       isReceived: isReceived,
+                      currentUserId: currentUser?.userId ?? '',
+                      currentUserName: currentUser?.name ?? '',
+                      currentUserPhone: currentUser?.phone ?? '',
                     );
                   },
               onRemind: () {
@@ -593,6 +671,341 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showPersonOptions(
+    String name,
+    String phone,
+    String currentUserContact,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit Person'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditPersonDialog(name, phone);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text(
+                'Delete Person',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDeletePerson(name, phone);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.visibility_off, color: Colors.grey),
+              title: const Text('Hide from Dashboard'),
+              onTap: () async {
+                Navigator.pop(context);
+                final provider = context.read<LedgerProvider>();
+                await provider.hidePerson(name);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Removed $name from view')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditPersonDialog(String currentName, String currentPhone) {
+    final nameController = TextEditingController(text: currentName);
+
+    // Separate logic to extract country code if possible, default to IN (+91)
+    String initialPhone = currentPhone;
+    String selectedCountryCode = '+91';
+
+    if (initialPhone.startsWith('+91')) {
+      initialPhone = initialPhone.substring(3);
+    } else if (initialPhone.startsWith('local:')) {
+      initialPhone = ''; // displaying empty for simpler editing
+    }
+
+    final phoneController = TextEditingController(text: initialPhone);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: Theme.of(context).cardColor,
+          ),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Edit Person',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextFormField(
+                  controller: nameController,
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                    labelText: 'Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.person_outline),
+                  ),
+                  validator: (value) =>
+                      value == null || value.isEmpty ? 'Name required' : null,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: CountryCodePicker(
+                        onChanged: (code) {
+                          selectedCountryCode = code.dialCode ?? '+91';
+                        },
+                        initialSelection: 'IN', // Default to India for now
+                        favorite: const ['+91', 'IN'],
+                        showCountryOnly: false,
+                        showOnlyCountryWhenClosed: false,
+                        padding: EdgeInsets.zero,
+                        flagWidth: 24,
+                        textStyle: GoogleFonts.inter(fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                        decoration: InputDecoration(
+                          labelText: 'Phone (Optional)',
+                          helperText: 'For reminders & nudges',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.phone_outlined),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (formKey.currentState!.validate()) {
+                        final newName = nameController.text.trim();
+                        final rawPhone = phoneController.text.trim();
+
+                        final newPhone = rawPhone.isEmpty
+                            ? ''
+                            : '$selectedCountryCode$rawPhone';
+
+                        Navigator.pop(context);
+
+                        if (newName == currentName && newPhone == currentPhone)
+                          return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Updating person...')),
+                        );
+
+                        final success = await context
+                            .read<LedgerProvider>()
+                            .updatePerson(
+                              oldName: currentName,
+                              oldPhone: currentPhone,
+                              newName: newName,
+                              newPhone: newPhone,
+                            );
+
+                        if (success) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Person updated successfully'),
+                              ),
+                            );
+                          }
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Failed to update person'),
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Save Changes',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeletePerson(String name, String phone) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Person'),
+        content: Text(
+          'Are you sure you want to delete $name and all their transactions? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Deleting person...')),
+              );
+
+              final success = await context.read<LedgerProvider>().deletePerson(
+                name: name,
+                phone: phone,
+              );
+
+              if (success) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Person deleted successfully'),
+                    ),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to delete person')),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHiddenPeopleDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final hiddenPeople = context.watch<LedgerProvider>().hiddenPeople;
+
+            return AlertDialog(
+              title: const Text('Hidden People'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: hiddenPeople.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text(
+                          'No hidden people.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: hiddenPeople.length,
+                        itemBuilder: (context, index) {
+                          final name = hiddenPeople[index];
+                          return ListTile(
+                            title: Text(name),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.visibility),
+                              onPressed: () async {
+                                await context
+                                    .read<LedgerProvider>()
+                                    .unhidePerson(name);
+                                setState(() {});
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

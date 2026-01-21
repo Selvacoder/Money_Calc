@@ -176,6 +176,7 @@ class TransactionProvider extends ChangeNotifier {
     bool isExpense, {
     String? categoryId,
     String? itemId,
+    String? paymentMethod,
   }) async {
     SoundService().play(isExpense ? 'expense.mp3' : 'income.mp3');
 
@@ -190,6 +191,7 @@ class TransactionProvider extends ChangeNotifier {
       dateTime: DateTime.now(),
       categoryId: categoryId,
       itemId: itemId,
+      paymentMethod: paymentMethod,
     );
 
     _transactions.insert(0, newTransaction);

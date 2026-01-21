@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:flutter/services.dart';
 
 import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
@@ -25,6 +27,27 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _isPersonalMode = true;
+  final LocalAuthentication auth = LocalAuthentication();
+
+  Future<void> _authenticate() async {
+    try {
+      final bool didAuthenticate = await auth.authenticate(
+        localizedReason: 'Please authenticate to access Ledger',
+        options: const AuthenticationOptions(stickyAuth: true),
+      );
+      if (didAuthenticate) {
+        setState(() {
+          _isPersonalMode = false;
+        });
+      }
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Authentication error: ${e.message}')),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -118,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_filled), label: 'Home'),
             NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-            NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Graph'),
+            NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Report'),
             NavigationDestination(icon: Icon(Icons.person), label: 'Account'),
           ],
         ),
@@ -130,9 +153,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () {
         if (!isActive) {
-          setState(() {
-            _isPersonalMode = !_isPersonalMode;
-          });
+          if (text == 'Ledger') {
+            _authenticate();
+          } else {
+            setState(() {
+              _isPersonalMode = true;
+            });
+          }
         }
       },
       child: Container(

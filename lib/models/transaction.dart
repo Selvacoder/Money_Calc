@@ -28,6 +28,9 @@ class Transaction {
   @HiveField(7)
   final String? ledgerId;
 
+  @HiveField(8)
+  final String? paymentMethod;
+
   Transaction({
     required this.id,
     required this.title,
@@ -37,6 +40,7 @@ class Transaction {
     this.categoryId,
     this.itemId,
     this.ledgerId,
+    this.paymentMethod,
   });
 
   String get description => title;
@@ -55,6 +59,7 @@ class Transaction {
       categoryId: json['categoryId'],
       itemId: json['itemId'],
       ledgerId: json['ledgerId'],
+      paymentMethod: json['paymentMethod'],
     );
   }
 
@@ -67,6 +72,7 @@ class Transaction {
       'categoryId': categoryId,
       'itemId': itemId,
       'ledgerId': ledgerId,
+      'paymentMethod': paymentMethod,
     };
   }
 }

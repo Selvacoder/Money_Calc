@@ -2,6 +2,8 @@ import 'package:appwrite/appwrite.dart';
 // ignore_for_file: deprecated_member_use
 import '../config/appwrite_config.dart';
 
+import 'package:appwrite/models.dart';
+
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
   factory AppwriteService() => _instance;
@@ -244,6 +246,7 @@ class AppwriteService {
         'categoryId': transactionData['categoryId'],
         'itemId': transactionData['itemId'],
         'ledgerId': transactionData['ledgerId'],
+        'paymentMethod': transactionData['paymentMethod'],
       };
 
       final doc = await databases.createDocument(
@@ -638,7 +641,7 @@ class AppwriteService {
   }
 
   // --- LEDGER ---
-  Future<List<Map<String, dynamic>>> getLedgerTransactions() async {
+  Future<List<Map<String, dynamic>>?> getLedgerTransactions() async {
     try {
       final user = await account.get();
       // final contact = user.phone.isNotEmpty ? user.phone : user.email; // OLD
@@ -706,7 +709,7 @@ class AppwriteService {
       return allTransactions;
     } catch (e) {
       print('Error fetching ledger transactions: $e');
-      return [];
+      return null; // Return null on error to distinguish from empty list
     }
   }
 
@@ -792,6 +795,236 @@ class AppwriteService {
     } catch (e) {
       print('Error deleting ledger transaction: $e');
       return false;
+    }
+  }
+
+  // Batch Update Person (Name/Phone)
+  Future<bool> updateLedgerPerson({
+    required String oldName,
+    required String oldPhone,
+    required String newName,
+    required String newPhone,
+  }) async {
+    try {
+      // 1. Fetch all transactions involving this person
+      // This is expensive if there are many, but Appwrite lacks "update where"
+      // We rely on the fact that for a single user, it shouldn't be massive.
+
+      // We need to match precise contact logic used in UI
+      // If oldPhone is valid (not local), we query by phone.
+      // Else we query by name.
+
+      final isPhoneIdentity =
+          oldPhone.isNotEmpty && !oldPhone.startsWith('local:');
+
+      List<String> qualities = [];
+      if (isPhoneIdentity) {
+        qualities.add('senderPhone');
+        qualities.add('receiverPhone');
+      } else {
+        qualities.add('senderName');
+        qualities.add('receiverName');
+      }
+
+      // Appwrite doesn't support "OR" easily across fields in one query for different fields
+      // But we can do multiple queries or fetch all user's transactions and filter.
+      // Fetching all is safest to ensure consistency, then filter.
+      // Or 2 queries: sentByPerson, receivedByPerson.
+
+      List<Document> docsToUpdate = [];
+
+      // Query 1: Where person is Sender
+      final q1 = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        queries: [
+          Query.equal(isPhoneIdentity ? 'senderPhone' : 'senderName', [
+            isPhoneIdentity ? oldPhone : oldName,
+          ]),
+          Query.limit(100), // Pagination?
+        ],
+      );
+      docsToUpdate.addAll(q1.documents);
+
+      // Query 2: Where person is Receiver
+      final q2 = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        queries: [
+          Query.equal(isPhoneIdentity ? 'receiverPhone' : 'receiverName', [
+            isPhoneIdentity ? oldPhone : oldName,
+          ]),
+          Query.limit(100),
+        ],
+      );
+
+      // Avoid duplicates just in case (though difficult unless self-transaction)
+      for (var doc in q2.documents) {
+        if (!docsToUpdate.any((d) => d.$id == doc.$id)) {
+          docsToUpdate.add(doc);
+        }
+      }
+
+      // 2. Update each document
+      for (var doc in docsToUpdate) {
+        final data = doc.data;
+        Map<String, dynamic> updates = {};
+
+        // Check if Sender is the person
+        bool isSender = false;
+        if (isPhoneIdentity) {
+          isSender = (data['senderPhone'] == oldPhone);
+        } else {
+          isSender =
+              (data['senderName'] == oldName); // Strict name match for local
+        }
+
+        if (isSender) {
+          updates['senderName'] = newName;
+          updates['senderPhone'] = newPhone;
+        }
+
+        // Check if Receiver is the person
+        bool isReceiver = false;
+        if (isPhoneIdentity) {
+          isReceiver = (data['receiverPhone'] == oldPhone);
+        } else {
+          isReceiver = (data['receiverName'] == oldName);
+        }
+
+        if (isReceiver) {
+          updates['receiverName'] = newName;
+          updates['receiverPhone'] = newPhone;
+        }
+
+        if (updates.isNotEmpty) {
+          await databases.updateDocument(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.ledgerCollectionId,
+            documentId: doc.$id,
+            data: updates,
+          );
+        }
+      }
+      return true;
+    } catch (e) {
+      print('Error updating ledger person: $e');
+      return false;
+    }
+  }
+
+  // Batch Delete Person
+  Future<bool> deleteLedgerPerson({
+    required String name,
+    required String phone,
+  }) async {
+    try {
+      final isPhoneIdentity = phone.isNotEmpty && !phone.startsWith('local:');
+
+      List<Document> docsToDelete = [];
+
+      // Query 1: Where person is Sender
+      final q1 = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        queries: [
+          Query.equal(isPhoneIdentity ? 'senderPhone' : 'senderName', [
+            isPhoneIdentity ? phone : name,
+          ]),
+          Query.limit(100),
+        ],
+      );
+      docsToDelete.addAll(q1.documents);
+
+      // Query 2: Where person is Receiver
+      final q2 = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        queries: [
+          Query.equal(isPhoneIdentity ? 'receiverPhone' : 'receiverName', [
+            isPhoneIdentity ? phone : name,
+          ]),
+          Query.limit(100),
+        ],
+      );
+
+      for (var doc in q2.documents) {
+        if (!docsToDelete.any((d) => d.$id == doc.$id)) {
+          docsToDelete.add(doc);
+        }
+      }
+
+      // Execute Deletes
+      for (var doc in docsToDelete) {
+        await databases.deleteDocument(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.ledgerCollectionId,
+          documentId: doc.$id,
+        );
+      }
+      return true;
+    } catch (e) {
+      print('Error deleting ledger person: $e');
+      return false;
+    }
+  }
+
+  // Get user by phone number
+  Future<Map<String, dynamic>?> getUserByPhone(String phone) async {
+    try {
+      // Normalize phone number (remove non-digits)
+      // final normalizedPhone = phone.replaceAll(RegExp(r'\D'), ''); // Unused
+
+      // We need to match the exact format stored in profiles.
+      // Since specific format might vary, we might need a more flexible search or ensure strict formatting.
+      // For now, let's assume strict match or substring match if possible.
+      // Note: Appwrite queries on string attributes are exact unless full-text search is enabled.
+
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.profilesCollectionId,
+        queries: [
+          Query.equal('phone', phone), // Try exact match first
+        ],
+      );
+
+      if (result.documents.isNotEmpty) {
+        return result.documents.first.data;
+      }
+
+      // If exact match failed, maybe try with/without country code if needed?
+      // For now, sticking to what was passed.
+      return null;
+    } catch (e) {
+      print('Error getting user by phone: $e');
+      return null;
+    }
+  }
+
+  // Send in-app notification
+  Future<void> sendNotification({
+    required String userId,
+    required String title,
+    required String message,
+    required String type, // 'nudge', 'reminder', etc.
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.notificationsCollectionId,
+        documentId: ID.unique(),
+        data: {
+          'userId': userId,
+          'title': title,
+          'message': message,
+          'type': type,
+          'isRead': false,
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Error sending notification: $e');
+      throw e;
     }
   }
 }

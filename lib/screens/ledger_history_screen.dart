@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/ledger_transaction.dart';
+import '../services/export_service.dart';
 
 class LedgerHistoryScreen extends StatefulWidget {
   final List<LedgerTransaction> transactions;
@@ -154,61 +155,88 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                           ),
                         ],
                       ),
-                      InkWell(
-                        onTap: () => _selectDate(context),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _selectedDate != null
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.white,
+                      Row(
+                        children: [
+                          InkWell(
+                            onTap: _showExportDialog,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _selectedDate != null
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.grey.shade300,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Icon(
+                                Icons.download,
+                                size: 16,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.calendar_today,
-                                size: 16,
-                                color: _selectedDate != null
-                                    ? Colors.white
-                                    : Colors.grey.shade600,
+                          const SizedBox(width: 12),
+                          InkWell(
+                            onTap: () => _selectDate(context),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
                               ),
-                              if (_selectedDate != null) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  DateFormat('MMM dd').format(_selectedDate!),
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
+                              decoration: BoxDecoration(
+                                color: _selectedDate != null
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedDate != null
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.shade300,
                                 ),
-                                const SizedBox(width: 4),
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedDate = null;
-                                    });
-                                  },
-                                  child: const Icon(
-                                    Icons.close,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.calendar_today,
                                     size: 16,
-                                    color: Colors.white,
+                                    color: _selectedDate != null
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
                                   ),
-                                ),
-                              ],
-                            ],
+                                  if (_selectedDate != null) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      DateFormat(
+                                        'MMM dd',
+                                      ).format(_selectedDate!),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedDate = null;
+                                        });
+                                      },
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -565,5 +593,271 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
         ],
       ),
     );
+  }
+
+  // --- Export Feature ---
+  void _showExportDialog() {
+    String selectedRange = 'Monthly';
+    bool isPdf = true;
+    DateTime? customStartDate;
+    DateTime? customEndDate;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(
+              'Export Ledger',
+              style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Time Period',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedRange,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  items:
+                      [
+                            'Daily',
+                            'Weekly',
+                            'Monthly',
+                            'Quarterly',
+                            'Yearly',
+                            'Custom',
+                          ]
+                          .map(
+                            (e) => DropdownMenuItem(value: e, child: Text(e)),
+                          )
+                          .toList(),
+                  onChanged: (val) => setState(() => selectedRange = val!),
+                ),
+                if (selectedRange == 'Custom') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: customStartDate ?? DateTime.now(),
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null)
+                              setState(() => customStartDate = picked);
+                          },
+                          icon: const Icon(Icons.calendar_today, size: 16),
+                          label: Text(
+                            customStartDate == null
+                                ? 'Start Date'
+                                : DateFormat('MMM dd').format(customStartDate!),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: customEndDate ?? DateTime.now(),
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null)
+                              setState(() => customEndDate = picked);
+                          },
+                          icon: const Icon(Icons.event, size: 16),
+                          label: Text(
+                            customEndDate == null
+                                ? 'End Date'
+                                : DateFormat('MMM dd').format(customEndDate!),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Text(
+                  'Format',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilterChip(
+                        label: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.picture_as_pdf, size: 16),
+                            SizedBox(width: 8),
+                            Text('PDF'),
+                          ],
+                        ),
+                        selected: isPdf,
+                        onSelected: (val) => setState(() => isPdf = true),
+                        showCheckmark: false,
+                        selectedColor: Colors.red.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: isPdf ? Colors.red : Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilterChip(
+                        label: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.table_chart, size: 16),
+                            SizedBox(width: 8),
+                            Text('Excel/CSV'),
+                          ],
+                        ),
+                        selected: !isPdf,
+                        onSelected: (val) => setState(() => isPdf = false),
+                        showCheckmark: false,
+                        selectedColor: Colors.green.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: !isPdf ? Colors.green : Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _generateExport(
+                    selectedRange,
+                    isPdf,
+                    customStartDate,
+                    customEndDate,
+                  );
+                },
+                child: const Text('Export'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _generateExport(
+    String range,
+    bool isPdf,
+    DateTime? customStart,
+    DateTime? customEnd,
+  ) async {
+    final now = DateTime.now();
+    DateTime start;
+    DateTime end = now;
+
+    // Filter Logic
+    switch (range) {
+      case 'Daily':
+        start = DateTime(now.year, now.month, now.day);
+        end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        break;
+      case 'Weekly':
+        start = now.subtract(Duration(days: now.weekday - 1));
+        start = DateTime(start.year, start.month, start.day); // Start of week
+        break;
+      case 'Monthly':
+        start = DateTime(now.year, now.month, 1);
+        break;
+      case 'Quarterly':
+        int quarter = ((now.month - 1) / 3).floor();
+        start = DateTime(now.year, quarter * 3 + 1, 1);
+        break;
+      case 'Yearly':
+        start = DateTime(now.year, 1, 1);
+        break;
+      case 'Custom':
+        start = customStart ?? DateTime(now.year, now.month, 1);
+        end = customEnd != null
+            ? DateTime(
+                customEnd.year,
+                customEnd.month,
+                customEnd.day,
+                23,
+                59,
+                59,
+              )
+            : DateTime(now.year, now.month, now.day, 23, 59, 59);
+        break;
+      default:
+        start = DateTime(now.year, now.month, 1);
+    }
+
+    final exportTransactions = widget.transactions.where((t) {
+      return t.dateTime.isAfter(start.subtract(const Duration(seconds: 1))) &&
+          t.dateTime.isBefore(end.add(const Duration(seconds: 1)));
+    }).toList();
+
+    if (exportTransactions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No transactions to export for this period.'),
+        ),
+      );
+      return;
+    }
+
+    // Call Service
+    final title =
+        '$range Report (${DateFormat('MMM d').format(start)}${range == 'Daily' ? '' : ' - ${DateFormat('MMM d').format(end)}'})';
+
+    try {
+      if (isPdf) {
+        await ExportService().generateLedgerPdf(
+          exportTransactions,
+          title,
+          widget.currencySymbol,
+          widget.currentUserContact,
+        );
+      } else {
+        await ExportService().generateLedgerCsv(
+          exportTransactions,
+          title,
+          widget.currencySymbol,
+          widget.currentUserContact,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
   }
 }

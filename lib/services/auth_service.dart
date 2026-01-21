@@ -3,15 +3,24 @@ import '../services/appwrite_service.dart';
 class AuthService {
   final _appwrite = AppwriteService();
 
-  Future<Map<String, dynamic>> signUp(
-    String name,
-    String email,
-    String password,
-  ) async {
-    return await _appwrite.signUp(name: name, email: email, password: password);
+  Future<Map<String, dynamic>> signUp({
+    required String name,
+    required String email,
+    required String password,
+    required String phone,
+  }) async {
+    return await _appwrite.signUp(
+      name: name,
+      email: email,
+      password: password,
+      phone: phone,
+    );
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
     return await _appwrite.login(email: email, password: password);
   }
 

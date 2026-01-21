@@ -1,13 +1,37 @@
+import 'package:hive/hive.dart';
+
+part 'item.g.dart';
+
+@HiveType(typeId: 3)
 class Item {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String userId;
+
+  @HiveField(2)
   final String title;
+
+  @HiveField(3)
   final double amount;
+
+  @HiveField(4)
   final bool isExpense;
+
+  @HiveField(5)
   final String categoryId;
+
+  @HiveField(6)
   final int usageCount;
-  final String? frequency; // 'daily' or 'monthly'
+
+  @HiveField(7)
+  final String? frequency;
+
+  @HiveField(8)
   final String? icon;
+
+  String get name => title; // Alias match
 
   Item({
     required this.id,
@@ -17,13 +41,26 @@ class Item {
     required this.isExpense,
     required this.categoryId,
     this.usageCount = 0,
-    this.frequency = 'daily',
+    this.frequency,
     this.icon,
   });
 
+  factory Item.fromJson(Map<String, dynamic> json) {
+    return Item(
+      id: json['\$id'] ?? '',
+      userId: json['userId'] ?? '',
+      title: json['title'] ?? '',
+      amount: (json['amount'] ?? 0.0).toDouble(),
+      isExpense: json['isExpense'] ?? true,
+      categoryId: json['categoryId'] ?? '',
+      usageCount: json['usageCount'] ?? 0,
+      frequency: json['frequency'],
+      icon: json['icon'],
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'userId': userId,
       'title': title,
       'amount': amount,
@@ -33,21 +70,5 @@ class Item {
       'frequency': frequency,
       'icon': icon,
     };
-  }
-
-  factory Item.fromJson(Map<String, dynamic> json) {
-    return Item(
-      id: json['\$id'] ?? json['id'] ?? '',
-      userId: json['userId'] ?? '',
-      title: json['title'] ?? 'Unknown',
-      amount: (json['amount'] is int)
-          ? (json['amount'] as int).toDouble()
-          : (json['amount'] ?? 0.0),
-      isExpense: json['isExpense'] ?? true,
-      categoryId: json['categoryId'] ?? '',
-      usageCount: json['usageCount'] ?? 0,
-      frequency: json['frequency'] ?? 'daily',
-      icon: json['icon'],
-    );
   }
 }

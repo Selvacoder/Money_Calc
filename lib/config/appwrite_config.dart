@@ -9,4 +9,6 @@ class AppwriteConfig {
   static const String transactionsCollectionId = 'transactions';
   static const String categoriesCollectionId = 'categories';
   static const String itemsCollectionId = 'items';
+  static const String profilesCollectionId = 'profiles';
+  static const String ledgerCollectionId = 'ledger_transactions';
 }

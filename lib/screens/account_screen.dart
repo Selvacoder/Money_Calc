@@ -1,199 +1,385 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/user_provider.dart';
+import '../providers/currency_provider.dart';
 import '../models/user_profile.dart';
-import '../services/auth_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'settings/notifications_screen.dart';
 import 'settings/theme_screen.dart';
 import 'settings/privacy_screen.dart';
 import 'settings/help_screen.dart';
 import 'settings/about_screen.dart';
 
-class AccountScreen extends StatefulWidget {
-  final UserProfile profile;
-  final VoidCallback onLogout;
-  final Function(UserProfile) onUpdateProfile;
-
-  const AccountScreen({
-    super.key,
-    required this.profile,
-    required this.onLogout,
-    required this.onUpdateProfile,
-    required this.currencySymbol,
-    required this.onUpdateCurrency,
-  });
-
-  final String currencySymbol;
-  final Function(String) onUpdateCurrency;
+class AccountScreen extends StatelessWidget {
+  const AccountScreen({super.key});
 
   @override
-  State<AccountScreen> createState() => _AccountScreenState();
-}
+  Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().user;
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
 
-class _AccountScreenState extends State<AccountScreen> {
-  void _showEditProfileDialog() {
-    final nameController = TextEditingController(text: widget.profile.name);
-    final emailController = TextEditingController(text: widget.profile.email);
-    final phoneController = TextEditingController(text: widget.profile.phone);
+    // Helper to format date manually to avoid intl dependency if not present
+    // or just use yyyy-mm-dd. Screenshot shows "Jan 19, 2026".
+    String formatDate(DateTime date) {
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    }
 
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Edit Profile',
-                style: GoogleFonts.inter(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // --- Profile Header ---
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(top: 60, bottom: 30),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    primaryColor.withOpacity(0.8),
+                    primaryColor.withOpacity(0.6),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(32),
                 ),
               ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Full Name',
-                  prefixIcon: const Icon(Icons.person),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: emailController,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: const Icon(Icons.email),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneController,
-                decoration: InputDecoration(
-                  labelText: 'Phone',
-                  prefixIcon: const Icon(Icons.phone),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Cancel'),
+                  // Avatar
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.white,
+                    child: Icon(
+                      Icons.person,
+                      size: 50,
+                      color: primaryColor.withOpacity(0.5),
+                    ),
+                    // backgroundImage: user?.photoUrl != null ? NetworkImage(user!.photoUrl) : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Name
+                  Text(
+                    user?.name ?? 'Guest User',
+                    style: GoogleFonts.inter(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors
+                          .white, // Or primary depending on contrast. Screenshot matches primary bg?
+                      // Screenshot has light purple background, white text might be hard if too light.
+                      // Let's assume the background is solid light accent.
+                      // Screenshot text is White. Background is Blue/Purple.
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final updatedProfile = UserProfile(
-                          name: nameController.text,
-                          email: emailController.text,
-                          phone: phoneController.text,
-                          photoUrl: widget.profile.photoUrl,
-                          joinDate: widget.profile.joinDate,
-                        );
-                        widget.onUpdateProfile(updatedProfile);
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                  const SizedBox(height: 4),
+
+                  // Email (Header)
+                  Text(
+                    user?.email ?? 'Sign in to sync',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Edit Profile Button
+                  ElevatedButton.icon(
+                    onPressed: () => _showEditProfileDialog(context),
+                    icon: Icon(Icons.edit, size: 16, color: primaryColor),
+                    label: Text(
+                      'Edit Profile',
+                      style: GoogleFonts.inter(
+                        color: primaryColor,
+                        fontWeight: FontWeight.w600,
                       ),
-                      child: const Text('Save'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: primaryColor,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+
+            // --- Account Information ---
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Account Information',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildMakeInfoItem(
+                    context,
+                    Icons.email_outlined,
+                    'Email',
+                    user?.email ?? 'Not set',
+                  ),
+                  _buildMakeInfoItem(
+                    context,
+                    Icons.phone_outlined,
+                    'Phone',
+                    user?.phone ?? 'Not set',
+                  ),
+                  _buildMakeInfoItem(
+                    context,
+                    Icons.calendar_today_outlined,
+                    'Member Since',
+                    user != null ? formatDate(user.joinDate) : 'N/A',
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  Text(
+                    'Settings',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    subtitle: 'Manage your notifications',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    ),
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.currency_exchange,
+                    title: 'Currency',
+                    subtitle:
+                        'Current: ${context.watch<CurrencyProvider>().currencySymbol} (${context.watch<CurrencyProvider>().currencyCode})',
+                    onTap: () {
+                      _showCurrencySelectionDialog(context);
+                    },
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.palette_outlined,
+                    title: 'Appearance',
+                    subtitle: 'Theme & Accent Color',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ThemeScreen()),
+                    ),
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.lock_outline,
+                    title: 'Privacy & Security',
+                    subtitle: 'Manage your privacy settings',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PrivacyScreen()),
+                    ),
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.help_outline,
+                    title: 'Help & Support',
+                    subtitle: 'Get help and support',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HelpScreen()),
+                    ),
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.info_outline,
+                    title: 'About',
+                    subtitle: 'Version 1.0.0',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutScreen()),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        context.read<UserProvider>().logout();
+                        Navigator.of(context).pushReplacementNamed('/login');
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.errorContainer,
+                        foregroundColor: theme.colorScheme.onErrorContainer,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  // Add bottom padding for scrolling
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
+          ],
         ),
-      ).animate().scale(duration: 300.ms, curve: Curves.easeOutBack).fade(),
+      ),
     );
   }
 
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Logout',
-          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to logout? All your data will be cleared.',
-          style: GoogleFonts.inter(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Use AuthService to logout and clear all data
-              await AuthService().logout();
-              // Navigate to login screen
-              if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/login', (route) => false);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6B6B),
-              foregroundColor: Colors.white,
+  // Helper for Account Info Items
+  Widget _buildMakeInfoItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: const Text('Logout'),
+            child: Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(fontSize: 12, color: Colors.grey),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Future<void> _showCurrencyDialog() async {
-    final currencies = {
-      'USD': '\$',
-      'EUR': '€',
-      'INR': '₹',
-      'GBP': '£',
-      'JPY': '¥',
-      'CAD': 'C\$',
-      'AUD': 'A\$',
-    };
+  // Existing _buildSettingItem BELOW this line (retained)
 
-    await showDialog(
+  Widget _buildSettingItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCurrencySelectionDialog(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Container(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        final currencies = CurrencyProvider.currencies;
+        return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -204,475 +390,107 @@ class _AccountScreenState extends State<AccountScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                height: 300,
+              Expanded(
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: currencies.length,
                   itemBuilder: (context, index) {
-                    final key = currencies.keys.elementAt(index);
-                    final symbol = currencies[key]!;
-                    final isSelected = widget.currencySymbol == symbol;
-
-                    return InkWell(
-                      onTap: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('currency_symbol', symbol);
-                        widget.onUpdateCurrency(symbol);
-                        if (mounted) Navigator.pop(context);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primaryContainer
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                symbol,
-                                style: GoogleFonts.inter(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              key,
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (isSelected)
-                              Icon(
-                                Icons.check_circle,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                          ],
+                    final currency = currencies[index];
+                    return ListTile(
+                      leading: Text(
+                        currency['symbol']!,
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                         ),
                       ),
+                      title: Text(
+                        '${currency['code']}',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                      onTap: () {
+                        context.read<CurrencyProvider>().setCurrency(
+                          currency['code']!,
+                          currency['symbol']!,
+                        );
+                        Navigator.pop(context);
+                      },
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-              ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Profile Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ).animate().scale(
-                      delay: 100.ms,
-                      duration: 400.ms,
-                      curve: Curves.easeOutBack,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                          widget.profile.name,
-                          style: GoogleFonts.inter(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 200.ms)
-                        .slideY(begin: 0.2, end: 0),
-                    const SizedBox(height: 4),
-                    Text(
-                          widget.profile.email,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 250.ms)
-                        .slideY(begin: 0.2, end: 0),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: _showEditProfileDialog,
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit Profile'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Theme.of(context).colorScheme.primary,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ).animate().fadeIn(delay: 300.ms).scale(),
-                  ],
-                ),
-              ),
+  void _showEditProfileDialog(BuildContext context) {
+    final user = context.read<UserProvider>().user;
+    final nameController = TextEditingController(text: user?.name ?? '');
 
-              // Profile Details
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Account Information',
-                      style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onBackground,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildInfoCard(
-                          icon: Icons.email_outlined,
-                          title: 'Email',
-                          value: widget.profile.email,
-                        )
-                        .animate()
-                        .fadeIn(delay: 100.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    _buildInfoCard(
-                          icon: Icons.phone_outlined,
-                          title: 'Phone',
-                          value: widget.profile.phone,
-                        )
-                        .animate()
-                        .fadeIn(delay: 150.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    _buildInfoCard(
-                          icon: Icons.calendar_today_outlined,
-                          title: 'Member Since',
-                          value: DateFormat(
-                            'MMM dd, yyyy',
-                          ).format(widget.profile.joinDate),
-                        )
-                        .animate()
-                        .fadeIn(delay: 200.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    const SizedBox(height: 24),
-
-                    Text(
-                      'Settings',
-                      style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onBackground,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildSettingsOption(
-                          icon: Icons.notifications_outlined,
-                          title: 'Notifications',
-                          subtitle: 'Manage your notifications',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const NotificationsScreen(),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 200.ms)
-                        .slideX(begin: 0.1, end: 0),
-                    _buildSettingsOption(
-                          icon: Icons.currency_exchange,
-                          title: 'Currency',
-                          subtitle: 'Current: ${widget.currencySymbol}',
-                          onTap: _showCurrencyDialog,
-                        )
-                        .animate()
-                        .fadeIn(delay: 225.ms)
-                        .slideX(begin: 0.1, end: 0),
-                    _buildSettingsOption(
-                          icon: Icons.palette_outlined,
-                          title: 'Appearance',
-                          subtitle: 'Theme & Accent Color',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ThemeScreen(),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 225.ms)
-                        .slideX(begin: 0.1, end: 0),
-                    _buildSettingsOption(
-                          icon: Icons.lock_outline,
-                          title: 'Privacy & Security',
-                          subtitle: 'Manage your privacy settings',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const PrivacyScreen(),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 300.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    _buildSettingsOption(
-                          icon: Icons.help_outline,
-                          title: 'Help & Support',
-                          subtitle: 'Get help and support',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HelpScreen(),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 350.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    _buildSettingsOption(
-                          icon: Icons.info_outline,
-                          title: 'About',
-                          subtitle: 'Version 1.0.0',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AboutScreen(),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(delay: 400.ms)
-                        .slideX(begin: 0.2, end: 0),
-
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _showLogoutDialog,
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Logout'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ).animate().fadeIn(delay: 450.ms).scale(),
-
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ],
-          ),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Profile',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onBackground,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.grey.shade700, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onBackground,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: 'Name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'Email and phone can be updated in account settings',
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty && user != null) {
+                final updatedProfile = UserProfile(
+                  userId: user.userId,
+                  name: nameController.text,
+                  email: user.email,
+                  phone: user.phone,
+                  photoUrl: user.photoUrl,
+                  joinDate: user.joinDate,
+                );
+                context.read<UserProvider>().updateProfile(updatedProfile);
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

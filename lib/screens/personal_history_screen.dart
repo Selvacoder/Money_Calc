@@ -3,28 +3,26 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/transaction.dart';
-import '../models/category.dart';
 
-class HistoryScreen extends StatefulWidget {
+class PersonalHistoryScreen extends StatefulWidget {
   final List<Transaction> transactions;
-  final List<Category> categories;
+  final String currencySymbol;
 
-  const HistoryScreen({
+  const PersonalHistoryScreen({
     super.key,
     required this.transactions,
-    required this.categories,
+    this.currencySymbol = '₹',
   });
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<PersonalHistoryScreen> createState() => _PersonalHistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
   DateTime? _selectedDate;
   String _searchQuery = '';
   String _selectedType = 'All'; // All, Income, Expense
   String _sortOption = 'Date'; // Date, Amount High, Amount Low
-  String? _selectedCategoryId; // null = All
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -65,23 +63,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
       }
 
-      // 2. Search Filter (Item Name)
+      // 2. Search Filter (Title)
       if (_searchQuery.isNotEmpty) {
-        if (!t.title.toLowerCase().contains(_searchQuery.toLowerCase())) {
+        final query = _searchQuery.toLowerCase();
+        if (!t.title.toLowerCase().contains(query)) {
           return false;
         }
       }
 
       // 3. Type Filter
-      if (_selectedType != 'All') {
-        bool isExpense = _selectedType == 'Expense';
-        if (t.isExpense != isExpense) return false;
-      }
-
-      // 4. Category Filter
-      if (_selectedCategoryId != null) {
-        if (t.categoryId != _selectedCategoryId) return false;
-      }
+      if (_selectedType == 'Income' && t.isExpense) return false;
+      if (_selectedType == 'Expense' && !t.isExpense) return false;
 
       return true;
     }).toList();
@@ -218,7 +210,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         });
                       },
                       decoration: InputDecoration(
-                        hintText: 'Search items...',
+                        hintText: 'Search transactions...',
                         hintStyle: GoogleFonts.inter(
                           color: Colors.grey.shade400,
                         ),
@@ -241,31 +233,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           isSelected: _selectedType != 'All',
                           onTap: () {
                             _showTypeFilterDialog(context);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Category Filter
-                        _buildFilterChip(
-                          label: _selectedCategoryId == null
-                              ? 'Category'
-                              : widget.categories
-                                    .firstWhere(
-                                      (c) => c.id == _selectedCategoryId,
-                                      orElse: () => Category(
-                                        id: '',
-                                        name: 'Unknown',
-                                        type: 'expense',
-                                        icon: 'help_outline',
-                                        userId: '',
-                                        usageCount: 0,
-                                      ),
-                                    )
-                                    .name,
-                          icon: Icons.category_outlined,
-                          isSelected: _selectedCategoryId != null,
-                          onTap: () {
-                            _showCategoryFilterDialog(context);
                           },
                         ),
                         const SizedBox(width: 8),
@@ -423,81 +390,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 setState(() => _selectedType = val);
                 Navigator.pop(context);
               }),
-              _buildRadioOption('Expense', _selectedType, (val) {
-                setState(() => _selectedType = val);
-                Navigator.pop(context);
-              }),
               _buildRadioOption('Income', _selectedType, (val) {
                 setState(() => _selectedType = val);
                 Navigator.pop(context);
               }),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCategoryFilterDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          height: MediaQuery.of(context).size.height * 0.5,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Filter by Category',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView(
-                  children: [
-                    ListTile(
-                      title: Text('All Categories', style: GoogleFonts.inter()),
-                      leading: const Icon(Icons.category),
-                      trailing: _selectedCategoryId == null
-                          ? Icon(
-                              Icons.check,
-                              color: Theme.of(context).colorScheme.primary,
-                            )
-                          : null,
-                      onTap: () {
-                        setState(() => _selectedCategoryId = null);
-                        Navigator.pop(context);
-                      },
-                    ),
-                    ...widget.categories.map((category) {
-                      return ListTile(
-                        leading: Text(
-                          category.icon,
-                          style: const TextStyle(fontSize: 20),
-                        ),
-                        title: Text(category.name, style: GoogleFonts.inter()),
-                        trailing: _selectedCategoryId == category.id
-                            ? Icon(
-                                Icons.check,
-                                color: Theme.of(context).colorScheme.primary,
-                              )
-                            : null,
-                        onTap: () {
-                          setState(() => _selectedCategoryId = category.id);
-                          Navigator.pop(context);
-                        },
-                      );
-                    }),
-                  ],
-                ),
-              ),
+              _buildRadioOption('Expense', _selectedType, (val) {
+                setState(() => _selectedType = val);
+                Navigator.pop(context);
+              }),
             ],
           ),
         );
@@ -563,6 +463,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildTransactionItem(BuildContext context, Transaction transaction) {
+    final isExpense = transaction.isExpense;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -582,16 +483,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: transaction.isExpense
+              color: isExpense
                   ? const Color(0xFFFFE5E5)
                   : const Color(0xFFE5F5E9),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              transaction.isExpense
-                  ? Icons.remove_circle_outline
-                  : Icons.add_circle_outline,
-              color: transaction.isExpense
+              isExpense ? Icons.arrow_outward : Icons.arrow_downward,
+              color: isExpense
                   ? const Color(0xFFFF6B6B)
                   : const Color(0xFF51CF66),
               size: 24,
@@ -622,11 +521,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
           Text(
-            '${transaction.isExpense ? '-' : '+'}₹${NumberFormat('#,##0.00').format(transaction.amount)}',
+            '${isExpense ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0.00').format(transaction.amount)}',
             style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: transaction.isExpense
+              color: isExpense
                   ? const Color(0xFFFF6B6B)
                   : const Color(0xFF51CF66),
             ),

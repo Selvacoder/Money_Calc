@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../services/auth_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
+// import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,7 +15,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  // final _authService = AuthService();
   bool _isLoading = false;
   String? _errorMessage;
   bool _obscurePassword = true;
@@ -54,15 +56,24 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final result = await _authService.login(email, password);
+    // Use UserProvider instead of AuthService directly
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final result = await userProvider.login(email, password);
 
-    if (result['success'] == true) {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+      if (result['success'] == true) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        setState(() {
+          _errorMessage = result['message'] ?? 'Invalid credentials';
+          _isLoading = false;
+        });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _errorMessage = result['message'] ?? 'Invalid credentials';
+        _errorMessage = 'An error occurred: $e';
         _isLoading = false;
       });
     }
@@ -74,15 +85,23 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    final success = await _authService.signInWithGoogle();
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final success = await userProvider.signInWithGoogle();
 
-    if (success) {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+      if (success) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Google sign-in failed';
+          _isLoading = false;
+        });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _errorMessage = 'Google sign-in failed';
+        _errorMessage = 'Google sign-in error: $e';
         _isLoading = false;
       });
     }
@@ -90,13 +109,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF5B5FED), Color(0xFF7B7FF8), Color(0xFF9B9FFA)],
+            colors: [
+              primaryColor,
+              primaryColor.withOpacity(0.8),
+              primaryColor.withOpacity(0.6),
+            ],
           ),
         ),
         child: SafeArea(
@@ -120,10 +145,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.account_balance_wallet,
                       size: 60,
-                      color: Color(0xFF5B5FED),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ).animate().scale(delay: 100.ms, duration: 500.ms),
 

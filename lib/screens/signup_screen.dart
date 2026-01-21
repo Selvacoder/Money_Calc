@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../services/auth_service.dart';
+import 'package:country_code_picker/country_code_picker.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
+// import '../services/auth_service.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -13,18 +16,21 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController(); // Added phone controller
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _authService = AuthService();
+  // final _authService = AuthService();
   bool _isLoading = false;
   String? _errorMessage;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String _selectedCountryCode = '+91'; // Default to India
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose(); // Dispose phone controller
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -42,12 +48,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final fullPhone = _selectedCountryCode + phone; // Concatenate country code
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
     // Validation
     if (name.isEmpty ||
         email.isEmpty ||
+        phone.isEmpty || // Check phone
         password.isEmpty ||
         confirmPassword.isEmpty) {
       setState(() {
@@ -60,6 +69,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!_isValidEmail(email)) {
       setState(() {
         _errorMessage = 'Please enter a valid email address';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Basic Phone Validation
+    if (phone.length < 10) {
+      setState(() {
+        _errorMessage = 'Please enter a valid phone number';
         _isLoading = false;
       });
       return;
@@ -81,16 +99,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    final result = await _authService.signUp(name, email, password);
+    // Use UserProvider
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final result = await userProvider.signUp(
+        name: name,
+        email: email,
+        password: password,
+        phone: fullPhone,
+      );
 
-    if (result['success'] == true) {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+      if (result['success'] == true) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        setState(() {
+          _errorMessage =
+              result['message'] ?? 'Sign up failed. Please try again.';
+          _isLoading = false;
+        });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _errorMessage =
-            result['message'] ?? 'Sign up failed. Please try again.';
+        _errorMessage = 'An error occurred: $e';
         _isLoading = false;
       });
     }
@@ -115,14 +147,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Back Button
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                  ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.2, end: 0),
-
                   const SizedBox(height: 20),
 
                   // Logo
@@ -239,6 +263,61 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                             ),
                           ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Phone Field with Country Code
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: CountryCodePicker(
+                                onChanged: (code) {
+                                  setState(() {
+                                    _selectedCountryCode =
+                                        code.dialCode ?? '+91';
+                                  });
+                                },
+                                initialSelection: 'IN',
+                                favorite: const ['+91', 'IN'],
+                                showCountryOnly: false,
+                                showOnlyCountryWhenClosed: false,
+                                alignLeft: false,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                keyboardType: TextInputType.phone,
+                                decoration: InputDecoration(
+                                  labelText: 'Phone Number',
+                                  hintText: 'Enter phone number',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF5B5FED),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 16),

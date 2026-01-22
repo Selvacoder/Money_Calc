@@ -10,6 +10,7 @@ import 'settings/theme_screen.dart';
 import 'settings/privacy_screen.dart';
 import 'settings/help_screen.dart';
 import 'settings/about_screen.dart';
+import 'settings/bank_details_screen.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
@@ -177,6 +178,18 @@ class AccountScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
 
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.account_balance,
+                    title: 'Bank Details',
+                    subtitle: 'Manage banks & primary accounts',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const BankDetailsScreen(),
+                      ),
+                    ),
+                  ),
                   _buildSettingItem(
                     context,
                     icon: Icons.notifications_outlined,

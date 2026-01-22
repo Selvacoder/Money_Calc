@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Keep for now
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/appwrite_service.dart'; // Keep if used for mock/other calls
 
 class UserProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
-  // final AppwriteService _appwriteService = AppwriteService(); // Removed unused warning
+  final AppwriteService _appwriteService = AppwriteService();
 
   UserProfile? _user;
   bool _isLoading = true;
@@ -17,7 +17,14 @@ class UserProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
 
+  List<String> _banks = [];
+  List<String> get banks => _banks;
+
+  Map<String, String> _primaryPaymentMethods = {};
+  Map<String, String> get primaryPaymentMethods => _primaryPaymentMethods;
+
   late Box<UserProfile> _userBox;
+  late Box _settingsBox; // New box for banks and primary methods
   bool _isHiveInitialized = false;
 
   UserProvider() {
@@ -36,7 +43,14 @@ class UserProvider extends ChangeNotifier {
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
     _userBox = await Hive.openBox<UserProfile>('user_profile');
+    _settingsBox = await Hive.openBox('user_settings');
     _isHiveInitialized = true;
+
+    // Load banks and primary methods
+    _banks = List<String>.from(_settingsBox.get('banks', defaultValue: []));
+    _primaryPaymentMethods = Map<String, String>.from(
+      _settingsBox.get('primary_payment_methods', defaultValue: {}),
+    );
   }
 
   Future<void> checkAuthStatus() async {
@@ -68,6 +82,22 @@ class UserProvider extends ChangeNotifier {
             photoUrl: '', // Placeholder
             joinDate: DateTime.parse(userData['joinDate']),
           );
+          _user = newUser;
+          // Sync Banks & Primary Methods from Cloud to Local
+          if (userData['banks'] != null) {
+            _banks = List<String>.from(userData['banks']);
+            await _settingsBox.put('banks', _banks);
+          }
+          if (userData['primaryPaymentMethods'] != null) {
+            _primaryPaymentMethods = Map<String, String>.from(
+              userData['primaryPaymentMethods'],
+            );
+            await _settingsBox.put(
+              'primary_payment_methods',
+              _primaryPaymentMethods,
+            );
+          }
+
           _user = newUser;
           _isAuthenticated = true;
 
@@ -184,6 +214,9 @@ class UserProvider extends ChangeNotifier {
     try {
       if (_isHiveInitialized) {
         await _userBox.clear();
+        await _settingsBox.clear();
+        _banks = [];
+        _primaryPaymentMethods = {};
       }
       await _authService.logout();
       _user = null;
@@ -191,6 +224,64 @@ class UserProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // --- Bank Management Methods ---
+
+  Future<void> addBank(String bankName) async {
+    if (!_banks.contains(bankName)) {
+      _banks.add(bankName);
+      await _settingsBox.put('banks', _banks);
+      notifyListeners();
+      await _syncPreferences();
+    }
+  }
+
+  Future<void> removeBank(String bankName) async {
+    if (_banks.contains(bankName)) {
+      _banks.remove(bankName);
+      await _settingsBox.put('banks', _banks);
+
+      // Also remove from primary methods if selected
+      final keysToRemove = _primaryPaymentMethods.entries
+          .where((entry) => entry.value == bankName)
+          .map((e) => e.key)
+          .toList();
+
+      for (var key in keysToRemove) {
+        _primaryPaymentMethods.remove(key);
+      }
+
+      if (keysToRemove.isNotEmpty) {
+        await _settingsBox.put(
+          'primary_payment_methods',
+          _primaryPaymentMethods,
+        );
+      }
+      notifyListeners();
+      await _syncPreferences();
+    }
+  }
+
+  Future<void> setPrimaryPaymentMethod(String method, String? bankName) async {
+    if (bankName == null) {
+      _primaryPaymentMethods.remove(method);
+    } else {
+      _primaryPaymentMethods[method] = bankName;
+    }
+    await _settingsBox.put('primary_payment_methods', _primaryPaymentMethods);
+    notifyListeners();
+    await _syncPreferences();
+  }
+
+  Future<void> _syncPreferences() async {
+    if (_user != null) {
+      await _appwriteService.updateUserPreferences(
+        userId: _user!.userId,
+        banks: _banks,
+        primaryPaymentMethods: _primaryPaymentMethods,
+      );
     }
   }
 }

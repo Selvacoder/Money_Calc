@@ -732,7 +732,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
+        builder: (context, setDialogState) {
           final isGave = !currentIsReceived;
           final primaryColor = currentIsReceived
               ? const Color(0xFF51CF66)
@@ -775,7 +775,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         Expanded(
                           child: GestureDetector(
                             onTap: () =>
-                                setState(() => currentIsReceived = false),
+                                setDialogState(() => currentIsReceived = false),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
@@ -799,7 +799,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         Expanded(
                           child: GestureDetector(
                             onTap: () =>
-                                setState(() => currentIsReceived = true),
+                                setDialogState(() => currentIsReceived = true),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(

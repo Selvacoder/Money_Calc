@@ -1,6 +1,7 @@
 import 'package:appwrite/appwrite.dart';
 // ignore_for_file: deprecated_member_use
 import '../config/appwrite_config.dart';
+import 'dart:convert'; // Added for jsonEncode
 
 import 'package:appwrite/models.dart';
 
@@ -70,11 +71,14 @@ class AppwriteService {
       // 3. Create Profile Document
       try {
         final user = await account.get();
+
         await createProfile(
           userId: user.$id,
           name: name,
           email: email,
           phone: phone, // Pass provided phone
+          banks: [],
+          primaryPaymentMethods: {},
         );
       } catch (e) {
         // If profile creation fails, we should maybe cleanup the account
@@ -146,6 +150,40 @@ class AppwriteService {
             phone = profileData['phone'].toString();
           }
         }
+
+        // Parse Banks and Primary Methods
+        List<String> banks = [];
+        Map<String, String> primaryPaymentMethods = {};
+        if (profileDocs.documents.isNotEmpty) {
+          final data = profileDocs.documents.first.data;
+
+          if (data['banks'] != null) {
+            banks = List<String>.from(data['banks']);
+          }
+
+          if (data['primaryPaymentMethods'] != null) {
+            try {
+              final pmData = data['primaryPaymentMethods'];
+              if (pmData is String && pmData.isNotEmpty) {
+                primaryPaymentMethods = Map<String, String>.from(
+                  jsonDecode(pmData),
+                );
+              }
+            } catch (e) {
+              print('Error parsing primary payment methods: $e');
+            }
+          }
+        }
+
+        return {
+          'userId': user.$id,
+          'name': user.name,
+          'email': user.email,
+          'phone': phone.isNotEmpty ? phone : '',
+          'joinDate': user.registration,
+          'banks': banks,
+          'primaryPaymentMethods': primaryPaymentMethods,
+        };
       } catch (e) {
         print('Error fetching profile doc: $e');
       }
@@ -201,6 +239,40 @@ class AppwriteService {
       return true;
     } catch (e) {
       print('Error updating profile: $e');
+      return false;
+    }
+  }
+
+  // Update User Preferences (Banks & Primary Methods)
+  Future<bool> updateUserPreferences({
+    required String userId,
+    required List<String> banks,
+    required Map<String, String> primaryPaymentMethods,
+  }) async {
+    try {
+      final profileDocs = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.profilesCollectionId,
+        queries: [
+          Query.equal('userId', [userId]),
+        ],
+      );
+
+      if (profileDocs.documents.isNotEmpty) {
+        await databases.updateDocument(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.profilesCollectionId,
+          documentId: profileDocs.documents.first.$id,
+          data: {
+            'banks': banks,
+            'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
+          },
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error updating user preferences: $e');
       return false;
     }
   }
@@ -600,6 +672,8 @@ class AppwriteService {
     required String name,
     required String email,
     String? phone, // Added phone
+    List<String> banks = const [],
+    Map<String, String> primaryPaymentMethods = const {},
   }) async {
     try {
       await databases.createDocument(
@@ -611,6 +685,8 @@ class AppwriteService {
           'name': name,
           'email': email,
           'phone': phone ?? '', // Save phone
+          'banks': banks,
+          'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
         },
       );
     } catch (e) {

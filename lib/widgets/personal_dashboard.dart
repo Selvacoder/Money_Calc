@@ -8,6 +8,8 @@ import '../providers/transaction_provider.dart';
 import '../providers/currency_provider.dart';
 import '../models/transaction.dart';
 import '../models/item.dart';
+import '../screens/settings/bank_details_screen.dart';
+import '../providers/user_provider.dart';
 
 class PersonalDashboard extends StatefulWidget {
   const PersonalDashboard({super.key});
@@ -2013,30 +2015,124 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Select Payment Method',
-          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildPaymentOption(context, 'Cash', Icons.money),
-            const SizedBox(height: 12),
-            _buildPaymentOption(context, 'UPI', Icons.qr_code),
-            const SizedBox(height: 12),
-            _buildPaymentOption(context, 'Debit Card', Icons.credit_card),
-            const SizedBox(height: 12),
-            _buildPaymentOption(context, 'Credit Card', Icons.credit_score),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
+      builder: (context) {
+        return Consumer<UserProvider>(
+          builder: (context, userProvider, child) {
+            final primaryMethods = userProvider.primaryPaymentMethods;
+
+            Future<void> handleLongPress(String method) async {
+              // One-time bank selection override
+              final selectedBank = await showModalBottomSheet<String>(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (BuildContext context) {
+                  final banks = userProvider.banks;
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Select Bank for this Transaction',
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (banks.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Center(
+                              child: Text(
+                                "No banks added in Settings.",
+                                style: GoogleFonts.inter(color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                        ...banks.map(
+                          (bank) => ListTile(
+                            leading: const Icon(Icons.account_balance),
+                            title: Text(
+                              bank,
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(context, bank);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+
+              if (selectedBank != null) {
+                // If a bank was selected, return the combined string immediately
+                Navigator.pop(context, '$method ($selectedBank)');
+              }
+            }
+
+            return AlertDialog(
+              title: Text(
+                'Select Payment Method',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildPaymentOption(
+                    context,
+                    'Cash',
+                    Icons.money,
+                    userProvider,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPaymentOption(
+                    context,
+                    'UPI',
+                    Icons.qr_code,
+                    userProvider,
+                    primaryBank: primaryMethods['UPI'],
+                    onLongPress: () => handleLongPress('UPI'),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPaymentOption(
+                    context,
+                    'Debit Card',
+                    Icons.credit_card,
+                    userProvider,
+                    primaryBank: primaryMethods['Debit Card'],
+                    onLongPress: () => handleLongPress('Debit Card'),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPaymentOption(
+                    context,
+                    'Credit Card',
+                    Icons.credit_score,
+                    userProvider,
+                    primaryBank: primaryMethods['Credit Card'],
+                    onLongPress: () => handleLongPress('Credit Card'),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -2044,9 +2140,56 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     BuildContext context,
     String method,
     IconData icon,
-  ) {
+    UserProvider userProvider, {
+    String? primaryBank,
+    VoidCallback? onLongPress,
+  }) {
     return InkWell(
-      onTap: () => Navigator.pop(context, method),
+      onTap: () {
+        if (method != 'Cash' && userProvider.banks.isEmpty) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(
+                'Add Bank Details?',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+              content: Text(
+                'You haven\'t added any banks yet. Adding a bank helps you track accounts better.',
+                style: GoogleFonts.inter(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx); // Close suggestion
+                    Navigator.pop(context, method); // Return default method
+                  },
+                  child: const Text('Use Default'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx); // Close suggestion
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BankDetailsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Add Bank'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          String result = method;
+          if (primaryBank != null) {
+            result = '$method ($primaryBank)';
+          }
+          Navigator.pop(context, result);
+        }
+      },
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -2058,11 +2201,51 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           children: [
             Icon(icon, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 12),
-            Text(
-              method,
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    method,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
+                  ),
+                  // Always reserve space for subtitle to match height
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Visibility(
+                      visible: primaryBank != null,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          primaryBank != null
+                              ? 'Primary as $primaryBank'
+                              : 'Primary as Placeholder',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

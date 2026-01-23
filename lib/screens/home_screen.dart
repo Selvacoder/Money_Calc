@@ -9,13 +9,17 @@ import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/ledger_provider.dart';
 import '../providers/currency_provider.dart';
+import '../providers/investment_provider.dart';
 import '../widgets/personal_dashboard.dart';
 import '../widgets/ledger_dashboard.dart';
+import '../widgets/investment_dashboard.dart';
 
 import 'ledger_history_screen.dart';
 import 'ledger_graph_screen.dart';
 import 'personal_history_screen.dart';
 import 'personal_graph_screen.dart';
+import 'investment_history_screen.dart';
+import 'investment_graph_screen.dart';
 import 'account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,7 +31,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  bool _isPersonalMode = true;
+  // 0: Personal, 1: Ledger, 2: Investment
+  int _currentMode = 0;
   final LocalAuthentication auth = LocalAuthentication();
 
   Future<void> _authenticate() async {
@@ -38,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!isBiometricEnabled) {
         setState(() {
-          _isPersonalMode = false;
+          _currentMode = 1; // Switch to Ledger
         });
         return;
       }
@@ -49,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (didAuthenticate) {
         setState(() {
-          _isPersonalMode = false;
+          _currentMode = 1; // Switch to Ledger
         });
       }
     } on PlatformException catch (e) {
@@ -67,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Future.microtask(() {
       context.read<TransactionProvider>().fetchData();
       context.read<LedgerProvider>().fetchLedgerTransactions();
-      // context.read<UserProvider>().loadUser(); // Removed to prevent infinite loop with AuthWrapper
+      context.read<InvestmentProvider>().fetchInvestments();
     });
   }
 
@@ -81,21 +86,23 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Dynamic Title based on mode? Or generic?
+    // User requested toggle inside AppBar actions.
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar:
           _selectedIndex ==
-              3 // Hide AppBar for Account Screen to use its own title
+              3 // Hide AppBar for Account Screen
           ? null
           : AppBar(
-              automaticallyImplyLeading: false, // Removes the back button
-              toolbarHeight: 80, // Taller app bar for custom layout
+              automaticallyImplyLeading: false,
+              toolbarHeight: 80,
               backgroundColor: Colors.transparent,
               elevation: 0,
               titleSpacing: 20,
               title: Row(
                 children: [
-                  // App Icon
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -109,6 +116,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  // Show "Invest" or "Ledger" or "MoneyCalc" based on mode?
+                  // Keeping generic "MoneyCalc" title as per design
                   Text(
                     'MoneyCalc',
                     style: GoogleFonts.inter(
@@ -120,18 +129,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               actions: [
-                // Custom Toggle Switch
+                // Custom Toggle Switch (3 states)
                 Container(
                   margin: const EdgeInsets.only(right: 20),
-                  padding: const EdgeInsets.all(2), // Reduced padding
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     color: theme.cardColor,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Row(
                     children: [
-                      _buildToggleBtn('Personal', _isPersonalMode),
-                      _buildToggleBtn('Ledger', !_isPersonalMode),
+                      _buildToggleBtn('Personal', 0),
+                      _buildToggleBtn('Ledger', 1),
+                      _buildToggleBtn('Invest', 2),
                     ],
                   ),
                 ),
@@ -147,8 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: NavigationBar(
           selectedIndex: _selectedIndex,
           onDestinationSelected: _onItemTapped,
-          backgroundColor:
-              theme.cardColor, // Use theme card color (darker surface)
+          backgroundColor: theme.cardColor,
           indicatorColor: theme.colorScheme.primary.withOpacity(0.2),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_filled), label: 'Home'),
@@ -161,24 +170,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildToggleBtn(String text, bool isActive) {
+  Widget _buildToggleBtn(String text, int modeIndex) {
+    final isActive = _currentMode == modeIndex;
     return GestureDetector(
       onTap: () {
         if (!isActive) {
-          if (text == 'Ledger') {
+          if (modeIndex == 1) {
+            // Ledger needs auth
             _authenticate();
           } else {
             setState(() {
-              _isPersonalMode = true;
+              _currentMode = modeIndex;
             });
           }
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
-        ), // Reduced padding
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isActive
               ? Theme.of(context).colorScheme.primary
@@ -190,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: GoogleFonts.inter(
             color: isActive ? Colors.white : Colors.grey,
             fontWeight: FontWeight.w600,
-            fontSize: 12, // Reduced font size
+            fontSize: 12,
           ),
         ),
       ),
@@ -205,29 +213,38 @@ class _HomeScreenState extends State<HomeScreen> {
     final ledgerTransactions = ledgerProvider.ledgerTransactions;
 
     switch (_selectedIndex) {
-      case 0:
-        return _isPersonalMode
-            ? const PersonalDashboard()
-            : const LedgerDashboard();
+      case 0: // Dashboard
+        if (_currentMode == 0) return const PersonalDashboard();
+        if (_currentMode == 1) return const LedgerDashboard();
+        return const InvestmentDashboard();
+
       case 1: // History
-        return _isPersonalMode
-            ? PersonalHistoryScreen(
-                transactions: context.watch<TransactionProvider>().transactions,
-                currencySymbol: currencySymbol,
-              )
-            : LedgerHistoryScreen(
-                transactions: ledgerTransactions,
-                currentUserContact: currentUserContact,
-                currencySymbol: currencySymbol,
-              );
-      case 2: // Graph
-        return _isPersonalMode
-            ? const PersonalGraphScreen()
-            : LedgerGraphScreen(
-                transactions: ledgerTransactions,
-                currentUserContact: currentUserContact,
-                currencySymbol: currencySymbol,
-              );
+        if (_currentMode == 0) {
+          return PersonalHistoryScreen(
+            transactions: context.watch<TransactionProvider>().transactions,
+            currencySymbol: currencySymbol,
+          );
+        }
+        if (_currentMode == 1) {
+          return LedgerHistoryScreen(
+            transactions: ledgerTransactions,
+            currentUserContact: currentUserContact,
+            currencySymbol: currencySymbol,
+          );
+        }
+        return const InvestmentHistoryScreen(); // Ensure arguments passed if needed later
+
+      case 2: // Graph/Report
+        if (_currentMode == 0) return const PersonalGraphScreen();
+        if (_currentMode == 1) {
+          return LedgerGraphScreen(
+            transactions: ledgerTransactions,
+            currentUserContact: currentUserContact,
+            currencySymbol: currencySymbol,
+          );
+        }
+        return const InvestmentGraphScreen();
+
       case 3: // Account
         return const AccountScreen();
       default:

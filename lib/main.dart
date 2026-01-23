@@ -9,6 +9,8 @@ import 'providers/user_provider.dart';
 import 'providers/transaction_provider.dart';
 import 'providers/ledger_provider.dart';
 
+import 'models/investment.dart';
+import 'models/investment_transaction.dart';
 import 'models/transaction.dart';
 import 'models/category.dart';
 import 'models/item.dart';
@@ -17,6 +19,7 @@ import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/ledger_screen.dart';
+import 'providers/investment_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,8 @@ void main() async {
   Hive.registerAdapter(CategoryAdapter());
   Hive.registerAdapter(ItemAdapter());
   Hive.registerAdapter(LedgerTransactionAdapter());
+  Hive.registerAdapter(InvestmentAdapter());
+  Hive.registerAdapter(InvestmentTransactionAdapter());
 
   runApp(const MyApp());
 }
@@ -43,6 +48,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LedgerProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => CurrencyProvider()),
+        ChangeNotifierProvider(create: (_) => InvestmentProvider()),
       ],
       child: Consumer2<UserProvider, ThemeProvider>(
         builder: (context, userProvider, themeProvider, _) {

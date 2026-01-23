@@ -1104,4 +1104,165 @@ class AppwriteService {
       rethrow;
     }
   }
+  // --- INVESTMENTS ---
+
+  Future<List<Map<String, dynamic>>> getInvestments() async {
+    try {
+      final user = await account.get();
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentsCollectionId,
+        queries: [
+          Query.equal('userId', [user.$id]),
+        ],
+      );
+
+      return result.documents.map((doc) {
+        final data = doc.data;
+        data['id'] = doc.$id;
+        return data;
+      }).toList();
+    } catch (e) {
+      print('Error fetching investments: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> createInvestment(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final user = await account.get();
+      final investmentData = {
+        'userId': user.$id,
+        'name': data['name'],
+        'type': data['type'],
+        'investedAmount': data['investedAmount'] ?? 0.0,
+        'currentAmount': data['currentAmount'] ?? 0.0,
+        'quantity': data['quantity'] ?? 0.0,
+        'lastUpdated': DateTime.now().toIso8601String(),
+      };
+
+      final doc = await databases.createDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentsCollectionId,
+        documentId: ID.unique(),
+        data: investmentData,
+      );
+
+      final response = doc.data;
+      response['id'] = doc.$id;
+      return response;
+    } catch (e) {
+      print('Error creating investment: $e');
+      return null;
+    }
+  }
+
+  Future<bool> updateInvestment(String id, Map<String, dynamic> data) async {
+    try {
+      // Ensure we update 'lastUpdated' if not provided
+      if (!data.containsKey('lastUpdated')) {
+        data['lastUpdated'] = DateTime.now().toIso8601String();
+      }
+
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentsCollectionId,
+        documentId: id,
+        data: data,
+      );
+      return true;
+    } catch (e) {
+      print('Error updating investment: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteInvestment(String id) async {
+    try {
+      // Should we delete all transactions associated with this investment?
+      // Yes, probably. But for now simpler is better.
+      await databases.deleteDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentsCollectionId,
+        documentId: id,
+      );
+      return true;
+    } catch (e) {
+      print('Error deleting investment: $e');
+      return false;
+    }
+  }
+
+  // --- INVESTMENT TRANSACTIONS ---
+
+  Future<List<Map<String, dynamic>>> getInvestmentTransactions() async {
+    try {
+      final user = await account.get();
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentTransactionsCollectionId,
+        queries: [
+          Query.equal('userId', [user.$id]),
+          Query.orderDesc('dateTime'),
+        ],
+      );
+
+      return result.documents.map((doc) {
+        final data = doc.data;
+        data['id'] = doc.$id;
+        return data;
+      }).toList();
+    } catch (e) {
+      print('Error fetching investment transactions: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> createInvestmentTransaction(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final user = await account.get();
+      final txData = {
+        'userId': user.$id,
+        'investmentId': data['investmentId'],
+        'type': data['type'],
+        'amount': data['amount'],
+        'pricePerUnit': data['pricePerUnit'],
+        'quantity': data['quantity'],
+        'dateTime': data['dateTime'],
+        'note': data['note'],
+      };
+
+      final doc = await databases.createDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentTransactionsCollectionId,
+        documentId: ID.unique(),
+        data: txData,
+      );
+
+      final response = doc.data;
+      response['id'] = doc.$id;
+      return response;
+    } catch (e) {
+      print('Error creating investment transaction: $e');
+      return null;
+    }
+  }
+
+  Future<bool> deleteInvestmentTransaction(String id) async {
+    try {
+      await databases.deleteDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.investmentTransactionsCollectionId,
+        documentId: id,
+      );
+      return true;
+    } catch (e) {
+      print('Error deleting investment transaction: $e');
+      return false;
+    }
+  }
 }

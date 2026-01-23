@@ -23,13 +23,15 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       phone: fields[3] as String,
       photoUrl: fields[4] as String,
       joinDate: fields[5] as DateTime,
+      banks: (fields[6] as List).cast<String>(),
+      primaryPaymentMethods: (fields[7] as Map).cast<String, String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfile obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.userId)
       ..writeByte(1)
@@ -41,7 +43,11 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       ..writeByte(4)
       ..write(obj.photoUrl)
       ..writeByte(5)
-      ..write(obj.joinDate);
+      ..write(obj.joinDate)
+      ..writeByte(6)
+      ..write(obj.banks)
+      ..writeByte(7)
+      ..write(obj.primaryPaymentMethods);
   }
 
   @override

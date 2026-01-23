@@ -10,7 +10,8 @@ class UserProvider extends ChangeNotifier {
   final AppwriteService _appwriteService = AppwriteService();
 
   UserProfile? _user;
-  bool _isLoading = true;
+  bool _isLoading =
+      false; // Changed from true to false to show splash/login immediately
   bool _isAuthenticated = false;
 
   UserProfile? get user => _user;
@@ -28,7 +29,7 @@ class UserProvider extends ChangeNotifier {
   bool _isHiveInitialized = false;
 
   UserProvider() {
-    init();
+    // init(); // Do not call async init in constructor without care
   }
 
   Future<void> init() async {

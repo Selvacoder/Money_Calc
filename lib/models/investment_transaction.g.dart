@@ -1,56 +1,56 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'transaction.dart';
+part of 'investment_transaction.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class TransactionAdapter extends TypeAdapter<Transaction> {
+class InvestmentTransactionAdapter extends TypeAdapter<InvestmentTransaction> {
   @override
-  final int typeId = 1;
+  final int typeId = 6;
 
   @override
-  Transaction read(BinaryReader reader) {
+  InvestmentTransaction read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Transaction(
+    return InvestmentTransaction(
       id: fields[0] as String,
-      title: fields[1] as String,
-      amount: fields[2] as double,
-      isExpense: fields[3] as bool,
-      dateTime: fields[4] as DateTime,
-      categoryId: fields[5] as String?,
-      itemId: fields[6] as String?,
-      ledgerId: fields[7] as String?,
-      paymentMethod: fields[8] as String?,
+      investmentId: fields[1] as String,
+      userId: fields[2] as String,
+      type: fields[3] as String,
+      amount: fields[4] as double,
+      pricePerUnit: fields[5] as double?,
+      quantity: fields[6] as double?,
+      dateTime: fields[7] as DateTime,
+      note: fields[8] as String?,
     );
   }
 
   @override
-  void write(BinaryWriter writer, Transaction obj) {
+  void write(BinaryWriter writer, InvestmentTransaction obj) {
     writer
       ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.title)
+      ..write(obj.investmentId)
       ..writeByte(2)
-      ..write(obj.amount)
+      ..write(obj.userId)
       ..writeByte(3)
-      ..write(obj.isExpense)
+      ..write(obj.type)
       ..writeByte(4)
-      ..write(obj.dateTime)
+      ..write(obj.amount)
       ..writeByte(5)
-      ..write(obj.categoryId)
+      ..write(obj.pricePerUnit)
       ..writeByte(6)
-      ..write(obj.itemId)
+      ..write(obj.quantity)
       ..writeByte(7)
-      ..write(obj.ledgerId)
+      ..write(obj.dateTime)
       ..writeByte(8)
-      ..write(obj.paymentMethod);
+      ..write(obj.note);
   }
 
   @override
@@ -59,7 +59,7 @@ class TransactionAdapter extends TypeAdapter<Transaction> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TransactionAdapter &&
+      other is InvestmentTransactionAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

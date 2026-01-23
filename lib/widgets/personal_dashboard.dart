@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import '../utils/formatters.dart';
@@ -107,6 +108,10 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
           // Quick Entries - Dynamic Display
           () {
+            if (provider.isLoading) {
+              return _buildSkeletonLoader();
+            }
+
             final items = provider.items
                 .where(
                   (item) => item.frequency == (_isDaily ? 'daily' : 'monthly'),
@@ -485,28 +490,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                         color: Colors.red,
                         child: const Icon(Icons.delete, color: Colors.white),
                       ),
-                      confirmDismiss: (direction) async {
-                        return await showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Delete Transaction'),
-                            content: Text('Delete "${tx.title}"?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                ),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                      // Removed confirmDismiss to allow instant delete
                       onDismissed: (direction) {
                         context.read<TransactionProvider>().deleteTransaction(
                           tx.id,
@@ -563,7 +547,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                                 color: Colors.red,
                                 size: 20,
                               ),
-                              onPressed: () => _confirmDeleteTransaction(tx),
+                              onPressed: () => _deleteTransaction(tx),
                               padding: const EdgeInsets.all(4),
                               constraints: const BoxConstraints(),
                             ),
@@ -636,9 +620,9 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
     // Map icon string to IconData
     IconData iconData = Icons.star;
-    if (item.icon == 'shopping_cart')
+    if (item.icon == 'shopping_cart') {
       iconData = Icons.shopping_cart;
-    else if (item.icon == 'restaurant')
+    } else if (item.icon == 'restaurant')
       iconData = Icons.restaurant;
     else if (item.icon == 'commute')
       iconData = Icons.commute;
@@ -650,6 +634,32 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       iconData = Icons.school;
     else if (item.icon == 'fitness_center')
       iconData = Icons.fitness_center;
+
+    // Dynamic Background Color Logic
+    Color backgroundColor = theme.cardColor;
+    if (item.dueDay != null) {
+      final now = DateTime.now();
+      DateTime nextDue = DateTime(now.year, now.month, item.dueDay!);
+
+      // If due date passed this month, move to next month
+      if (nextDue.isBefore(DateTime(now.year, now.month, now.day))) {
+        nextDue = DateTime(now.year, now.month + 1, item.dueDay!);
+      }
+
+      final daysUntil = nextDue
+          .difference(DateTime(now.year, now.month, now.day))
+          .inDays;
+
+      if (daysUntil <= 3) {
+        backgroundColor = item.isExpense
+            ? Colors.red.withOpacity(0.2)
+            : Colors.green.withOpacity(0.2);
+      } else if (daysUntil <= 7) {
+        backgroundColor = item.isExpense
+            ? Colors.red.withOpacity(0.1)
+            : Colors.green.withOpacity(0.1);
+      }
+    }
 
     return GestureDetector(
       onTap: () async {
@@ -672,36 +682,67 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       onLongPress: () => _showItemOptions(item),
       child: Container(
         decoration: BoxDecoration(
-          color: theme.cardColor,
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Icon(
-              iconData,
-              color: item.isExpense ? Colors.red : Colors.green,
-              size: 28,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              item.title,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            if (item.dueDay != null)
+              Positioned(
+                top: 8,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: item.isExpense
+                        ? Colors.red.withOpacity(0.1)
+                        : Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Due ${item.dueDay}${_getOrdinal(item.dueDay!)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: item.isExpense ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '$currencySymbol${item.amount.toStringAsFixed(0)}',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: item.isExpense ? Colors.red : Colors.green,
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    iconData,
+                    color: item.isExpense ? Colors.red : Colors.green,
+                    size: 28,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.title,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$currencySymbol${item.amount.toStringAsFixed(0)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: item.isExpense ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -742,7 +783,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                _confirmDeleteItem(item);
+                _deleteItem(item);
               },
             ),
           ],
@@ -751,31 +792,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  void _confirmDeleteItem(dynamic item) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Quick Entry'),
-        content: Text('Are you sure you want to delete "${item.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<TransactionProvider>().deleteItem(item.id);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Deleted ${item.title}')));
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  void _deleteItem(dynamic item) {
+    context.read<TransactionProvider>().deleteItem(item.id);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Deleted ${item.title}')));
   }
 
   void _showEditItemDialog(dynamic item) {
@@ -814,7 +835,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                _confirmDeleteCategory(category);
+                _deleteCategory(category);
               },
             ),
           ],
@@ -823,38 +844,16 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  void _confirmDeleteCategory(dynamic category) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Category'),
-        content: Text(
-          'Are you sure you want to delete "${category.name}"? Items in this category will also be affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<TransactionProvider>().deleteCategory(category.id);
-              Navigator.pop(context);
-              setState(() {
-                if (_selectedCategoryId == category.id) {
-                  _selectedCategoryId = null;
-                }
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Deleted ${category.name}')),
-              );
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  void _deleteCategory(dynamic category) {
+    context.read<TransactionProvider>().deleteCategory(category.id);
+    setState(() {
+      if (_selectedCategoryId == category.id) {
+        _selectedCategoryId = null;
+      }
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Deleted ${category.name}')));
   }
 
   void _showEditCategoryDialog(dynamic category) {
@@ -984,31 +983,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  void _confirmDeleteTransaction(dynamic tx) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Transaction'),
-        content: Text('Are you sure you want to delete "${tx.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<TransactionProvider>().deleteTransaction(tx.id);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Deleted ${tx.title}')));
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  void _deleteTransaction(dynamic tx) {
+    context.read<TransactionProvider>().deleteTransaction(tx.id);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Deleted ${tx.title}')));
   }
 
   // --- Add Category Dialog ---
@@ -1158,23 +1137,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     Item? editingItem, // New parameter for editing
   }) {
     // Mode State
-    bool isOneTime =
-        editingItem ==
-        null; // Default to One Time if adding new, or Entry if editing?
-    // Wait, user said "In one time give same as Entry". Usually Quick Entry is the frequent action.
-    // Let's default to Quick Entry if user clicked "+" on Quick Entry list, but user removed the random add button.
-    // "remove the new transaction add button". So the ONLY way to add transaction is via this dialog?
-    // Or via Quick Entry tap.
-    // Currently this dialog is called by:
-    // 1. _showAddItemDialog (Quick Entry "Add" button placeholder?) - Wait, the grid has an "Add Item" cell if category empty or via _showAddCategoryDialog?
-    // Actually, there is NO explicit "Add Quick Entry" button on the main dashboard anymore except the empty category cell.
-    // Re-reading: "now in new quick entry add a one time as toogle at top".
-    // So when opening the "Add Quick Entry" dialog (which is triggered how? Ah, likely via the "Add Category" -> "Add Item" flow or if I missed a trigger).
-    // Let's assume default is 'Entry' (Quick Entry) as before, but allow switching to 'One Time'.
-
-    // Actually, I'll initialize isOneTime to false (Entry Mode) by default to match "Quick Entry" context,
-    // unless user explicitly wants One Time default? "add a one time as toogle at top".
-    // I'll stick to isOneTime = false (Entry Mode) as default.
+    // Initialize isOneTime to false (Entry Mode) by default as requested.
+    bool isOneTime = false;
 
     final titleController = TextEditingController(text: editingItem?.title);
     final amountController = TextEditingController(
@@ -1186,15 +1150,19 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             ))
           : '',
     );
-    bool isDaily =
-        preSelectedIsDaily ??
-        (editingItem?.frequency == 'daily'
-            ? true
-            : (editingItem?.frequency == 'monthly' ? false : _isDaily));
+    bool formIsDaily;
+    if (editingItem != null && editingItem.frequency != null) {
+      final f = editingItem.frequency!.trim().toLowerCase();
+      // Explicit check for monthly to avoid defaulting to daily
+      formIsDaily = f == 'daily';
+    } else {
+      formIsDaily = preSelectedIsDaily ?? _isDaily;
+    }
     String? selectedCategoryId =
         editingItem?.categoryId ?? preSelectedCategoryId;
     bool isExpense = editingItem?.isExpense ?? preSelectedIsExpense ?? true;
     String selectedIcon = editingItem?.icon ?? 'star';
+    int? dueDay = editingItem?.dueDay;
 
     // New: Payment Method for One Time mode
     String? selectedPaymentMethod;
@@ -1388,9 +1356,9 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                           itemBuilder: (context, index) {
                             final iconName = iconOptions[index];
                             IconData iconData = Icons.star;
-                            if (iconName == 'shopping_cart')
+                            if (iconName == 'shopping_cart') {
                               iconData = Icons.shopping_cart;
-                            else if (iconName == 'restaurant')
+                            } else if (iconName == 'restaurant')
                               iconData = Icons.restaurant;
                             else if (iconName == 'commute')
                               iconData = Icons.commute;
@@ -1585,13 +1553,13 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => isDaily = true),
+                                onTap: () => setState(() => formIsDaily = true),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: isDaily
+                                    color: formIsDaily
                                         ? Theme.of(
                                             context,
                                           ).colorScheme.primary.withOpacity(0.1)
@@ -1603,7 +1571,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                                       'Daily',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: isDaily
+                                        color: formIsDaily
                                             ? Theme.of(
                                                 context,
                                               ).colorScheme.primary
@@ -1616,13 +1584,14 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                             ),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => isDaily = false),
+                                onTap: () =>
+                                    setState(() => formIsDaily = false),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: !isDaily
+                                    color: !formIsDaily
                                         ? Theme.of(
                                             context,
                                           ).colorScheme.primary.withOpacity(0.1)
@@ -1634,7 +1603,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                                       'Monthly',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: !isDaily
+                                        color: !formIsDaily
                                             ? Theme.of(
                                                 context,
                                               ).colorScheme.primary
@@ -1647,6 +1616,30 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                             ),
                           ],
                         ),
+                      ),
+                    ],
+
+                    // Due Day Input (Only for Monthly Quick Entry)
+                    if (!isOneTime && !formIsDaily) ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int>(
+                        value: dueDay,
+                        decoration: InputDecoration(
+                          labelText: 'Due Day (Optional)',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.calendar_today),
+                        ),
+                        items: List.generate(31, (index) => index + 1)
+                            .map(
+                              (day) => DropdownMenuItem(
+                                value: day,
+                                child: Text('Day $day'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) => setState(() => dueDay = value),
                       ),
                     ],
 
@@ -1693,13 +1686,14 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                                 'amount':
                                     double.tryParse(amountController.text) ??
                                     0.0,
-                                'frequency': isDaily ? 'daily' : 'monthly',
+                                'frequency': formIsDaily ? 'daily' : 'monthly',
                                 'categoryId':
                                     selectedCategoryId == 'other_virtual'
                                     ? null
                                     : selectedCategoryId,
                                 'isExpense': isExpense,
                                 'icon': selectedIcon,
+                                'dueDay': dueDay,
                                 // userId handled by backend service
                               };
 
@@ -1752,6 +1746,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     required double expense,
     required ColorScheme colorScheme,
     required String currencySymbol,
+    required int currentPage,
+    required int totalPages,
   }) {
     return Container(
       // margin removed to match LedgerDashboard and fix shade mismatch
@@ -1767,108 +1763,136 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
+          // Content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.account_balance_wallet_outlined,
-                color: Colors.white70,
-                size: 20,
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
+              const SizedBox(height: 12),
               Text(
-                title,
+                '$currencySymbol${balance.toStringAsFixed(2)}',
                 style: GoogleFonts.inter(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
                 ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.arrow_upward_rounded,
+                              color: Colors.white70,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Income',
+                              style: GoogleFonts.inter(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$currencySymbol${income.toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF51CF66), // Green
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(height: 40, width: 1, color: Colors.white12),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.arrow_downward_rounded,
+                              color: Colors.white70,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Expenses',
+                              style: GoogleFonts.inter(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$currencySymbol${expense.toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFFFF6B6B), // Red
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            '$currencySymbol${balance.toStringAsFixed(2)}',
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
+
+          // Indicators (Dots)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(totalPages, (index) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: currentPage == index
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.3),
+                  ),
+                );
+              }),
             ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.arrow_upward_rounded,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Income',
-                          style: GoogleFonts.inter(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$currencySymbol${income.toStringAsFixed(2)}',
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF51CF66), // Green
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(height: 40, width: 1, color: Colors.white12),
-              const SizedBox(width: 24),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.arrow_downward_rounded,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Expenses',
-                          style: GoogleFonts.inter(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$currencySymbol${expense.toStringAsFixed(2)}',
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFFFF6B6B), // Red
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1889,6 +1913,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           expense: provider.totalExpenses,
           colorScheme: colorScheme,
           currencySymbol: currencySymbol,
+          currentPage: 0,
+          totalPages: 5,
         );
       case 1:
         return _buildBalanceCard(
@@ -1907,6 +1933,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           }),
           colorScheme: colorScheme,
           currencySymbol: currencySymbol,
+          currentPage: 1,
+          totalPages: 5,
         );
       case 2:
         return _buildBalanceCard(
@@ -1925,6 +1953,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           }),
           colorScheme: colorScheme,
           currencySymbol: currencySymbol,
+          currentPage: 2,
+          totalPages: 5,
         );
       case 3:
         return _buildBalanceCard(
@@ -1946,6 +1976,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           }),
           colorScheme: colorScheme,
           currencySymbol: currencySymbol,
+          currentPage: 3,
+          totalPages: 5,
         );
       case 4:
       default:
@@ -1971,6 +2003,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           }),
           colorScheme: colorScheme,
           currencySymbol: currencySymbol,
+          currentPage: 4,
+          totalPages: 5,
         );
     }
   }
@@ -2250,6 +2284,47 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _getOrdinal(int n) {
+    if (n >= 11 && n <= 13) return 'th';
+    switch (n % 10) {
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
+    }
+  }
+
+  Widget _buildSkeletonLoader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Shimmer.fromColors(
+      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 1.1,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          );
+        },
       ),
     );
   }

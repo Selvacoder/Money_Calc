@@ -26,13 +26,14 @@ class ItemAdapter extends TypeAdapter<Item> {
       usageCount: fields[6] as int,
       frequency: fields[7] as String?,
       icon: fields[8] as String?,
+      dueDay: fields[9] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Item obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class ItemAdapter extends TypeAdapter<Item> {
       ..writeByte(7)
       ..write(obj.frequency)
       ..writeByte(8)
-      ..write(obj.icon);
+      ..write(obj.icon)
+      ..writeByte(9)
+      ..write(obj.dueDay);
   }
 
   @override

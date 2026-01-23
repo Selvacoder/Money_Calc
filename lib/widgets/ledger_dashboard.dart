@@ -62,8 +62,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                 const SizedBox(height: 24),
                 Autocomplete<Map<String, dynamic>>(
                   optionsBuilder: (TextEditingValue textEditingValue) async {
-                    if (textEditingValue.text.isEmpty)
+                    if (textEditingValue.text.isEmpty) {
                       return const Iterable<Map<String, dynamic>>.empty();
+                    }
                     return await AppwriteService().searchContacts(
                       textEditingValue.text,
                     );
@@ -71,8 +72,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                   displayStringForOption: (option) => option['name'] ?? '',
                   onSelected: (Map<String, dynamic> selection) {
                     nameController.text = selection['name'];
-                    if (selection['phone'] != null)
+                    if (selection['phone'] != null) {
                       phoneController.text = selection['phone'];
+                    }
                   },
                   fieldViewBuilder:
                       (context, controller, focusNode, onFieldSubmitted) {
@@ -167,12 +169,12 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         Navigator.pop(context);
                       }
                     },
-                    child: Text(isReceived ? 'Add Record' : 'Lend Money'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
                     ),
+                    child: Text(isReceived ? 'Add Record' : 'Lend Money'),
                   ),
                 ),
               ],
@@ -314,12 +316,13 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String currencySymbol,
   ) {
     final balances = _calculateUserBalances(transactions, currentUserContact);
-    if (balances.isEmpty)
+    if (balances.isEmpty) {
       return const EmptyState(
         title: 'No records',
         message: 'Start lending/receiving',
         icon: Icons.people_outline,
       );
+    }
 
     return Column(
       children: [
@@ -378,7 +381,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
         return t.receiverName == personName;
       } else if (isMeReceiver) {
         // I received, checking if sender is this person
-        if (personPhone.isNotEmpty && t.senderPhone != null) {
+        if (personPhone.isNotEmpty) {
           return _arePhonesEqual(t.senderPhone, personPhone);
         }
         return t.senderName == personName;
@@ -844,8 +847,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
                         Navigator.pop(context);
 
-                        if (newName == currentName && newPhone == currentPhone)
+                        if (newName == currentName && newPhone == currentPhone) {
                           return;
+                        }
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Updating person...')),

@@ -223,99 +223,116 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
             ),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: Column(
+          child: Stack(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.pie_chart, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Income vs Expenses ($period)',
-                        style: GoogleFonts.inter(
-                          fontSize: 16, // Slightly reduced to fit
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Row(
+                        children: [
+                          const Icon(Icons.pie_chart, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Income vs Expenses ($period)',
+                            style: GoogleFonts.inter(
+                              fontSize: 16, // Slightly reduced to fit
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(
+                        Icons.touch_app,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              '${incomePercent.toStringAsFixed(1)}%',
+                              style: GoogleFonts.inter(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Income',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$currency${income.toStringAsFixed(0)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 80,
+                        color: Colors.white.withOpacity(0.3),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              '${expensePercent.toStringAsFixed(1)}%',
+                              style: GoogleFonts.inter(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Expenses',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$currency${expense.toStringAsFixed(0)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const Icon(Icons.touch_app, color: Colors.white54, size: 16),
                 ],
               ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          '${incomePercent.toStringAsFixed(1)}%',
-                          style: GoogleFonts.inter(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Income',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$currency${income.toStringAsFixed(0)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    height: 80,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          '${expensePercent.toStringAsFixed(1)}%',
-                          style: GoogleFonts.inter(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Expenses',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$currency${expense.toStringAsFixed(0)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _buildDots(
+                  _incomeVsExpenseIndex,
+                  _insightPeriods.length,
+                ),
               ),
             ],
           ),
@@ -694,7 +711,7 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );
@@ -835,49 +852,67 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
             ),
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.insights, color: Colors.white, size: 24),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Insights ($period)',
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.insights,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Insights ($period)',
+                            style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(
+                        Icons.touch_app,
+                        color: Colors.white54,
+                        size: 16,
                       ),
                     ],
                   ),
-                  const Icon(Icons.touch_app, color: Colors.white54, size: 16),
+                  const SizedBox(height: 16),
+                  _buildInsightRow(
+                    'Total Spent',
+                    total > 0 ? '$currency${total.toStringAsFixed(0)}' : 'N/A',
+                  ),
+                  _buildInsightRow(
+                    'Avg Per Tx',
+                    '$currency${avg.toStringAsFixed(0)}',
+                  ),
+                  _buildInsightRow('Total Transactions', count.toString()),
+                  const Divider(color: Colors.white24, height: 24),
+                  _buildInsightRow(highestLabel, highestVal),
+                  _buildInsightRow(lowestLabel, lowestVal),
+                  const Divider(color: Colors.white24, height: 24),
+                  _buildInsightRow('Top Category', topCatName),
+                  _buildInsightRow(
+                    'Category Total',
+                    topCatVal > 0
+                        ? '$currency${topCatVal.toStringAsFixed(0)}'
+                        : 'N/A',
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              _buildInsightRow(
-                'Total Spent',
-                total > 0 ? '$currency${total.toStringAsFixed(0)}' : 'N/A',
-              ),
-              _buildInsightRow(
-                'Avg Per Tx',
-                '$currency${avg.toStringAsFixed(0)}',
-              ),
-              _buildInsightRow('Total Transactions', count.toString()),
-              const Divider(color: Colors.white24, height: 24),
-              _buildInsightRow(highestLabel, highestVal),
-              _buildInsightRow(lowestLabel, lowestVal),
-              const Divider(color: Colors.white24, height: 24),
-              _buildInsightRow('Top Category', topCatName),
-              _buildInsightRow(
-                'Category Total',
-                topCatVal > 0
-                    ? '$currency${topCatVal.toStringAsFixed(0)}'
-                    : 'N/A',
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _buildDots(_insightIndex, _insightPeriods.length),
               ),
             ],
           ),
@@ -906,6 +941,25 @@ class _PersonalGraphScreenState extends State<PersonalGraphScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDots(int currentIndex, int totalCount) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(totalCount, (index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: currentIndex == index
+                ? Colors.white
+                : Colors.white.withOpacity(0.3),
+          ),
+        );
+      }),
     );
   }
 }

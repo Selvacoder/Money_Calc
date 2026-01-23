@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/currency_provider.dart';
 import '../models/user_profile.dart';
@@ -251,6 +252,58 @@ class AccountScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(builder: (_) => const AboutScreen()),
                     ),
+                  ),
+                  _buildSettingItem(
+                    context,
+                    icon: Icons.sync,
+                    title: 'Resync Data',
+                    subtitle: 'Clear local cache and refetch from server',
+                    onTap: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Resync Data?'),
+                          content: const Text(
+                            'This will clear your local data and re-download everything from the server. Use this if you see errors or missing items.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Resync'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true && context.mounted) {
+                        try {
+                          await context
+                              .read<TransactionProvider>()
+                              .clearLocalData();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Data resynced successfully'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Resync failed: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
                   ),
                   const SizedBox(height: 32),
                   SizedBox(

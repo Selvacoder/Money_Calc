@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
@@ -31,6 +32,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _authenticate() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool isBiometricEnabled =
+          prefs.getBool('biometric_enabled') ?? false;
+
+      if (!isBiometricEnabled) {
+        setState(() {
+          _isPersonalMode = false;
+        });
+        return;
+      }
+
       final bool didAuthenticate = await auth.authenticate(
         localizedReason: 'Please authenticate to access Ledger',
         options: const AuthenticationOptions(stickyAuth: true),

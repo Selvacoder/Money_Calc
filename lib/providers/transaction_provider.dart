@@ -272,12 +272,10 @@ class TransactionProvider extends ChangeNotifier {
     final success = await _appwriteService.deleteTransaction(id);
 
     if (!success) {
-      // Revert if API fail
-      _transactions.insert(index, removedItem);
-      if (_isHiveInitialized) {
-        await _transactionBox.put(id, removedItem);
-      }
-      notifyListeners();
+      // Failed to delete on server
+      print('Failed to delete transaction $id on server');
+      // We do NOT revert locally to avoid "zombie" items.
+      // User can resync if needed.
       return false;
     } else {
       _loadQuickItems();
@@ -311,21 +309,73 @@ class TransactionProvider extends ChangeNotifier {
   }
 
   Future<void> updateItem(String id, Map<String, dynamic> data) async {
-    final success = await _appwriteService.updateItem(id, data);
-    if (success) {
-      await fetchData(); // Refresh to ensure consistency
+    // 1. Find existing item to backup for revert
+    final index = _quickItems.indexWhere((i) => i.id == id);
+    if (index == -1) return;
+    final oldItem = _quickItems[index];
+
+    // 2. Create optimistic new item
+    // We need to merge 'data' with 'oldItem' fields
+    final newItem = Item(
+      id: oldItem.id,
+      userId: oldItem.userId,
+      title: data['title'] ?? oldItem.title,
+      amount: (data['amount'] ?? oldItem.amount).toDouble(),
+      isExpense: data['isExpense'] ?? oldItem.isExpense,
+      categoryId: data['categoryId'] ?? oldItem.categoryId,
+      usageCount: oldItem.usageCount,
+      frequency: data['frequency'] ?? oldItem.frequency,
+      icon: data['icon'] ?? oldItem.icon,
+      dueDay: data['dueDay'] ?? oldItem.dueDay,
+    );
+
+    // 3. Update local state immediately
+    _quickItems[index] = newItem;
+    if (_isHiveInitialized) {
+      _itemBox.put(id, newItem);
     }
+
+    // Also update category-specific list if present
+    final catIndex = _items.indexWhere((i) => i.id == id);
+    if (catIndex != -1) {
+      _items[catIndex] = newItem;
+    }
+
+    notifyListeners();
+
+    // 4. Perform API call
+    final success = await _appwriteService.updateItem(id, data);
+
+    if (!success) {
+      print('Failed to update item $id on server');
+      // Revert is fine for UPDATE, but for DELETE we want it gone.
+      // Keeping revert for update as it helps avoid state desync for editable fields.
+      _quickItems[index] = oldItem;
+      if (_isHiveInitialized) {
+        _itemBox.put(id, oldItem);
+      }
+      if (catIndex != -1) {
+        _items[catIndex] = oldItem;
+      }
+      notifyListeners();
+    }
+    // No need to call fetchData() if successful, unless we suspect side effects not covered here.
+    // Optimistic update is sufficient for this use case.
   }
 
   Future<void> deleteItem(String id) async {
+    // Optimistic Delete
+    _quickItems.removeWhere((i) => i.id == id);
+    _items.removeWhere((i) => i.id == id);
+
+    if (_isHiveInitialized) {
+      _itemBox.delete(id);
+    }
+    notifyListeners();
+
     final success = await _appwriteService.deleteItem(id);
-    if (success) {
-      _quickItems.removeWhere((i) => i.id == id);
-      _items.removeWhere((i) => i.id == id);
-      if (_isHiveInitialized) {
-        _itemBox.delete(id);
-      }
-      notifyListeners();
+    if (!success) {
+      print('Failed to delete item $id on server');
     }
   }
 
@@ -369,15 +419,35 @@ class TransactionProvider extends ChangeNotifier {
   }
 
   Future<void> deleteCategory(String id) async {
-    final success = await _appwriteService.deleteCategory(id);
-    if (success) {
-      _categories.removeWhere((c) => c.id == id);
-      _items = []; // Clear items as category is gone
-      if (_isHiveInitialized) {
-        _categoryBox.delete(id);
-      }
-      notifyListeners();
+    // Optimistic Delete
+    _categories.removeWhere((c) => c.id == id);
+    _items = []; // Clear items as category is gone
+
+    if (_isHiveInitialized) {
+      _categoryBox.delete(id);
     }
+    notifyListeners();
+
+    final success = await _appwriteService.deleteCategory(id);
+    if (!success) {
+      print('Failed to delete category $id on server');
+    }
+  }
+
+  Future<void> clearLocalData() async {
+    if (_isHiveInitialized) {
+      await _transactionBox.clear();
+      await _categoryBox.clear();
+      await _itemBox.clear();
+    }
+    _transactions = [];
+    _categories = [];
+    _items = [];
+    _quickItems = [];
+    notifyListeners();
+
+    // Refetch
+    await fetchData();
   }
 
   // Helper method for syncing ledger to wallet

@@ -619,6 +619,7 @@ class AppwriteService {
         'usageCount': 0,
         'frequency': data['frequency'] ?? 'daily',
         if (data['icon'] != null) 'icon': data['icon'],
+        if (data['dueDay'] != null) 'dueDay': data['dueDay'],
       };
 
       final doc = await databases.createDocument(
@@ -1100,7 +1101,7 @@ class AppwriteService {
       );
     } catch (e) {
       print('Error sending notification: $e');
-      throw e;
+      rethrow;
     }
   }
 }

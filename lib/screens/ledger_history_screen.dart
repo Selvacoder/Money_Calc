@@ -659,8 +659,9 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                               firstDate: DateTime(2020),
                               lastDate: DateTime.now(),
                             );
-                            if (picked != null)
+                            if (picked != null) {
                               setState(() => customStartDate = picked);
+                            }
                           },
                           icon: const Icon(Icons.calendar_today, size: 16),
                           label: Text(
@@ -681,8 +682,9 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                               firstDate: DateTime(2020),
                               lastDate: DateTime.now(),
                             );
-                            if (picked != null)
+                            if (picked != null) {
                               setState(() => customEndDate = picked);
+                            }
                           },
                           icon: const Icon(Icons.event, size: 16),
                           label: Text(

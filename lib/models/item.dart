@@ -31,6 +31,9 @@ class Item {
   @HiveField(8)
   final String? icon;
 
+  @HiveField(9)
+  final int? dueDay;
+
   String get name => title; // Alias match
 
   Item({
@@ -43,6 +46,7 @@ class Item {
     this.usageCount = 0,
     this.frequency,
     this.icon,
+    this.dueDay,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -54,8 +58,9 @@ class Item {
       isExpense: json['isExpense'] ?? true,
       categoryId: json['categoryId'] ?? '',
       usageCount: json['usageCount'] ?? 0,
-      frequency: json['frequency'],
+      frequency: json['frequency']?.toString().trim().toLowerCase(),
       icon: json['icon'],
+      dueDay: json['dueDay'],
     );
   }
 
@@ -69,6 +74,7 @@ class Item {
       'usageCount': usageCount,
       'frequency': frequency,
       'icon': icon,
+      'dueDay': dueDay,
     };
   }
 }

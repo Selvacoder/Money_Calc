@@ -1,11 +1,10 @@
 class AppwriteConfig {
-  static const String projectId = '6964ae720037daa002a3';
-  static const String projectName = 'MoneyCalc';
-  // CORRECT LOCAL IPv4 ADDRESS (from Wi-Fi adapter)
-  static const String endpoint = 'http://192.168.29.161/v1';
+  static const String projectId = '6972fc1c001816b0de41';
+  static const String projectName = 'Tap_It';
+  static const String endpoint = 'https://appwrite.aigenxt.com/v1';
 
   // Database configuration
-  static const String databaseId = '6964bc220038d07f5c64';
+  static const String databaseId = 'Tap_It_DB';
   static const String transactionsCollectionId = 'transactions';
   static const String categoriesCollectionId = 'categories';
   static const String itemsCollectionId = 'items';

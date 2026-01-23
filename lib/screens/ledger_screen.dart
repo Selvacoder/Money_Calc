@@ -245,7 +245,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         Navigator.pop(context);
                       }
                     },
-                    child: Text(isReceived ? 'Add Record' : 'Lend Money'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -254,6 +253,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    child: Text(isReceived ? 'Add Record' : 'Lend Money'),
                   ),
                 ),
               ],

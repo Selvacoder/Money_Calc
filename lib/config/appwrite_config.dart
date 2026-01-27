@@ -12,6 +12,5 @@ class AppwriteConfig {
   static const String ledgerCollectionId = 'ledger_transactions';
   static const String notificationsCollectionId = 'notifications';
   static const String investmentsCollectionId = 'investments';
-  static const String investmentTransactionsCollectionId =
-      'investment_transactions';
+  static const String investmentTransactionsCollectionId = 'investment_transactions';
 }

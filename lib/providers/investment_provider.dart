@@ -86,12 +86,42 @@ class InvestmentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addInvestment(String name, String type, double amount) async {
-    // Optimistic Update
+  Future<void> addInvestment(
+    String name,
+    String type,
+    double amount,
+    double quantity,
+  ) async {
+    // 1. Check for Duplicate
+    final normalizedName = name.trim().toLowerCase();
+    final existingIndex = _investments.indexWhere(
+      (i) => i.name.trim().toLowerCase() == normalizedName,
+    );
+
+    if (existingIndex != -1) {
+      // Merge with existing
+      final existingParams = _investments[existingIndex];
+      // Calculate derived price per unit (Amount is Total Invested here)
+      final pricePerUnit = quantity > 0 ? amount / quantity : 0.0;
+
+      await addTransaction(
+        existingParams.id,
+        'buy',
+        amount,
+        quantity,
+        pricePerUnit,
+      );
+      return;
+    }
+
+    // 2. Create New Investment
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-    // Default initial investment creates a "Buy" transaction implicitly?
-    // Or we stick to explicitly creating it.
-    // Let's create the Investment object first.
+    // Also create an initial "Buy" transaction for history for the new asset?
+    // Current logic: Just creates summary.
+    // Ideally: Create Investment + Create Transaction.
+    // For MVP consistency with current logic: Just create Investment summary,
+    // but maybe we SHOULD create a transaction too so history isn't empty?
+    // Let's stick to current logic: Create Investment Object.
 
     final newInv = Investment(
       id: tempId,
@@ -100,7 +130,7 @@ class InvestmentProvider extends ChangeNotifier {
       type: type,
       investedAmount: amount,
       currentAmount: amount, // Initially same
-      quantity: 0, // Logic specific to type (e.g. Gold grams), optional for MVP
+      quantity: quantity,
       lastUpdated: DateTime.now(),
     );
 
@@ -117,6 +147,7 @@ class InvestmentProvider extends ChangeNotifier {
         'type': type,
         'investedAmount': amount,
         'currentAmount': amount,
+        'quantity': quantity,
       });
 
       if (result != null) {
@@ -130,6 +161,22 @@ class InvestmentProvider extends ChangeNotifier {
           }
           notifyListeners();
         }
+
+        // Optional: Create initial transaction log for this new asset
+        // So history shows "Initial Buy"
+        /* 
+        // Commented out to potentially fix duplicate quantity issue (1 becoming 2)
+        // If the backend or logic was double counting this, removing this stops the second add.
+        final pricePerUnit = quantity > 0 ? amount / quantity : 0.0;
+        await addTransaction(
+          realInv.id, // Use real ID
+          'buy',
+          amount,
+          quantity,
+          pricePerUnit,
+          updateParent: false, // Fix: Don't update parent as it's already set
+        );
+        */
       }
     } catch (e) {
       print('Error adding investment: $e');
@@ -177,9 +224,18 @@ class InvestmentProvider extends ChangeNotifier {
     String type,
     double amount,
     double quantity,
-    double price,
-  ) async {
-    // 1. Create Transaction
+    double price, {
+    bool updateParent = true,
+  }) async {
+    // 1. Validation for Sell
+    if (type == 'sell') {
+      final inv = _investments.firstWhere((i) => i.id == investmentId);
+      if (quantity > inv.quantity) {
+        throw Exception('Cannot sell more than you own!');
+      }
+    }
+
+    // 2. Create Transaction
     final tempTx = InvestmentTransaction(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       investmentId: investmentId,
@@ -194,79 +250,93 @@ class InvestmentProvider extends ChangeNotifier {
     _transactions.insert(0, tempTx);
     _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
-    // 2. Update Parent Investment
-    final invIndex = _investments.indexWhere((i) => i.id == investmentId);
-    if (invIndex != -1) {
-      final old = _investments[invIndex];
-      double newInvested = old.investedAmount;
-      double newCurrent = old.currentAmount;
-      double newQty = old.quantity; // Assuming quantity is tracked
+    // 3. Update Parent Investment (Locally)
+    if (updateParent) {
+      final invIndex = _investments.indexWhere((i) => i.id == investmentId);
+      if (invIndex != -1) {
+        final old = _investments[invIndex];
+        double newInvested = old.investedAmount;
+        double newCurrent = old.currentAmount;
+        double newQty = old.quantity;
 
-      if (type == 'buy') {
-        newInvested += amount;
-        newCurrent += amount; // Assuming bought at current price
-        newQty += quantity;
-      } else {
-        // Sell
-        // Invested amount logic on sell is tricky. usually "fifo" or "average cost".
-        // Simple MVP: Reduce invested amount proportionally? Or just log it?
-        // Let's say we sell 50% of holdings. We reduce invested capital by 50%?
-        // Or we just reduce current amount (value withdrawn).
-        // Let's do: Reduce quantity and current amount.
-        // Don't reduce 'investedAmount' if we want to track 'Net Investment'.
-        // Actually, Selling = Booking Profit/Loss.
-        // Let's keep it simple: Realized P/L is tricky.
-        // Let's just update current value and quantity.
-        newCurrent -= amount;
-        newQty -= quantity;
+        if (type == 'buy') {
+          newInvested += amount;
+          // When buying, we assume current value increases by the buy amount immediately
+          newCurrent += amount;
+          newQty += quantity;
+        } else {
+          // Sell Logic
+          if (old.quantity > 0) {
+            final ratio = quantity / old.quantity;
+            final portionInvested = old.investedAmount * ratio;
+            newInvested -= portionInvested;
+          }
+          newCurrent -= amount;
+          newQty -= quantity;
+        }
+
+        if (newQty < 0) newQty = 0;
+        if (newInvested < 0) newInvested = 0;
+        if (newCurrent < 0) newCurrent = 0;
+
+        final updatedInv = Investment(
+          id: old.id,
+          userId: old.userId,
+          name: old.name,
+          type: old.type,
+          investedAmount: newInvested,
+          currentAmount: newCurrent,
+          quantity: newQty,
+          lastUpdated: DateTime.now(),
+        );
+
+        _investments[invIndex] = updatedInv;
+        if (_isHiveInitialized) {
+          _investmentBox.put(updatedInv.id, updatedInv);
+          _transactionBox.put(tempTx.id, tempTx);
+        }
+        notifyListeners();
       }
-
-      final updatedInv = Investment(
-        id: old.id,
-        userId: old.userId,
-        name: old.name,
-        type: old.type,
-        investedAmount: newInvested,
-        currentAmount: newCurrent,
-        quantity: newQty,
-        lastUpdated: DateTime.now(),
-      );
-
-      _investments[invIndex] = updatedInv;
+    } else {
+      // Just save the transaction locally
       if (_isHiveInitialized) {
-        _investmentBox.put(updatedInv.id, updatedInv);
         _transactionBox.put(tempTx.id, tempTx);
       }
       notifyListeners();
+    }
 
-      // API
-      final txResult = await _appwriteService.createInvestmentTransaction({
-        'investmentId': investmentId,
-        'type': type,
-        'amount': amount,
-        'quantity': quantity,
-        'pricePerUnit': price,
-        'dateTime': DateTime.now().toIso8601String(),
-      });
+    // API
+    final txResult = await _appwriteService.createInvestmentTransaction({
+      'investmentId': investmentId,
+      'type': type,
+      'amount': amount,
+      'quantity': quantity,
+      'pricePerUnit': price,
+      'dateTime': DateTime.now().toIso8601String(),
+    });
 
-      if (txResult != null) {
-        // Update Tx ID
-        final realTx = InvestmentTransaction.fromJson(txResult);
-        final txIndex = _transactions.indexWhere((t) => t.id == tempTx.id);
-        if (txIndex != -1) {
-          _transactions[txIndex] = realTx;
-          if (_isHiveInitialized) {
-            _transactionBox.delete(tempTx.id);
-            _transactionBox.put(realTx.id, realTx);
-          }
+    if (txResult != null) {
+      // Update Tx ID
+      final realTx = InvestmentTransaction.fromJson(txResult);
+      final txIndex = _transactions.indexWhere((t) => t.id == tempTx.id);
+      if (txIndex != -1) {
+        _transactions[txIndex] = realTx;
+        if (_isHiveInitialized) {
+          _transactionBox.delete(tempTx.id);
+          _transactionBox.put(realTx.id, realTx);
         }
       }
+    }
 
-      // Update Investment on Server
+    // Update Investment on Server (Only if requested)
+    if (updateParent) {
+      // Need to fetch current state again? No, we updated local state.
+      // But we need the values.
+      final inv = _investments.firstWhere((i) => i.id == investmentId);
       await _appwriteService.updateInvestment(investmentId, {
-        'investedAmount': newInvested,
-        'currentAmount': newCurrent,
-        'quantity': newQty,
+        'investedAmount': inv.investedAmount,
+        'currentAmount': inv.currentAmount,
+        'quantity': inv.quantity,
       });
     }
   }

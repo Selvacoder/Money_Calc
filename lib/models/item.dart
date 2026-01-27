@@ -34,6 +34,9 @@ class Item {
   @HiveField(9)
   final int? dueDay;
 
+  @HiveField(10)
+  final bool? isVariable;
+
   String get name => title; // Alias match
 
   Item({
@@ -47,6 +50,7 @@ class Item {
     this.frequency,
     this.icon,
     this.dueDay,
+    this.isVariable,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -61,6 +65,9 @@ class Item {
       frequency: json['frequency']?.toString().trim().toLowerCase(),
       icon: json['icon'],
       dueDay: json['dueDay'],
+      isVariable:
+          json['isVariable'] ??
+          (json['frequency']?.toString().trim().toLowerCase() == 'variable'),
     );
   }
 
@@ -75,6 +82,7 @@ class Item {
       'frequency': frequency,
       'icon': icon,
       'dueDay': dueDay,
+      'isVariable': isVariable,
     };
   }
 }

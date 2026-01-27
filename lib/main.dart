@@ -21,6 +21,9 @@ import 'screens/home_screen.dart';
 import 'screens/ledger_screen.dart';
 import 'providers/investment_provider.dart';
 
+import 'services/notification_service.dart';
+import 'services/appwrite_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -120,7 +123,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<UserProvider>().checkAuthStatus());
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    // Check Auth
+    await context.read<UserProvider>().checkAuthStatus();
+
+    // Init Notifications
+    await NotificationService().init();
+    await NotificationService().requestPermissions();
+
+    // Setup Realtime Listener if logged in
+    final user = context.read<UserProvider>().user;
+    if (user != null) {
+      AppwriteService().subscribeToNotifications(user.userId, (data) {
+        NotificationService().showNotification(
+          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          title: data['title'] ?? 'New Notification',
+          body: data['message'] ?? '',
+          payload: data['type'],
+        );
+      });
+    }
   }
 
   @override

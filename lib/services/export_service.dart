@@ -370,4 +370,161 @@ class ExportService {
 
     await Share.shareXFiles([XFile(path)], text: 'Ledger Report: $title');
   }
+
+  /// Generate and share/print a PDF report for Investments
+  Future<void> generateInvestmentPdf(
+    List<dynamic> transactions, // InvestmentTransaction
+    String title,
+    String currencySymbol,
+    Map<String, String> assetNames,
+  ) async {
+    final pdf = pw.Document();
+
+    // Sort transactions by date (newest first)
+    transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+    final font = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Investment Report',
+                    style: pw.TextStyle(font: fontBold, fontSize: 24),
+                  ),
+                  pw.Text(
+                    title,
+                    style: pw.TextStyle(
+                      font: font,
+                      fontSize: 14,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Table.fromTextArray(
+              context: context,
+              border: null,
+              headerStyle: pw.TextStyle(
+                font: fontBold,
+                fontSize: 12,
+                color: PdfColors.white,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue600,
+              ),
+              cellStyle: pw.TextStyle(font: font, fontSize: 10),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerLeft,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+              },
+              headerPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              headers: ['Date', 'Asset', 'Type', 'Qty', 'Price', 'Amount'],
+              data: transactions.map((tx) {
+                final isBuy = tx.type.toLowerCase() == 'buy';
+                return [
+                  DateFormat('MMM dd, yyyy').format(tx.dateTime),
+                  assetNames[tx.investmentId] ?? 'Unknown Asset',
+                  isBuy ? 'Buy' : 'Sell',
+                  tx.quantity?.toStringAsFixed(2) ?? '-',
+                  tx.pricePerUnit?.toStringAsFixed(2) ?? '-',
+                  '${isBuy ? '+' : '-'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
+                ];
+              }).toList(),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Divider(),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'Net Invested: $currencySymbol${transactions.fold<double>(0, (sum, t) {
+                    final isBuy = t.type.toLowerCase() == 'buy';
+                    return sum + (isBuy ? t.amount : -t.amount);
+                  }).toStringAsFixed(2)}',
+                  style: pw.TextStyle(font: fontBold, fontSize: 16),
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name:
+          'Investment_Report_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}',
+    );
+  }
+
+  /// Generate and share a CSV file for Investments
+  Future<void> generateInvestmentCsv(
+    List<dynamic> transactions, // InvestmentTransaction
+    String title,
+    String currencySymbol,
+    Map<String, String> assetNames,
+  ) async {
+    // Sort transactions by date (newest first)
+    transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+    List<List<dynamic>> rows = [];
+
+    // Header
+    rows.add([
+      'Date',
+      'Time',
+      'Asset Name',
+      'Type',
+      'Quantity',
+      'Price Per Unit',
+      'Total Amount',
+    ]);
+
+    // Data
+    for (var tx in transactions) {
+      final isBuy = tx.type.toLowerCase() == 'buy';
+      rows.add([
+        DateFormat('yyyy-MM-dd').format(tx.dateTime),
+        DateFormat('HH:mm').format(tx.dateTime),
+        assetNames[tx.investmentId] ?? 'Unknown',
+        isBuy ? 'Buy' : 'Sell',
+        tx.quantity ?? 0,
+        tx.pricePerUnit ?? 0,
+        (isBuy ? tx.amount : -tx.amount),
+      ]);
+    }
+
+    String csvData = const ListToCsvConverter().convert(rows);
+
+    final directory = await getTemporaryDirectory();
+    final path =
+        '${directory.path}/investments_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.csv';
+    final file = File(path);
+    await file.writeAsString(csvData);
+
+    await Share.shareXFiles([XFile(path)], text: 'Investment Report: $title');
+  }
 }

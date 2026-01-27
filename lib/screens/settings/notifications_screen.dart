@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/notification_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -91,9 +92,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             title: 'Daily Reminder',
             subtitle: 'Remind me to log expenses',
             value: _remindersEnabled,
-            onChanged: (val) {
+            onChanged: (val) async {
               setState(() => _remindersEnabled = val);
-              _updatePreference('reminders_enabled', val);
+              await _updatePreference('reminders_enabled', val);
+
+              if (val) {
+                await NotificationService().scheduleDailyNotification(
+                  id: 0, // ID 0 for Daily Reminder
+                  title: 'Daily Reminder',
+                  body: 'Time to log your daily expenses!',
+                  hour: _reminderTime.hour,
+                  minute: _reminderTime.minute,
+                );
+              } else {
+                await NotificationService().cancelNotification(0);
+              }
             },
           ),
           if (_remindersEnabled)
@@ -105,8 +118,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 );
                 if (time != null) {
                   setState(() => _reminderTime = time);
-                  _updatePreference('reminder_hour', time.hour);
-                  _updatePreference('reminder_minute', time.minute);
+                  await _updatePreference('reminder_hour', time.hour);
+                  await _updatePreference('reminder_minute', time.minute);
+
+                  // Reschedule
+                  await NotificationService().scheduleDailyNotification(
+                    id: 0,
+                    title: 'Daily Reminder',
+                    body: 'Time to log your daily expenses!',
+                    hour: time.hour,
+                    minute: time.minute,
+                  );
                 }
               },
               child: Container(

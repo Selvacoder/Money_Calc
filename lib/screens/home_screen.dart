@@ -21,6 +21,8 @@ import 'personal_graph_screen.dart';
 import 'investment_history_screen.dart';
 import 'investment_graph_screen.dart';
 import 'account_screen.dart';
+import 'category_screen.dart';
+import 'ai_analyzer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -91,62 +93,75 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      appBar:
-          _selectedIndex ==
-              3 // Hide AppBar for Account Screen
-          ? null
-          : AppBar(
-              automaticallyImplyLeading: false,
-              toolbarHeight: 80,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              titleSpacing: 20,
-              title: Row(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        toolbarHeight: 80,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        titleSpacing: 20,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.calculate_outlined,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'MoneyCalc',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: theme.appBarTheme.titleTextStyle?.color,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: IconButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AccountScreen(),
+                  ),
+                );
+              },
+              icon: Icon(Icons.settings, color: theme.colorScheme.onSurface),
+            ),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.calculate_outlined,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Show "Invest" or "Ledger" or "MoneyCalc" based on mode?
-                  // Keeping generic "MoneyCalc" title as per design
-                  Text(
-                    'MoneyCalc',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                      color: theme.appBarTheme.titleTextStyle?.color,
-                    ),
-                  ),
+                  _buildToggleBtn('Personal', 0),
+                  _buildToggleBtn('Ledger', 1),
+                  _buildToggleBtn('Investment', 2),
                 ],
               ),
-              actions: [
-                // Custom Toggle Switch (3 states)
-                Container(
-                  margin: const EdgeInsets.only(right: 20),
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildToggleBtn('Personal', 0),
-                      _buildToggleBtn('Ledger', 1),
-                      _buildToggleBtn('Invest', 2),
-                    ],
-                  ),
-                ),
-              ],
             ),
+          ),
+        ),
+      ),
       body: _buildBody(),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
@@ -159,11 +174,29 @@ class _HomeScreenState extends State<HomeScreen> {
           onDestinationSelected: _onItemTapped,
           backgroundColor: theme.cardColor,
           indicatorColor: theme.colorScheme.primary.withOpacity(0.2),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_filled), label: 'Home'),
-            NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-            NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Report'),
-            NavigationDestination(icon: Icon(Icons.person), label: 'Account'),
+          destinations: [
+            const NavigationDestination(
+              icon: Icon(Icons.home_filled),
+              label: 'Home',
+            ),
+            if (_currentMode == 0)
+              const NavigationDestination(
+                icon: Icon(Icons.category),
+                label: 'Category',
+              ),
+            if (_currentMode == 2) // Investment Mode
+              const NavigationDestination(
+                icon: Icon(Icons.auto_awesome),
+                label: 'AI Analyzer',
+              ),
+            const NavigationDestination(
+              icon: Icon(Icons.history),
+              label: 'History',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.bar_chart),
+              label: 'Report',
+            ),
           ],
         ),
       ),
@@ -181,6 +214,8 @@ class _HomeScreenState extends State<HomeScreen> {
           } else {
             setState(() {
               _currentMode = modeIndex;
+              _selectedIndex =
+                  0; // Reset to Home when switching modes to avoid index mismatch
             });
           }
         }
@@ -212,13 +247,65 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUserContact = userProvider.user?.phone ?? '';
     final ledgerTransactions = ledgerProvider.ledgerTransactions;
 
-    switch (_selectedIndex) {
+    // Index Mapping Logic
+    // Mode 0: 0=Home, 1=Category, 2=History, 3=Report
+    // Mode 1/2: 0=Home, 1=History, 2=Report
+
+    int adjustedIndex = _selectedIndex;
+    if (_currentMode != 0 && _selectedIndex > 0) {
+      // If not personal mode, indices shift because Category (index 1) is missing
+      // 1 (History) -> should be treated as navigation index 1 but logic index 2?
+      // No, let's normalize to content types.
+      // Content Types: 0=Dashboard, 1=Category, 2=History, 3=Report
+
+      // Navigation Index in Non-Personal Mode:
+      // Mode 1 (Ledger): 0=Home, 1=History, 2=Report
+      // Mode 2 (Investment): 0=Home, 1=AI, 2=History, 3=Report
+
+      // Logic Index Mapping:
+      // 0: Dashboard (All)
+      // 1: Category (Personal Only)
+      // 2: AI Analyzer (Investment Only) -> New Logic Index!
+      // 3: History (All)
+      // 4: Report (All)
+
+      // We need to map _selectedIndex to strict Case IDs.
+      // Let's redefine cases:
+      // 0: Dashboard
+      // 1: Category
+      // 2: AI
+      // 3: History
+      // 4: Report
+
+      if (_currentMode == 0) {
+        // Personal: 0->0, 1->1, 2->3, 3->4
+        if (_selectedIndex == 2) adjustedIndex = 3;
+        if (_selectedIndex == 3) adjustedIndex = 4;
+      } else if (_currentMode == 1) {
+        // Ledger: 0->0, 1->3, 2->4
+        if (_selectedIndex == 1) adjustedIndex = 3;
+        if (_selectedIndex == 2) adjustedIndex = 4;
+      } else {
+        // Investment: 0->0, 1->2, 2->3, 3->4
+        if (_selectedIndex == 1) adjustedIndex = 2;
+        if (_selectedIndex == 2) adjustedIndex = 3;
+        if (_selectedIndex == 3) adjustedIndex = 4;
+      }
+    }
+
+    switch (adjustedIndex) {
       case 0: // Dashboard
         if (_currentMode == 0) return const PersonalDashboard();
         if (_currentMode == 1) return const LedgerDashboard();
         return const InvestmentDashboard();
 
-      case 1: // History
+      case 1: // Category (Personal)
+        return const CategoryScreen();
+
+      case 2: // AI Analyzer (Investment)
+        return const AIAnalyzerScreen();
+
+      case 3: // History
         if (_currentMode == 0) {
           return PersonalHistoryScreen(
             transactions: context.watch<TransactionProvider>().transactions,
@@ -232,9 +319,9 @@ class _HomeScreenState extends State<HomeScreen> {
             currencySymbol: currencySymbol,
           );
         }
-        return const InvestmentHistoryScreen(); // Ensure arguments passed if needed later
+        return const InvestmentHistoryScreen();
 
-      case 2: // Graph/Report
+      case 4: // Graph/Report
         if (_currentMode == 0) return const PersonalGraphScreen();
         if (_currentMode == 1) {
           return LedgerGraphScreen(
@@ -245,8 +332,6 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         return const InvestmentGraphScreen();
 
-      case 3: // Account
-        return const AccountScreen();
       default:
         return const SizedBox.shrink();
     }

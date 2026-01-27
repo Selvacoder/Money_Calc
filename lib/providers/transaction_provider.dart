@@ -21,6 +21,7 @@ class TransactionProvider extends ChangeNotifier {
   List<Item> get items =>
       _quickItems; // Return quickItems which has all items with frequency
   List<Item> get quickItems => _quickItems;
+  List<Item> get categoryItems => _items; // Exposed for Category Detail View
   bool get isLoading => _isLoading;
 
   late Box<Transaction> _transactionBox;
@@ -261,7 +262,7 @@ class TransactionProvider extends ChangeNotifier {
     final index = _transactions.indexWhere((t) => t.id == id);
     if (index == -1) return false;
 
-    final removedItem = _transactions[index];
+    // final removedItem = _transactions[index]; // Unused
     _transactions.removeAt(index);
     notifyListeners();
 
@@ -285,7 +286,7 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addItem(Map<String, dynamic> itemData) async {
+  Future<Item?> addItem(Map<String, dynamic> itemData) async {
     try {
       final result = await _appwriteService.createItem(itemData);
       if (result != null) {
@@ -301,7 +302,9 @@ class TransactionProvider extends ChangeNotifier {
           _items.insert(0, newItem);
         }
         notifyListeners();
+        return newItem;
       }
+      return null;
     } catch (e) {
       print('Error adding item: $e');
       rethrow;
@@ -379,24 +382,40 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addCategory(String name, String type, String icon) async {
-    final result = await _appwriteService.createCategory({
-      'name': name,
-      'type': type,
-      'icon': icon,
-    });
-    if (result != null) {
-      final newCat = Category.fromJson(result);
-      _categories.add(newCat);
-      if (_isHiveInitialized) {
-        _categoryBox.put(newCat.id, newCat);
+  Future<bool> addCategory(String name, String type, String icon) async {
+    try {
+      final result = await _appwriteService.createCategory({
+        'name': name,
+        'type': type,
+        'icon': icon,
+      });
+      if (result != null) {
+        final newCat = Category.fromJson(result);
+        _categories.add(newCat);
+        if (_isHiveInitialized) {
+          _categoryBox.put(newCat.id, newCat);
+        }
+        notifyListeners();
+        return true;
       }
-      notifyListeners();
+      return false;
+    } catch (e) {
+      print('Error adding category: $e');
+      return false;
     }
   }
 
-  Future<void> updateCategory(String id, String name) async {
-    final success = await _appwriteService.updateCategory(id, {'name': name});
+  Future<void> updateCategory(
+    String id,
+    String name, {
+    String? type,
+    String? icon,
+  }) async {
+    final data = {'name': name};
+    if (type != null) data['type'] = type;
+    if (icon != null) data['icon'] = icon;
+
+    final success = await _appwriteService.updateCategory(id, data);
     if (success) {
       final index = _categories.indexWhere((c) => c.id == id);
       if (index != -1) {
@@ -405,8 +424,8 @@ class TransactionProvider extends ChangeNotifier {
           id: id,
           userId: old.userId,
           name: name,
-          type: old.type,
-          icon: old.icon,
+          type: type ?? old.type,
+          icon: icon ?? old.icon,
           usageCount: old.usageCount,
         );
         _categories[index] = newCat;
@@ -460,5 +479,22 @@ class TransactionProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
+
+  // --- Category Helpers ---
+
+  int getCategoryUsageCount(String categoryId) {
+    return _transactions.where((t) => t.categoryId == categoryId).length;
+  }
+
+  bool hasTransactionsForCategory(String categoryId) {
+    return _transactions.any((t) => t.categoryId == categoryId);
+  }
+
+  bool isCategoryNameDuplicate(String name, String type) {
+    final lowerName = name.trim().toLowerCase();
+    return _categories.any(
+      (c) => c.type == type && c.name.trim().toLowerCase() == lowerName,
+    );
   }
 }

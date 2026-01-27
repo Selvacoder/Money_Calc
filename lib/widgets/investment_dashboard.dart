@@ -285,79 +285,106 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
     final profit = investment.currentAmount - investment.investedAmount;
     final isProfit = profit >= 0;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () => _showAssetOptions(context, investment),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor),
             ),
-            child: Icon(icon, color: iconColor),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    investment.name,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    investment.type,
+                    style: GoogleFonts.inter(color: Colors.grey, fontSize: 12),
+                  ),
+                  if (investment.quantity > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Qty: ${investment.quantity.toStringAsFixed(investment.quantity % 1 == 0 ? 0 : 2)}',
+                            style: GoogleFonts.inter(
+                              color: Colors.blueGrey,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Avg: $currencySymbol${(investment.investedAmount / investment.quantity).toStringAsFixed(2)}',
+                            style: GoogleFonts.inter(
+                              color: Colors.blueGrey,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  investment.name,
+                  '$currencySymbol${investment.currentAmount.toStringAsFixed(2)}',
                   style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
-                Text(
-                  investment.type,
-                  style: GoogleFonts.inter(color: Colors.grey, fontSize: 12),
+                Row(
+                  children: [
+                    Icon(
+                      isProfit ? Icons.arrow_upward : Icons.arrow_downward,
+                      size: 12,
+                      color: isProfit ? Colors.green : Colors.red,
+                    ),
+                    Text(
+                      '${profit.abs().toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        color: isProfit ? Colors.green : Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$currencySymbol${investment.currentAmount.toStringAsFixed(2)}',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Row(
-                children: [
-                  Icon(
-                    isProfit ? Icons.arrow_upward : Icons.arrow_downward,
-                    size: 12,
-                    color: isProfit ? Colors.green : Colors.red,
-                  ),
-                  Text(
-                    '${profit.abs().toStringAsFixed(2)}',
-                    style: GoogleFonts.inter(
-                      color: isProfit ? Colors.green : Colors.red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   void _showAddInvestmentDialog(BuildContext context) {
     final nameController = TextEditingController();
-    final amountController = TextEditingController();
+    final priceController = TextEditingController(); // Renamed from amount
+    final quantityController = TextEditingController();
     String selectedType = 'Stock';
     final types = [
       'Stock',
@@ -377,82 +404,496 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Add New Asset',
+                      style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Asset Name (e.g. Apple, Gold)',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedType,
+                      items: types
+                          .map(
+                            (t) => DropdownMenuItem(value: t, child: Text(t)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => selectedType = v!),
+                      decoration: InputDecoration(
+                        labelText: 'Type',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Buy Price (Per Unit)',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: quantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Quantity',
+                        hintText: 'e.g. 10',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          if (nameController.text.isNotEmpty &&
+                              priceController.text.isNotEmpty &&
+                              quantityController.text.isNotEmpty) {
+                            final price =
+                                double.tryParse(priceController.text) ?? 0.0;
+                            final quantity =
+                                double.tryParse(quantityController.text) ?? 0.0;
+                            final totalInvested = price * quantity;
+
+                            // Assuming initial Current Value = Invested Value
+                            // If user wants to track purely, we pass totalInvested as 'amount'
+                            // but provider takes (amount, quantity). 'amount' there is usually investedAmount.
+
+                            context.read<InvestmentProvider>().addInvestment(
+                              nameController.text,
+                              selectedType,
+                              totalInvested,
+                              quantity,
+                            );
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Add Asset'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAssetOptions(BuildContext context, dynamic investment) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              investment.name,
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.add, color: Colors.green),
+              ),
+              title: const Text('Buy More'),
+              onTap: () {
+                Navigator.pop(context);
+                _showTransactionDialog(context, investment, 'buy');
+              },
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.remove, color: Colors.red),
+              ),
+              title: const Text('Sell'),
+              onTap: () {
+                Navigator.pop(context);
+                _showTransactionDialog(context, investment, 'sell');
+              },
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit, color: Colors.blue),
+              ),
+              title: const Text('Update Current Value'),
+              onTap: () {
+                Navigator.pop(context);
+                _showUpdateValueDialog(context, investment);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.delete, color: Colors.red),
+              ),
+              title: const Text('Delete Asset'),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteConfirmation(context, investment);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTransactionDialog(
+    BuildContext context,
+    dynamic investment,
+    String type,
+  ) {
+    final priceController = TextEditingController();
+    final quantityController = TextEditingController();
+    final isBuy = type == 'buy';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isBuy ? 'Buy More' : 'Sell Asset'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: priceController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: isBuy
+                    ? 'Buy Price (Per Unit)'
+                    : 'Sell Price (Per Unit)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Quantity',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final price = double.tryParse(priceController.text) ?? 0.0;
+              final quantity = double.tryParse(quantityController.text) ?? 0.0;
+              final amount = price * quantity;
+
+              if (amount > 0 && quantity > 0) {
+                context.read<InvestmentProvider>().addTransaction(
+                  investment.id,
+                  type,
+                  amount,
+                  quantity,
+                  price,
+                );
+                Navigator.pop(context);
+              }
+            },
+            child: Text(isBuy ? 'Buy' : 'Sell'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUpdateValueDialog(BuildContext context, dynamic investment) {
+    final hasQuantity = investment.quantity > 0;
+    // If has quantity, show Price per unit. Else show Total Value.
+    final initialValue = hasQuantity
+        ? (investment.currentAmount / investment.quantity)
+        : investment.currentAmount;
+
+    final valueController = TextEditingController(
+      text: initialValue.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          hasQuantity ? 'Update Market Price' : 'Update Current Value',
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: valueController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: hasQuantity
+                    ? 'Current Price (Per Unit)'
+                    : 'New Total Value',
+                suffixText: hasQuantity
+                    ? 'x ${investment.quantity} units'
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            if (hasQuantity)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Total Value will be calculated automatically.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = double.tryParse(valueController.text);
+              if (val != null) {
+                double newTotal;
+                if (hasQuantity) {
+                  newTotal = val * investment.quantity;
+                } else {
+                  newTotal = val;
+                }
+
+                context.read<InvestmentProvider>().updateCurrentValue(
+                  investment.id,
+                  newTotal,
+                );
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, dynamic investment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Asset'),
+        content: Text('Are you sure you want to delete ${investment.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<InvestmentProvider>().deleteInvestment(
+                investment.id,
+              );
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAIAnalyzerCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.purple,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
-                    'Add New Asset',
+                    'Coming Soon',
                     style: GoogleFonts.inter(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Asset Name (e.g. Apple, Gold)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: selectedType,
-                    items: types
-                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                        .toList(),
-                    onChanged: (v) => setState(() => selectedType = v!),
-                    decoration: InputDecoration(
-                      labelText: 'Type',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Invested Amount',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'We are building the smartest AI investment analyzer for you. Stay tuned!',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(color: Colors.grey, fontSize: 14),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: () {
-                        if (nameController.text.isNotEmpty &&
-                            amountController.text.isNotEmpty) {
-                          context.read<InvestmentProvider>().addInvestment(
-                            nameController.text,
-                            selectedType,
-                            double.tryParse(amountController.text) ?? 0.0,
-                          );
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: const Text('Add Asset'),
+                      child: const Text('Okay, Can\'t Wait!'),
                     ),
                   ),
                 ],
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF4A00E0).withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI Analyzer',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Get smart insights & predictions',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white70,
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,0 +1,360 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../models/category.dart';
+import '../providers/transaction_provider.dart';
+import '../utils/formatters.dart';
+
+class CategoryDialog extends StatefulWidget {
+  final Category? category; // If null, it's Add mode
+  final String? initialType; // For Add mode, pre-select type
+
+  const CategoryDialog({super.key, this.category, this.initialType});
+
+  @override
+  State<CategoryDialog> createState() => _CategoryDialogState();
+}
+
+class _CategoryDialogState extends State<CategoryDialog> {
+  late TextEditingController _nameController;
+  late String _selectedType;
+  late String _selectedIcon;
+  bool _hasTransactions = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.category?.name ?? '');
+    _selectedType = widget.category?.type ?? widget.initialType ?? 'expense';
+    _selectedIcon =
+        widget.category?.icon ??
+        (_selectedType == 'expense' ? 'shopping_cart' : 'work');
+
+    if (widget.category != null) {
+      // Check if category has transactions to lock type
+      _hasTransactions = context
+          .read<TransactionProvider>()
+          .hasTransactionsForCategory(widget.category!.id);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Text(
+        widget.category == null ? 'Add Category' : 'Edit Category',
+        style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Income/Expense Toggle at top
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildTypeToggleButton(
+                      context,
+                      'Expense',
+                      'expense',
+                      Colors.red,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildTypeToggleButton(
+                      context,
+                      'Income',
+                      'income',
+                      Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_hasTransactions)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Type cannot be changed because this category is in use.',
+                  style: GoogleFonts.inter(fontSize: 12, color: Colors.orange),
+                ),
+              ),
+            const SizedBox(height: 16),
+
+            // Category Name
+            TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.sentences,
+              inputFormatters: [CapitalizeFirstLetterTextFormatter()],
+              decoration: const InputDecoration(
+                labelText: 'Category Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Select Icon',
+                style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[700]),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height:
+                  120, // Fixed height to accommodate 2 rows of icons (50+8+50 + padding)
+              width: double.maxFinite, // Force full width
+              alignment: Alignment.topLeft,
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _getIconList(_selectedType).map((iconName) {
+                    final isSelected = _selectedIcon == iconName;
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedIcon = iconName;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.colorScheme.primary.withOpacity(0.1)
+                              : Colors.grey.withOpacity(0.05),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.grey.withOpacity(0.3),
+                            width: isSelected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _getIconData(iconName),
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : Colors.grey,
+                          size: 28,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel', style: GoogleFonts.inter()),
+        ),
+        ElevatedButton(
+          onPressed: _saveCategory,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(
+            widget.category == null ? 'Add' : 'Save',
+            style: GoogleFonts.inter(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _saveCategory() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+
+    final provider = context.read<TransactionProvider>();
+
+    // Duplicate Check
+    // If editing, check if name changed. If same, no check needed (unless type changed, but type is locked if used).
+    // Actually, even if same name, we need to ensure we don't collide with ANOTHER category.
+    bool checkDuplicate = true;
+    if (widget.category != null &&
+        widget.category!.name.toLowerCase() == name.toLowerCase() &&
+        widget.category!.type == _selectedType) {
+      checkDuplicate = false;
+    }
+
+    if (checkDuplicate) {
+      if (provider.isCategoryNameDuplicate(name, _selectedType)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Category already exists')),
+        );
+        return;
+      }
+    }
+
+    if (widget.category == null) {
+      // Add
+      final success = await provider.addCategory(
+        name,
+        _selectedType,
+        _selectedIcon,
+      );
+      if (!success) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to add category. Please try again.'),
+            ),
+          );
+        }
+        return; // Don't pop if failed
+      }
+    } else {
+      // Update - We need a full update method in provider, currently only updateCategory(id, name) exists.
+      // We should probably update provider to allow updating icon/type too if we want full flexibility.
+      // For now, based on user request "Allow icon change while editing", we need to update provider.
+
+      // Wait, TransactionProvider only has updateCategory(id, name).
+      // I need to update TransactionProvider first to support icon/type updates.
+      // But I can overload or create a new method.
+      // For now, I will use a workaround or Assume I will update provider next.
+      // Actually, I'll update provider in the next step.
+
+      // Temporary: Call updateCategoryName (which is what we have)
+      // I need to update the provider to accept icon updates.
+      // I'll leave a TODO or initiate a specific provider update task.
+      provider.updateCategory(
+        widget.category!.id,
+        name,
+        icon: _selectedIcon,
+        type: _selectedType,
+      );
+    }
+
+    Navigator.pop(context);
+  }
+
+  Widget _buildTypeToggleButton(
+    BuildContext context,
+    String label,
+    String value,
+    Color color,
+  ) {
+    final isSelected = _selectedType == value;
+    final isDisabled = _hasTransactions;
+
+    return GestureDetector(
+      onTap: isDisabled
+          ? null
+          : () {
+              setState(() {
+                _selectedType = value;
+                if (_selectedType == 'income' &&
+                    _selectedIcon == 'shopping_cart') {
+                  _selectedIcon = 'work';
+                } else if (_selectedType == 'expense' &&
+                    _selectedIcon == 'work') {
+                  _selectedIcon = 'shopping_cart';
+                }
+              });
+            },
+      child: Container(
+        height: 48, // Enforce fixed height
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? color.withOpacity(0.5) : Colors.transparent,
+            width: 1, // Always 1px width
+          ),
+        ),
+        child: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Hidden bold text to reserve width
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.transparent,
+                  fontSize: 14, // Explicit font size
+                ),
+              ),
+              // Visible text
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: isDisabled
+                      ? Colors.grey
+                      : (isSelected ? color : Colors.grey[600]),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 14, // Explicit font size matches hidden text
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _getIconList(String type) {
+    if (type == 'expense') {
+      return [
+        'shopping_cart',
+        'restaurant',
+        'commute',
+        'home',
+        'medical_services',
+        'school',
+        'fitness_center',
+      ];
+    } else {
+      return ['work', 'savings', 'attach_money'];
+    }
+  }
+
+  IconData _getIconData(String iconName) {
+    switch (iconName) {
+      case 'shopping_cart':
+        return Icons.shopping_cart;
+      case 'restaurant':
+        return Icons.restaurant;
+      case 'commute':
+        return Icons.commute;
+      case 'home':
+        return Icons.home;
+      case 'medical_services':
+        return Icons.medical_services;
+      case 'school':
+        return Icons.school;
+      case 'fitness_center':
+        return Icons.fitness_center;
+      case 'work':
+        return Icons.work;
+      case 'savings':
+        return Icons.savings;
+      case 'attach_money':
+        return Icons.attach_money;
+      default:
+        return Icons.category;
+    }
+  }
+}

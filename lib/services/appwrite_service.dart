@@ -15,6 +15,7 @@ class AppwriteService {
   late Client client;
   late Account account;
   late Databases databases;
+  late Realtime realtime; // Added Realtime
 
   void init() {
     client = Client()
@@ -24,6 +25,43 @@ class AppwriteService {
 
     account = Account(client);
     databases = Databases(client);
+    realtime = Realtime(client); // Initialize Realtime
+  }
+
+  // Subscribe to Realtime Notifications
+  RealtimeSubscription subscribeToNotifications(
+    String userId,
+    Function(Map<String, dynamic>) onNotification,
+  ) {
+    // Listen to changes in the 'notifications' collection
+    // Filter by userId would be ideal, but Realtime channels are usually collection-level or document-level.
+    // We can listen to the collection and filter client-side, OR listen to a channel query if supported.
+    // Appwrite Realtime supports channels like 'databases.{id}.collections.{id}.documents'
+
+    // We will listen to the entire collection but we need to secure it so users only see their own.
+    // Since we can't easily filter Realtime *streams* by query in client SDK (it receives all events for the channel permission),
+    // we rely on Row Level Security (RLS). If RLS is set up, the user only receives events for docs they can read.
+    // Assuming 'notifications' collection has RLS set to 'users' or specific user permission.
+
+    final subscription = realtime.subscribe([
+      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.notificationsCollectionId}.documents',
+    ]);
+
+    subscription.stream.listen((response) {
+      // Check if any event is a create event
+      final isCreate = response.events.any(
+        (event) => event.endsWith('.create'),
+      );
+
+      if (isCreate) {
+        final data = response.payload;
+        if (data['userId'] == userId) {
+          onNotification(data);
+        }
+      }
+    });
+
+    return subscription;
   }
 
   // Get current user session
@@ -619,7 +657,6 @@ class AppwriteService {
         'usageCount': 0,
         'frequency': data['frequency'] ?? 'daily',
         if (data['icon'] != null) 'icon': data['icon'],
-        if (data['dueDay'] != null) 'dueDay': data['dueDay'],
       };
 
       final doc = await databases.createDocument(

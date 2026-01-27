@@ -162,10 +162,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         onChanged: (code) {
                           selectedCountryCode = code.dialCode ?? '+91';
                           // basic logic to try and strip old code if exists roughly
-                          final phone = phoneController.text.replaceAll(
-                            RegExp(r'^\+\d+'),
-                            '',
-                          );
+                          // final phone = phoneController.text.replaceAll(...) // Unused for now
                           // But user might not have typed code.
                           // Ideally just store code separate or prepend on submit
                           // Keeping it simple as before

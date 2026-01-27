@@ -173,7 +173,7 @@ class LedgerProvider extends ChangeNotifier {
       final Map<dynamic, String> boxMap = _hiddenPeopleBox
           .toMap()
           .cast<dynamic, String>();
-      var keyToDelete;
+      dynamic keyToDelete;
       boxMap.forEach((key, value) {
         if (value == name) {
           keyToDelete = key;

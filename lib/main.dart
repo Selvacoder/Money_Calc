@@ -29,8 +29,7 @@ void main() async {
 
   await Hive.initFlutter();
 
-  // Clear cache on startup to ensure fresh data fetch (Requested Fix)
-  await Hive.deleteFromDisk();
+  // Cache cleared line removed for persistence
 
   Hive.registerAdapter(TransactionAdapter());
   Hive.registerAdapter(CategoryAdapter());

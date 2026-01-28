@@ -16,6 +16,7 @@ import '../widgets/investment_dashboard.dart';
 
 import 'ledger_history_screen.dart';
 import 'ledger/ledger_due_date_screen.dart'; // NEW
+import 'notification_screen.dart';
 import 'ledger_graph_screen.dart';
 import 'personal_history_screen.dart';
 import 'personal_graph_screen.dart';
@@ -126,6 +127,29 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          Consumer<LedgerProvider>(
+            builder: (context, provider, child) {
+              final requestCount = provider.incomingRequests.length;
+              return IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationScreen(),
+                    ),
+                  );
+                },
+                icon: Badge(
+                  isLabelVisible: requestCount > 0,
+                  label: Text('$requestCount'),
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: IconButton(
@@ -336,9 +360,15 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         if (_currentMode == 1) {
+          final userProvider = context.watch<UserProvider>();
+          final myIdentities = [
+            if (userProvider.user?.phone != null) userProvider.user!.phone!,
+            if (userProvider.user?.email != null) userProvider.user!.email!,
+          ].cast<String>();
+
           return LedgerHistoryScreen(
             transactions: ledgerTransactions,
-            currentUserContact: currentUserContact,
+            myIdentities: myIdentities,
             currencySymbol: currencySymbol,
           );
         }

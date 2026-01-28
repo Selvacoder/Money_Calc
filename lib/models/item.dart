@@ -37,6 +37,9 @@ class Item {
   @HiveField(10)
   final bool? isVariable;
 
+  @HiveField(11)
+  final int order;
+
   String get name => title; // Alias match
 
   Item({
@@ -51,6 +54,7 @@ class Item {
     this.icon,
     this.dueDay,
     this.isVariable,
+    this.order = 9999,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -68,6 +72,7 @@ class Item {
       isVariable:
           json['isVariable'] ??
           (json['frequency']?.toString().trim().toLowerCase() == 'variable'),
+      order: json['order'] ?? 9999,
     );
   }
 

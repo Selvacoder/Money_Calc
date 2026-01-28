@@ -7,13 +7,13 @@ import '../services/export_service.dart';
 
 class LedgerHistoryScreen extends StatefulWidget {
   final List<LedgerTransaction> transactions;
-  final String currentUserContact;
+  final List<String> myIdentities; // Changed from currentUserContact
   final String currencySymbol;
 
   const LedgerHistoryScreen({
     super.key,
     required this.transactions,
-    required this.currentUserContact,
+    required this.myIdentities, // Changed
     this.currencySymbol = '₹',
   });
 
@@ -53,8 +53,14 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
     }
   }
 
+  // Updated to support email comparison
   bool _arePhonesEqual(String? p1, String? p2) {
     if (p1 == null || p2 == null) return false;
+    // Email check
+    if (p1.contains('@') || p2.contains('@')) {
+      return p1.trim().toLowerCase() == p2.trim().toLowerCase();
+    }
+    // Phone check
     final n1 = p1.replaceAll(RegExp(r'\D'), '');
     final n2 = p2.replaceAll(RegExp(r'\D'), '');
     if (n1.isEmpty || n2.isEmpty) return false;
@@ -70,7 +76,10 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
     List<LedgerTransaction> filteredTransactions = widget.transactions.where((
       t,
     ) {
-      bool isSent = _arePhonesEqual(t.senderPhone, widget.currentUserContact);
+      // Check against ANY identity
+      bool isSent = widget.myIdentities.any(
+        (id) => _arePhonesEqual(t.senderPhone, id),
+      );
 
       // 1. Date Filter
       if (_selectedDate != null) {
@@ -166,7 +175,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.grey.shade300),
                               ),
@@ -189,7 +198,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                               decoration: BoxDecoration(
                                 color: _selectedDate != null
                                     ? Theme.of(context).colorScheme.primary
-                                    : Colors.white,
+                                    : Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _selectedDate != null
@@ -246,7 +255,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
@@ -381,7 +390,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Colors.white,
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
@@ -513,9 +522,9 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
     BuildContext context,
     LedgerTransaction transaction,
   ) {
-    final isSent = _arePhonesEqual(
-      transaction.senderPhone,
-      widget.currentUserContact,
+    // Check against ANY identity
+    final isSent = widget.myIdentities.any(
+      (id) => _arePhonesEqual(transaction.senderPhone, id),
     );
     final otherName = isSent
         ? transaction.receiverName
@@ -583,7 +592,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
             ),
           ),
           Text(
-            '${isSent ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0.00').format(transaction.amount)}',
+            '${isSent ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0.00').format(transaction.amount.abs())}',
             style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -838,20 +847,25 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
     final title =
         '$range Report (${DateFormat('MMM d').format(start)}${range == 'Daily' ? '' : ' - ${DateFormat('MMM d').format(end)}'})';
 
+    // Use first identity for export
+    final currentUserContact = widget.myIdentities.isNotEmpty
+        ? widget.myIdentities.first
+        : '';
+
     try {
       if (isPdf) {
         await ExportService().generateLedgerPdf(
           exportTransactions,
           title,
           widget.currencySymbol,
-          widget.currentUserContact,
+          currentUserContact,
         );
       } else {
         await ExportService().generateLedgerCsv(
           exportTransactions,
           title,
           widget.currencySymbol,
-          widget.currentUserContact,
+          currentUserContact,
         );
       }
     } catch (e) {

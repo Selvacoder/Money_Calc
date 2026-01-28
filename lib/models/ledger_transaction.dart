@@ -31,6 +31,12 @@ class LedgerTransaction {
   @HiveField(8)
   final DateTime dateTime;
 
+  @HiveField(9)
+  final String status; // 'pending', 'confirmed', 'rejected'
+
+  @HiveField(10)
+  final String? receiverId;
+
   String get ledgerId => id; // Alias if needed
 
   LedgerTransaction({
@@ -43,6 +49,8 @@ class LedgerTransaction {
     required this.amount,
     required this.description,
     required this.dateTime,
+    this.status = 'confirmed',
+    this.receiverId,
   });
 
   factory LedgerTransaction.fromJson(Map<String, dynamic> json) {
@@ -58,6 +66,8 @@ class LedgerTransaction {
       dateTime: DateTime.parse(
         json['dateTime'] ?? DateTime.now().toIso8601String(),
       ),
+      status: json['status'] ?? 'confirmed',
+      receiverId: json['receiverId'],
     );
   }
 
@@ -71,6 +81,8 @@ class LedgerTransaction {
       'amount': amount,
       'description': description,
       'dateTime': dateTime.toIso8601String(),
+      'status': status,
+      'receiverId': receiverId,
     };
   }
 }

@@ -139,26 +139,71 @@ class TransactionProvider extends ChangeNotifier {
   Future<void> _loadQuickItems() async {
     try {
       final quickItemData = await _appwriteService.getQuickItems();
-      final networkItems = quickItemData
-          .map((data) => Item.fromJson(data))
-          .toList();
+      final networkItems = quickItemData.map((data) {
+        final item = Item.fromJson(data);
+        // Preserve local order preference if exists
+        final cachedItem = _itemBox.get(item.id);
+        int localOrder = cachedItem?.order ?? 9999;
+        // Create new item with preserved local order
+        return Item(
+          id: item.id,
+          userId: item.userId,
+          title: item.title,
+          amount: item.amount,
+          isExpense: item.isExpense,
+          categoryId: item.categoryId,
+          usageCount: item.usageCount,
+          frequency: item.frequency,
+          icon: item.icon,
+          dueDay: item.dueDay,
+          isVariable: item.isVariable,
+          order: localOrder,
+        );
+      }).toList();
 
       if (networkItems.isNotEmpty) {
         _quickItems = networkItems;
-        // Update Cache - Warning: this box might ideally be just for quick items?
-        // Let's treat 'items' box as generic items storage.
-        // We'll just put quick items there for now.
-        for (var item in _quickItems) {
-          _itemBox.put(item.id, item);
-        }
-      } else {
-        // Fallback to cache if empty? No, empty list means empty list from server usually.
-        // But if error, we rely on cache.
+        _quickItems.sort((a, b) => a.order.compareTo(b.order));
+
+        // Update Cache with merged data
+        await _itemBox.putAll({for (var i in _quickItems) i.id: i});
       }
     } catch (e) {
       print('Error loading quick items: $e');
-      _quickItems = _itemBox.values.toList(); // Simple fallback
+      // If network fails, we rely on _initHive()'s cache load (which we should also update to sort)
     }
+  }
+  }
+
+  Future<void> reorderItems(int oldIndex, int newIndex) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final Item item = _quickItems.removeAt(oldIndex);
+    _quickItems.insert(newIndex, item);
+
+    // Update order for all items based on new list position
+    for (int i = 0; i < _quickItems.length; i++) {
+        final updatedItem = Item(
+            id: _quickItems[i].id,
+            userId: _quickItems[i].userId,
+            title: _quickItems[i].title,
+            amount: _quickItems[i].amount,
+            isExpense: _quickItems[i].isExpense,
+            categoryId: _quickItems[i].categoryId,
+            usageCount: _quickItems[i].usageCount,
+            frequency: _quickItems[i].frequency,
+            icon: _quickItems[i].icon,
+            dueDay: _quickItems[i].dueDay,
+            isVariable: _quickItems[i].isVariable,
+            order: i, // New order
+        );
+        _quickItems[i] = updatedItem; // Update list memory
+        if (_isHiveInitialized) {
+            await _itemBox.put(updatedItem.id, updatedItem); // Update local cache
+        }
+    }
+    notifyListeners();
   }
 
   Future<void> fetchItemsEx(String categoryId) async {
@@ -386,7 +431,7 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> addCategory(String name, String type, String icon) async {
+  Future<Category?> addCategory(String name, String type, String icon) async {
     try {
       final result = await _appwriteService.createCategory({
         'name': name,
@@ -400,12 +445,12 @@ class TransactionProvider extends ChangeNotifier {
           _categoryBox.put(newCat.id, newCat);
         }
         notifyListeners();
-        return true;
+        return newCat;
       }
-      return false;
+      return null;
     } catch (e) {
       print('Error adding category: $e');
-      return false;
+      return null;
     }
   }
 

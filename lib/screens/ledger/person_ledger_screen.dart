@@ -7,8 +7,20 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import '../../providers/ledger_provider.dart';
+import '../../providers/user_provider.dart';
 import '../../models/ledger_transaction.dart';
 import '../../services/appwrite_service.dart';
+
+typedef OnAddTransactionCallback =
+    Future<String?> Function(
+      String name,
+      String? phone,
+      double amount,
+      String description, {
+      bool isReceived,
+      String? currentUserPhone,
+      String? currentUserEmail,
+    });
 
 class PersonLedgerScreen extends StatefulWidget {
   final String personName;
@@ -16,10 +28,9 @@ class PersonLedgerScreen extends StatefulWidget {
   final double currentBalance;
   final List<LedgerTransaction> transactions;
   final String currencySymbol;
-  final Function(String, String?, double, String, {bool isReceived})
-  onAddTransaction;
+  final OnAddTransactionCallback onAddTransaction;
   final Function() onRemind;
-  final String currentUserContact;
+  final List<String> myIdentities; // Changed from currentUserContact
 
   const PersonLedgerScreen({
     super.key,
@@ -30,7 +41,7 @@ class PersonLedgerScreen extends StatefulWidget {
     required this.currencySymbol,
     required this.onAddTransaction,
     required this.onRemind,
-    required this.currentUserContact,
+    required this.myIdentities, // Changed
   });
 
   @override
@@ -48,8 +59,14 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     _currentBalance = widget.currentBalance;
   }
 
+  // Updated to support email comparison
   bool _arePhonesEqual(String? p1, String? p2) {
     if (p1 == null || p2 == null) return false;
+    // Email check
+    if (p1.contains('@') || p2.contains('@')) {
+      return p1.trim().toLowerCase() == p2.trim().toLowerCase();
+    }
+    // Phone check
     final n1 = p1.replaceAll(RegExp(r'\D'), '');
     final n2 = p2.replaceAll(RegExp(r'\D'), '');
     if (n1.isEmpty || n2.isEmpty) return false;
@@ -113,53 +130,56 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (amountController.text.isNotEmpty) {
                       final amount =
                           double.tryParse(amountController.text) ?? 0.0;
-                      // Logic: If they owe me (balance > 0), I receive settlement.
-                      // If I owe them (balance < 0), I send settlement (Lend -> but logically it's paying back).
-                      // The main addTransaction logic:
-                      // isReceived = true -> "Borrow Money" (I receive money).
-                      // isReceived = false -> "Lend Money" (I give money).
-
-                      // If Balance > 0 (They owe me): I should RECEIVE money to settle. So isReceived = true.
-                      // If Balance < 0 (I owe them): I should GIVE money to settle. So isReceived = false.
                       final isReceived = _currentBalance > 0;
 
-                      widget.onAddTransaction(
+                      Navigator.pop(context);
+
+                      final userProvider = context.read<UserProvider>();
+                      final error = await widget.onAddTransaction(
                         widget.personName,
                         widget.personPhone,
                         amount,
                         descController.text,
                         isReceived: isReceived,
+                        currentUserPhone: userProvider.user?.phone,
+                        currentUserEmail: userProvider.user?.email,
                       );
 
-                      // Optimistic Update
-                      setState(() {
-                        _currentBalance = 0; // Assuming full settlement
-                        _localTransactions.add(
-                          LedgerTransaction(
-                            id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-                            senderId: isReceived
-                                ? ''
-                                : 'me', // simplistic check
-                            senderName: isReceived ? widget.personName : 'Me',
-                            senderPhone: isReceived
-                                ? widget.personPhone
-                                : widget.currentUserContact,
-                            receiverName: isReceived ? 'Me' : widget.personName,
-                            receiverPhone: isReceived
-                                ? widget.currentUserContact
-                                : widget.personPhone,
-                            amount: amount,
-                            description: descController.text,
-                            dateTime: DateTime.now(),
-                          ),
-                        );
-                      });
-
-                      Navigator.pop(context);
+                      if (error == null) {
+                        // Success - Optimistic Update
+                        setState(() {
+                          _currentBalance = 0;
+                          _localTransactions.add(
+                            LedgerTransaction(
+                              id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+                              senderId: isReceived ? '' : 'me',
+                              senderName: isReceived ? widget.personName : 'Me',
+                              senderPhone: isReceived
+                                  ? widget.personPhone
+                                  : widget.myIdentities.first,
+                              receiverName: isReceived
+                                  ? 'Me'
+                                  : widget.personName,
+                              receiverPhone: isReceived
+                                  ? widget.myIdentities.first
+                                  : widget.personPhone,
+                              amount: amount,
+                              description: descController.text,
+                              dateTime: DateTime.now(),
+                            ),
+                          );
+                        });
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(error)));
+                        }
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -181,8 +201,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
   }
 
   Future<void> _handleNudge() async {
-    // Show Selection Dialog immediately
-    // We check for phone number validity inside the specific actions
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
@@ -203,7 +221,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // Option 1: In-App Notification
             ListTile(
               onTap: () async {
                 Navigator.pop(context);
@@ -239,7 +256,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
-            // Option 2: WhatsApp
             ListTile(
               onTap: () {
                 Navigator.pop(context);
@@ -319,7 +335,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
       final user = await AppwriteService().getUserByPhone(widget.personPhone);
 
       if (user != null) {
-        // User Exists -> Send Nudge
         await AppwriteService().sendNotification(
           userId: user['userId'],
           title: 'Payment Nudge',
@@ -335,7 +350,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
           );
         }
       } else {
-        // User Doesn't Exist -> Suggest WhatsApp
         if (mounted) {
           showDialog(
             context: context,
@@ -375,7 +389,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     final phone = widget.personPhone.replaceAll(RegExp(r'[^\d+]'), '');
     final amount = NumberFormat('#,##0').format(_currentBalance.abs());
 
-    // Construct message based on who owes whom
     String message = '';
     if (_currentBalance > 0) {
       message =
@@ -403,6 +416,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Sort: Oldest first (Top to Bottom)
     final sortedTransactions = List<LedgerTransaction>.from(_localTransactions)
       ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
@@ -519,9 +533,9 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               itemCount: sortedTransactions.length,
               itemBuilder: (context, index) {
                 final t = sortedTransactions[index];
-                final isSentByMe = _arePhonesEqual(
-                  t.senderPhone,
-                  widget.currentUserContact,
+                // Check against ANY identity
+                final isSentByMe = widget.myIdentities.any(
+                  (id) => _arePhonesEqual(t.senderPhone, id),
                 );
 
                 // Check if it's a settlement
@@ -565,7 +579,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount)} • ${DateFormat('MMM d, h:mm a').format(t.dateTime)}',
+                            '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())} • ${DateFormat('MMM d, h:mm a').format(t.dateTime)}',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.grey.shade500,
@@ -589,9 +603,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: isSentByMe
-                          ? Theme.of(
-                              context,
-                            ).colorScheme.primary.withOpacity(0.1)
+                          ? const Color(0xFFFF6B6B).withOpacity(0.1)
                           : Theme.of(context).cardColor,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
@@ -616,17 +628,19 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: isSentByMe
-                                ? Theme.of(context).colorScheme.primary
+                                ? const Color(0xFFFF6B6B)
                                 : const Color(0xFF51CF66),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount)}',
+                          '${isSentByMe ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())}',
                           style: GoogleFonts.inter(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onBackground,
+                            color: isSentByMe
+                                ? const Color(0xFFFF6B6B)
+                                : const Color(0xFF51CF66),
                           ),
                         ),
                         if (t.description.isNotEmpty) ...[
@@ -672,7 +686,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Give / Get Buttons
                   Row(
                     children: [
                       Expanded(
@@ -726,7 +739,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     final amountController = TextEditingController();
     final descController = TextEditingController();
 
-    // We use a local variable for the toggle state, initializing with the passed value
     bool currentIsReceived = isReceived;
 
     showDialog(
@@ -752,7 +764,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header Title
                   Text(
                     'New Transaction',
                     style: GoogleFonts.inter(
@@ -878,51 +889,71 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         ),
                         elevation: 0,
                       ),
-                      onPressed: () {
+                      onPressed: () async {
                         if (amountController.text.isNotEmpty) {
                           final amount =
                               double.tryParse(amountController.text) ?? 0.0;
+                          final description = descController.text;
+                          final isReceived = currentIsReceived;
 
-                          widget.onAddTransaction(
-                            widget.personName,
-                            widget.personPhone,
-                            amount,
-                            descController.text,
-                            isReceived: currentIsReceived,
+                          Navigator.pop(context);
+
+                          // OPTIMISTIC UPDATE - Show immediately!
+                          final tempId =
+                              'temp_${DateTime.now().millisecondsSinceEpoch}';
+                          final optimisticTx = LedgerTransaction(
+                            id: tempId,
+                            senderId: isReceived ? '' : 'me',
+                            senderName: isReceived ? widget.personName : 'Me',
+                            senderPhone: isReceived
+                                ? widget.personPhone
+                                : widget.myIdentities.first,
+                            receiverName: isReceived ? 'Me' : widget.personName,
+                            receiverPhone: isReceived
+                                ? widget.myIdentities.first
+                                : widget.personPhone,
+                            amount: amount,
+                            description: description,
+                            dateTime: DateTime.now(),
                           );
 
-                          // Optimistic Update
                           setState(() {
-                            if (currentIsReceived) {
+                            if (isReceived) {
                               _currentBalance -= amount;
                             } else {
                               _currentBalance += amount;
                             }
-
-                            _localTransactions.add(
-                              LedgerTransaction(
-                                id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-                                senderId: currentIsReceived ? '' : 'me',
-                                senderName: currentIsReceived
-                                    ? widget.personName
-                                    : 'Me',
-                                senderPhone: currentIsReceived
-                                    ? widget.personPhone
-                                    : widget.currentUserContact,
-                                receiverName: currentIsReceived
-                                    ? 'Me'
-                                    : widget.personName,
-                                receiverPhone: currentIsReceived
-                                    ? widget.currentUserContact
-                                    : widget.personPhone,
-                                amount: amount,
-                                description: descController.text,
-                                dateTime: DateTime.now(),
-                              ),
-                            );
+                            _localTransactions.add(optimisticTx);
                           });
 
-                          Navigator.pop(context);
+                          // NETWORK CALL - Run in background
+                          final userProvider = context.read<UserProvider>();
+                          final error = await widget.onAddTransaction(
+                            widget.personName,
+                            widget.personPhone,
+                            amount,
+                            description,
+                            isReceived: isReceived,
+                            currentUserPhone: userProvider.user?.phone,
+                            currentUserEmail: userProvider.user?.email,
+                          );
+
+                          if (error != null && mounted) {
+                            // ROLLBACK on failure
+                            setState(() {
+                              if (isReceived) {
+                                _currentBalance += amount;
+                              } else {
+                                _currentBalance -= amount;
+                              }
+                              _localTransactions.removeWhere(
+                                (t) => t.id == tempId,
+                              );
+                            });
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text(error)));
+                          }
                         }
                       },
                       child: const Text(
@@ -943,14 +974,13 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
   void _showEditPersonDialog() {
     final nameController = TextEditingController(text: widget.personName);
 
-    // Separate logic to extract country code if possible, default to IN (+91)
     String initialPhone = widget.personPhone;
     String selectedCountryCode = '+91';
 
     if (initialPhone.startsWith('+91')) {
       initialPhone = initialPhone.substring(3);
     } else if (initialPhone.startsWith('local:')) {
-      initialPhone = ''; // displaying empty for simpler editing
+      initialPhone = '';
     }
 
     final phoneController = TextEditingController(text: initialPhone);
@@ -1046,7 +1076,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                             ? ''
                             : '$selectedCountryCode$rawPhone';
 
-                        Navigator.pop(context); // Close dialog
+                        Navigator.pop(context);
 
                         if (newName == widget.personName &&
                             newPhone == widget.personPhone) {
@@ -1073,9 +1103,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                                 content: Text('Person updated successfully'),
                               ),
                             );
-                            Navigator.pop(
-                              context,
-                            ); // Return to Ledger Screen to refresh
+                            Navigator.pop(context);
                           }
                         } else {
                           if (mounted) {
@@ -1129,7 +1157,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // Close dialog
+              Navigator.pop(context);
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Deleting person...')),
@@ -1147,7 +1175,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                       content: Text('Person deleted successfully'),
                     ),
                   );
-                  Navigator.pop(context); // Return to Ledger Screen
+                  Navigator.pop(context);
                 }
               } else {
                 if (mounted) {

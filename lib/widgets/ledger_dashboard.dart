@@ -146,26 +146,48 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       if (nameController.text.isNotEmpty &&
                           amountController.text.isNotEmpty) {
+                        Navigator.pop(context); // Close dialog first
+
                         final phoneStr = phoneController.text.isEmpty
                             ? null
                             : '$selectedCountryCode${phoneController.text}';
                         final userProvider = context.read<UserProvider>();
                         final currentUser = userProvider.user;
 
-                        context.read<LedgerProvider>().addLedgerTransaction(
-                          nameController.text,
-                          phoneStr,
-                          double.tryParse(amountController.text) ?? 0.0,
-                          descController.text,
-                          isReceived: isReceived,
-                          currentUserId: currentUser?.userId ?? '',
-                          currentUserName: currentUser?.name ?? '',
-                          currentUserPhone: currentUser?.phone ?? '',
-                        );
-                        Navigator.pop(context);
+                        final error = await context
+                            .read<LedgerProvider>()
+                            .addLedgerTransaction(
+                              nameController.text,
+                              phoneStr,
+                              double.tryParse(amountController.text) ?? 0.0,
+                              descController.text,
+                              isReceived: isReceived,
+                              currentUserId: currentUser?.userId ?? '',
+                              currentUserName: currentUser?.name ?? '',
+                              currentUserPhone: currentUser?.phone ?? '',
+                            );
+
+                        if (error != null && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            Theme.of(context).brightness == Brightness.dark
+                                ? SnackBar(
+                                    content: Text(
+                                      error,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    backgroundColor: Colors.redAccent,
+                                  )
+                                : SnackBar(
+                                    content: Text(error),
+                                    backgroundColor: Colors.red,
+                                  ),
+                          );
+                        }
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -190,7 +212,14 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     final userProvider = context.watch<UserProvider>();
     final currencySymbol = context.watch<CurrencyProvider>().currencySymbol;
     final transactions = ledgerProvider.ledgerTransactions;
-    final currentUserContact = userProvider.user?.phone ?? '';
+
+    final user = userProvider.user;
+    final myIdentities = [
+      if (user?.phone != null && user!.phone.isNotEmpty) user.phone,
+      if (user?.email != null && user!.email.isNotEmpty) user.email,
+    ].cast<String>();
+
+    // Fallback for simple display/logic if needed, but identities list is primary
 
     if (ledgerProvider.isLoading) {
       return Padding(
@@ -216,11 +245,15 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     // Total Sent = Money I gave/lent -> I expect TO RECEIVE this back.
 
     double totalReceived = transactions
-        .where((t) => !_arePhonesEqual(t.senderPhone, currentUserContact))
+        .where(
+          (t) => !myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)),
+        )
         .fold(0, (sum, t) => sum + t.amount);
 
     double totalSent = transactions
-        .where((t) => _arePhonesEqual(t.senderPhone, currentUserContact))
+        .where(
+          (t) => myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)),
+        )
         .fold(0, (sum, t) => sum + t.amount);
 
     // Net Balance formula: Received - Given
@@ -301,7 +334,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           ),
           const SizedBox(height: 16),
 
-          _buildPeopleGrid(transactions, currentUserContact, currencySymbol),
+          _buildPeopleGrid(transactions, myIdentities, currencySymbol),
           const SizedBox(height: 80),
         ],
       ),
@@ -311,10 +344,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
   // Helpers
   Widget _buildPeopleGrid(
     List<LedgerTransaction> transactions,
-    String currentUserContact,
+    List<String> myIdentities,
     String currencySymbol,
   ) {
-    final balances = _calculateUserBalances(transactions, currentUserContact);
+    final balances = _calculateUserBalances(transactions, myIdentities);
     if (balances.isEmpty) {
       return const EmptyState(
         title: 'No records',
@@ -345,10 +378,13 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               b['phone'],
               b['balance'],
               transactions,
-              currentUserContact,
+              myIdentities,
               currencySymbol,
-              onLongPress: () =>
-                  _showPersonOptions(b['name'], b['phone'], currentUserContact),
+              onLongPress: () => _showPersonOptions(
+                b['name'],
+                b['phone'],
+                myIdentities.isNotEmpty ? myIdentities.first : '',
+              ),
             );
           },
         ),
@@ -366,11 +402,15 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     List<LedgerTransaction> allTx,
     String personName,
     String personPhone,
-    String currentUserContact,
+    List<String> myIdentities,
   ) {
     return allTx.where((t) {
-      final isMeSender = _arePhonesEqual(t.senderPhone, currentUserContact);
-      final isMeReceiver = _arePhonesEqual(t.receiverPhone, currentUserContact);
+      final isMeSender = myIdentities.any(
+        (id) => _arePhonesEqual(t.senderPhone, id),
+      );
+      final isMeReceiver = myIdentities.any(
+        (id) => _arePhonesEqual(t.receiverPhone, id),
+      );
 
       if (isMeSender) {
         // I sent, checking if receiver is this person
@@ -391,6 +431,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
   bool _arePhonesEqual(String? p1, String? p2) {
     if (p1 == null || p2 == null) return false;
+    if (p1.contains('@') || p2.contains('@')) {
+      return p1.toLowerCase().trim() == p2.toLowerCase().trim();
+    }
     final n1 = p1.replaceAll(RegExp(r'\D'), '');
     final n2 = p2.replaceAll(RegExp(r'\D'), '');
     if (n1.isEmpty || n2.isEmpty) return false;
@@ -402,7 +445,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
   // Reuse existing calculation logic
   List<Map<String, dynamic>> _calculateUserBalances(
     List<LedgerTransaction> transactions,
-    String currentUserContact,
+    List<String> myIdentities,
   ) {
     // Filter hidden people
     final hiddenPeople = context.read<LedgerProvider>().hiddenPeople;
@@ -412,7 +455,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     Map<String, String> phones = {};
 
     for (var t in transactions) {
-      final isSent = _arePhonesEqual(t.senderPhone, currentUserContact);
+      final isSent = myIdentities.any(
+        (id) => _arePhonesEqual(t.senderPhone, id),
+      );
       final otherName = isSent ? t.receiverName : t.senderName;
       final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
 
@@ -600,14 +645,26 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String phone,
     double bal,
     List<LedgerTransaction> tx,
-    String cur,
+    List<String> myIdentities,
     String currencySymbol, {
     VoidCallback? onLongPress,
   }) {
     return GestureDetector(
       onLongPress: onLongPress,
       onTap: () {
-        final personTransactions = _getPersonTransactions(tx, name, phone, cur);
+        final provider = context.read<LedgerProvider>();
+        final allTransactions = [
+          ...provider.ledgerTransactions,
+          ...provider.incomingRequests,
+          ...provider.outgoingRequests,
+        ];
+
+        final personTransactions = _getPersonTransactions(
+          allTransactions,
+          name,
+          phone,
+          myIdentities,
+        );
 
         Navigator.push(
           context,
@@ -618,13 +675,21 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               currentBalance: bal,
               transactions: personTransactions,
               currencySymbol: currencySymbol,
-              currentUserContact: cur,
+              myIdentities: myIdentities,
               onAddTransaction:
-                  (pName, pPhone, amount, desc, {isReceived = false}) {
+                  (
+                    pName,
+                    pPhone,
+                    amount,
+                    desc, {
+                    isReceived = false,
+                    currentUserPhone,
+                    currentUserEmail,
+                  }) {
                     final userProvider = context.read<UserProvider>();
                     final currentUser = userProvider.user;
 
-                    context.read<LedgerProvider>().addLedgerTransaction(
+                    return context.read<LedgerProvider>().addLedgerTransaction(
                       pName,
                       pPhone,
                       amount,
@@ -632,7 +697,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                       isReceived: isReceived,
                       currentUserId: currentUser?.userId ?? '',
                       currentUserName: currentUser?.name ?? '',
-                      currentUserPhone: currentUser?.phone ?? '',
+                      currentUserPhone:
+                          currentUserPhone ?? currentUser?.phone ?? '',
+                      currentUserEmail: currentUserEmail ?? currentUser?.email,
                     );
                   },
               onRemind: () {
@@ -846,7 +913,8 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
                         Navigator.pop(context);
 
-                        if (newName == currentName && newPhone == currentPhone) {
+                        if (newName == currentName &&
+                            newPhone == currentPhone) {
                           return;
                         }
 

@@ -8,6 +8,7 @@ import '../providers/currency_provider.dart';
 import '../widgets/ledger_dashboard.dart';
 import 'ledger_history_screen.dart';
 import 'ledger/ledger_due_date_screen.dart';
+import 'notification_screen.dart';
 
 class LedgerScreen extends StatefulWidget {
   const LedgerScreen({super.key});
@@ -26,7 +27,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final userProvider = context.watch<UserProvider>();
     final currencySymbol = context.watch<CurrencyProvider>().currencySymbol;
     final transactions = ledgerProvider.ledgerTransactions;
-    final currentUserContact = userProvider.user?.phone ?? '';
+    // Construct multiple identities for correct filtering
+    final myIdentities = [
+      if (userProvider.user?.phone != null) userProvider.user!.phone!,
+      if (userProvider.user?.email != null) userProvider.user!.email!,
+    ].cast<String>();
 
     return DefaultTabController(
       length: 3,
@@ -35,6 +40,37 @@ class _LedgerScreenState extends State<LedgerScreen> {
         appBar: AppBar(
           title: const Text('Ledger'),
           backgroundColor: Theme.of(context).cardColor,
+          actions: [
+            Consumer<LedgerProvider>(
+              builder: (context, provider, child) {
+                final requestCount = provider.incomingRequests.length;
+                return IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationScreen(),
+                      ),
+                    );
+                  },
+                  icon: Badge(
+                    isLabelVisible: requestCount > 0,
+                    label: Text('$requestCount'),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              onPressed: () {
+                // Placeholder: Scan QR
+              },
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+            ),
+          ],
           bottom: TabBar(
             labelColor: Theme.of(context).colorScheme.primary,
             unselectedLabelColor: Colors.grey,
@@ -58,7 +94,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
             // Tab 3: History (Existing Screen)
             LedgerHistoryScreen(
               transactions: transactions,
-              currentUserContact: currentUserContact,
+              myIdentities: myIdentities,
               currencySymbol: currencySymbol,
             ),
           ],

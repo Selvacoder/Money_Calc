@@ -188,17 +188,30 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 onChanged: (value) async {
                   if (value == 'new_category') {
                     // Open Category Dialog on top
-                    await showDialog(
+                    final newCategoryId = await showDialog<String>(
                       context: context,
                       builder: (context) => const CategoryDialog(),
                     );
 
-                    // After closing CategoryDialog, reset selection to null so user can pick
-                    // or we could listen to the result if CategoryDialog returned the new ID.
-                    setState(() {
-                      _selectedCategoryId =
-                          null; // Let effective logic handle default or wait for user
-                    });
+                    // If a new category was created (ID returned), select it
+                    if (newCategoryId != null) {
+                      setState(() {
+                        _selectedCategoryId = newCategoryId;
+                        // Also update expense/income status based on new category
+                        final cat = categories.firstWhere(
+                          (c) => c.id == newCategoryId,
+                          orElse: () => categories.first,
+                        );
+                        _isExpense = cat.type == 'expense';
+                        // Optionally update icon if desired
+                        // _selectedIcon = cat.icon;
+                      });
+                    } else {
+                      // User cancelled or failed
+                      setState(() {
+                        _selectedCategoryId = null;
+                      });
+                    }
                   } else {
                     setState(() {
                       _selectedCategoryId = value;
@@ -208,8 +221,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
                           orElse: () => categories.first,
                         );
                         _isExpense = cat.type == 'expense';
-                        // Also update icon if it matches category default?
-                        // Maybe not enforce it if user picked one.
                       }
                     });
                   }
@@ -259,30 +270,29 @@ class _AddItemDialogState extends State<AddItemDialog> {
               ],
 
               // Frequency & Due Date (Available for both types now)
-              if (!_isVariable) ...[
-                _buildFrequencyToggle(context),
-                if (!_isDaily) ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    value: _dueDay,
-                    decoration: InputDecoration(
-                      labelText: 'Due Day (Optional)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.calendar_today),
+              // Frequency & Due Date
+              _buildFrequencyToggle(context),
+              if (!_isDaily && !_isVariable) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  value: _dueDay,
+                  decoration: InputDecoration(
+                    labelText: 'Due Day (Optional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    items: List.generate(31, (index) => index + 1)
-                        .map(
-                          (day) => DropdownMenuItem(
-                            value: day,
-                            child: Text('Day $day'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _dueDay = value),
+                    prefixIcon: const Icon(Icons.calendar_today),
                   ),
-                ],
+                  items: List.generate(31, (index) => index + 1)
+                      .map(
+                        (day) => DropdownMenuItem(
+                          value: day,
+                          child: Text('Day $day'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => _dueDay = value),
+                ),
               ],
 
               const SizedBox(height: 24),
@@ -578,7 +588,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       'amount': _isVariable
           ? 0.0
           : (double.tryParse(_amountController.text) ?? 0.0),
-      'frequency': _isVariable ? 'variable' : (_isDaily ? 'daily' : 'monthly'),
+      'frequency': _isDaily ? 'daily' : 'monthly',
       'categoryId': finalCategoryId == 'other_virtual' ? null : finalCategoryId,
       'isExpense': _isExpense,
       'icon': _selectedIcon,

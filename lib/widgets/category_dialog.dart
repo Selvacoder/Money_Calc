@@ -210,12 +210,13 @@ class _CategoryDialogState extends State<CategoryDialog> {
 
     if (widget.category == null) {
       // Add
-      final success = await provider.addCategory(
+      final newCategory = await provider.addCategory(
         name,
         _selectedType,
         _selectedIcon,
-      );
-      if (!success) {
+      ); // returns Category?
+
+      if (newCategory == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -225,29 +226,23 @@ class _CategoryDialogState extends State<CategoryDialog> {
         }
         return; // Don't pop if failed
       }
+      if (context.mounted) {
+        Navigator.pop(context, newCategory.id); // Return ID
+      }
+      return;
     } else {
-      // Update - We need a full update method in provider, currently only updateCategory(id, name) exists.
-      // We should probably update provider to allow updating icon/type too if we want full flexibility.
-      // For now, based on user request "Allow icon change while editing", we need to update provider.
-
-      // Wait, TransactionProvider only has updateCategory(id, name).
-      // I need to update TransactionProvider first to support icon/type updates.
-      // But I can overload or create a new method.
-      // For now, I will use a workaround or Assume I will update provider next.
-      // Actually, I'll update provider in the next step.
-
+      // Update
       // Temporary: Call updateCategoryName (which is what we have)
-      // I need to update the provider to accept icon updates.
-      // I'll leave a TODO or initiate a specific provider update task.
       provider.updateCategory(
         widget.category!.id,
         name,
         icon: _selectedIcon,
         type: _selectedType,
       );
+      if (context.mounted) {
+        Navigator.pop(context); // No return value for edit needed usually
+      }
     }
-
-    Navigator.pop(context);
   }
 
   Widget _buildTypeToggleButton(

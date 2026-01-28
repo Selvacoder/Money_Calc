@@ -21,6 +21,7 @@ class PersonalDashboard extends StatefulWidget {
 
 class _PersonalDashboardState extends State<PersonalDashboard> {
   String _entryMode = 'daily'; // daily, monthly, variable
+
   bool _showMoreTransactions = false;
   int _currentPage = 0;
 
@@ -158,9 +159,14 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               return _buildSkeletonLoader();
             }
 
-            final items = provider.items
-                .where((item) => item.frequency == _entryMode)
-                .toList();
+            final items = provider.items.where((item) {
+              if (_entryMode == 'variable') {
+                return item.isVariable ?? false;
+              } else {
+                // Show fixed AND variable items matching the frequency
+                return item.frequency == _entryMode;
+              }
+            }).toList();
 
             if (items.isEmpty) {
               return Center(
@@ -386,24 +392,44 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  Widget _buildToggleOption(String text, bool isSelected, VoidCallback onTap) {
+  Widget _buildToggleOption(
+    String text,
+    bool isSelected,
+    VoidCallback onTap, {
+    bool isSubSelect = false,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSubSelect ? 12 : 16,
+          vertical: isSubSelect ? 6 : 8,
+        ),
+        margin: EdgeInsets.only(right: 8, top: isSubSelect ? 0 : 0), // Spacing
         decoration: BoxDecoration(
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Colors.transparent,
+              : (isSubSelect
+                    ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                    : Colors.transparent),
           borderRadius: BorderRadius.circular(20),
+          border: isSubSelect && !isSelected
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                )
+              : null,
         ),
         child: Text(
           text,
           style: GoogleFonts.inter(
-            color: isSelected ? Colors.white : Colors.grey,
+            color: isSelected
+                ? Colors.white
+                : (isSubSelect
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey),
             fontWeight: FontWeight.w600,
-            fontSize: 12,
+            fontSize: isSubSelect ? 11 : 12,
           ),
         ),
       ),

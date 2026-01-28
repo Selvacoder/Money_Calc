@@ -351,48 +351,142 @@ class AppwriteService {
   }
 
   Future<Map<String, dynamic>?> createTransaction(
-    Map<String, dynamic> transactionData,
+    Map<String, dynamic> data,
   ) async {
     try {
       final user = await account.get();
-
-      // Prepare data for Appwrite
-      final data = {
+      final txData = {
         'userId': user.$id,
-        'title': transactionData['title'],
-        'amount': transactionData['amount'],
-        'isExpense': transactionData['isExpense'],
-        'dateTime': transactionData['dateTime'],
-        'categoryId': transactionData['categoryId'],
-        'itemId': transactionData['itemId'],
-        'ledgerId': transactionData['ledgerId'],
-        'paymentMethod': transactionData['paymentMethod'],
+        'amount': data['amount'],
+        'categoryId': data['categoryId'],
+        'itemId': data['itemId'],
+        'description': data['description'],
+        'dateTime': data['dateTime'],
+        'isExpense': data['isExpense'],
       };
+
+      // Handle Usage logic
+      if (data['categoryId'] != null) {
+        await incrementCategoryUsage(data['categoryId']);
+      }
+      if (data['itemId'] != null) {
+        await incrementItemUsage(data['itemId']);
+      }
 
       final doc = await databases.createDocument(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.transactionsCollectionId,
         documentId: ID.unique(),
-        data: data,
+        data: txData,
         permissions: [
           Permission.read(Role.user(user.$id)),
           Permission.write(Role.user(user.$id)),
         ],
       );
 
-      // Increment Usage Counts
-      if (transactionData['categoryId'] != null) {
-        incrementCategoryUsage(transactionData['categoryId']);
-      }
-      if (transactionData['itemId'] != null) {
-        incrementItemUsage(transactionData['itemId']);
-      }
-
-      final responseData = doc.data;
-      responseData['id'] = doc.$id;
-      return responseData;
+      final response = doc.data;
+      response['id'] = doc.$id;
+      return response;
     } catch (e) {
       print('Error creating transaction: $e');
+      return null;
+    }
+  }
+
+  // Create Ledger Transaction
+  Future<Map<String, dynamic>?> createLedgerTransaction(
+    Map<String, dynamic> transactionData,
+  ) async {
+    try {
+      final user = await account.get();
+      String status = 'confirmed';
+      String? receiverId;
+      List<String> readPermissions = [Permission.read(Role.user(user.$id))];
+      List<String> writePermissions = [Permission.write(Role.user(user.$id))];
+
+      // Check if receiver exists by phone
+      final receiverPhone = transactionData['receiverPhone'];
+      if (receiverPhone != null &&
+          receiverPhone.toString().isNotEmpty &&
+          !receiverPhone.toString().startsWith('local:')) {
+        final existingUser = await getUserByPhone(receiverPhone);
+        if (existingUser != null) {
+          status = 'pending';
+          receiverId = existingUser['userId'];
+
+          // Grant receiver permissions to see and update (accept/reject)
+          readPermissions.add(Permission.read(Role.user(receiverId!)));
+          writePermissions.add(Permission.write(Role.user(receiverId)));
+        }
+      }
+
+      final data = {
+        'senderId': user.$id, // Creator is always current user for permissions
+        'senderName': transactionData['senderName'] ?? '', // Use passed value
+        'senderPhone': transactionData['senderPhone'] ?? '', // Use passed value
+        'receiverName': transactionData['receiverName'] ?? '',
+        'receiverPhone': transactionData['receiverPhone'] ?? '',
+        'amount': transactionData['amount'],
+        'description': transactionData['description'] ?? '',
+        'dateTime': transactionData['dateTime'],
+        'status': status,
+        if (receiverId != null) 'receiverId': receiverId,
+      };
+
+      final doc = await databases.createDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        documentId: ID.unique(),
+        data: data,
+        permissions: [...readPermissions, ...writePermissions],
+      );
+
+      final response = doc.data;
+      response['id'] = doc.$id;
+      return response;
+    } catch (e) {
+      print('Error creating ledger transaction: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> updateLedgerTransactionStatus(String id, String status) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        documentId: id,
+        data: {'status': status},
+      );
+      return true;
+    } catch (e) {
+      print('Error updating ledger status: $e');
+      return false;
+    }
+  }
+
+  // Get User by Phone (for Ledger linking)
+  Future<Map<String, dynamic>?> getUserByPhone(String phone) async {
+    try {
+      // Normalize phone if key
+      final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+      // Basic check, might need specific format depending on how it's stored
+
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.profilesCollectionId,
+        queries: [
+          Query.equal('phone', [phone, '+$cleanPhone']), // Try both formats
+          Query.limit(1),
+        ],
+      );
+
+      if (result.documents.isNotEmpty) {
+        return result.documents.first.data;
+      }
+      return null;
+    } catch (e) {
+      print('Error finding user by phone: $e');
       return null;
     }
   }
@@ -826,12 +920,22 @@ class AppwriteService {
           Query.orderDesc('date'),
         ],
       );
-      // Fetch 2: I am the receiver (only if email matches)
+      // Fetch 2: I am the receiver (by Phone)
       final received = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.ledgerCollectionId,
         queries: [
           Query.equal('receiverPhone', [contact]),
+          Query.orderDesc('date'),
+        ],
+      );
+
+      // Fetch 3: I am the receiver (by ID - for App users)
+      final receivedById = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.ledgerCollectionId,
+        queries: [
+          Query.equal('receiverId', [user.$id]),
           Query.orderDesc('date'),
         ],
       );
@@ -851,6 +955,12 @@ class AppwriteService {
         transactionMap[doc.$id] = data;
       }
 
+      for (var doc in receivedById.documents) {
+        final data = doc.data;
+        data['id'] = doc.$id;
+        transactionMap[doc.$id] = data;
+      }
+
       // Convert back to list and sort by date descending
       final allTransactions = transactionMap.values.toList();
       allTransactions.sort((a, b) {
@@ -866,102 +976,7 @@ class AppwriteService {
     }
   }
 
-  Future<Map<String, dynamic>?> createLedgerTransaction(
-    Map<String, dynamic> data,
-  ) async {
-    try {
-      final user = await account.get();
-      String contact = user.phone;
-
-      // If auth phone is empty, try fetching from profile
-      if (contact.isEmpty) {
-        final profileDocs = await databases.listDocuments(
-          databaseId: AppwriteConfig.databaseId,
-          collectionId: AppwriteConfig.profilesCollectionId,
-          queries: [
-            Query.equal('userId', [user.$id]),
-          ],
-        );
-        if (profileDocs.documents.isNotEmpty) {
-          contact = profileDocs.documents.first.data['phone'] ?? '';
-        }
-      }
-
-      if (contact.isEmpty) {
-        throw 'Please update your profile with a phone number to use the Ledger.';
-      }
-
-      final isReceived = data['isReceived'] == true;
-      final otherName = data['name'];
-      String? otherContact = data['email']; // This comes from phoneController
-
-      // Handle optional phone for local-only entries (required schema support)
-      if (otherContact == null || otherContact.toString().trim().isEmpty) {
-        String safeName = (otherName ?? 'Unknown').toString().replaceAll(
-          RegExp(r'[^a-zA-Z0-9]'),
-          '',
-        );
-        if (safeName.length > 13) safeName = safeName.substring(0, 13);
-        otherContact = 'local:$safeName';
-      }
-
-      // Validate otherContact length if provided
-      if (otherContact.length > 20) {
-        throw 'Recipient phone number must be 20 characters or less.';
-      }
-
-      final ledgerData = {
-        // 'senderId': user.$id,
-        'senderName': isReceived ? otherName : user.name,
-        'senderPhone': isReceived ? otherContact : contact,
-        'receiverName': isReceived ? user.name : otherName,
-        'receiverPhone': isReceived ? contact : otherContact,
-        'amount': data['amount'],
-        'description': data['description'],
-        'date': data['dateTime'],
-      };
-
-      List<String> permissions = [
-        Permission.read(Role.user(user.$id)),
-        Permission.write(Role.user(user.$id)),
-      ];
-
-      // Try to give permission to the other user
-      if (otherContact.isNotEmpty && !otherContact.startsWith('local:')) {
-        try {
-          final otherUserDocs = await databases.listDocuments(
-            databaseId: AppwriteConfig.databaseId,
-            collectionId: AppwriteConfig.profilesCollectionId,
-            queries: [
-              Query.equal('phone', [otherContact]),
-            ],
-          );
-          if (otherUserDocs.documents.isNotEmpty) {
-            final otherUserId = otherUserDocs.documents.first.data['userId'];
-            permissions.add(Permission.read(Role.user(otherUserId)));
-            permissions.add(Permission.write(Role.user(otherUserId)));
-          }
-        } catch (e) {
-          print('Could not find other user to grant permission: $e');
-        }
-      }
-
-      final doc = await databases.createDocument(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.ledgerCollectionId,
-        documentId: ID.unique(),
-        data: ledgerData,
-        permissions: permissions,
-      );
-
-      final response = doc.data;
-      response['id'] = doc.$id;
-      return response;
-    } catch (e) {
-      print('Error creating ledger transaction: $e');
-      rethrow;
-    }
-  }
+  // End of method block if needed, but we are inserting after create LedgerTransaction which ends at 1016 in previous view.
 
   Future<bool> deleteLedgerTransaction(String id) async {
     try {
@@ -1145,38 +1160,6 @@ class AppwriteService {
     } catch (e) {
       print('Error deleting ledger person: $e');
       return false;
-    }
-  }
-
-  // Get user by phone number
-  Future<Map<String, dynamic>?> getUserByPhone(String phone) async {
-    try {
-      // Normalize phone number (remove non-digits)
-      // final normalizedPhone = phone.replaceAll(RegExp(r'\D'), ''); // Unused
-
-      // We need to match the exact format stored in profiles.
-      // Since specific format might vary, we might need a more flexible search or ensure strict formatting.
-      // For now, let's assume strict match or substring match if possible.
-      // Note: Appwrite queries on string attributes are exact unless full-text search is enabled.
-
-      final result = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.profilesCollectionId,
-        queries: [
-          Query.equal('phone', phone), // Try exact match first
-        ],
-      );
-
-      if (result.documents.isNotEmpty) {
-        return result.documents.first.data;
-      }
-
-      // If exact match failed, maybe try with/without country code if needed?
-      // For now, sticking to what was passed.
-      return null;
-    } catch (e) {
-      print('Error getting user by phone: $e');
-      return null;
     }
   }
 

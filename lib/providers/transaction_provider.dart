@@ -311,10 +311,10 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateItem(String id, Map<String, dynamic> data) async {
+  Future<String?> updateItem(String id, Map<String, dynamic> data) async {
     // 1. Find existing item to backup for revert
     final index = _quickItems.indexWhere((i) => i.id == id);
-    if (index == -1) return;
+    if (index == -1) return 'Item not found';
     final oldItem = _quickItems[index];
 
     // 2. Create optimistic new item
@@ -330,6 +330,8 @@ class TransactionProvider extends ChangeNotifier {
       frequency: data['frequency'] ?? oldItem.frequency,
       icon: data['icon'] ?? oldItem.icon,
       dueDay: data['dueDay'] ?? oldItem.dueDay,
+      isVariable:
+          data['isVariable'] ?? oldItem.isVariable, // Ensure isVariable copied
     );
 
     // 3. Update local state immediately
@@ -347,10 +349,10 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
 
     // 4. Perform API call
-    final success = await _appwriteService.updateItem(id, data);
+    final error = await _appwriteService.updateItem(id, data);
 
-    if (!success) {
-      print('Failed to update item $id on server');
+    if (error != null) {
+      print('Failed to update item $id on server: $error');
       // Revert is fine for UPDATE, but for DELETE we want it gone.
       // Keeping revert for update as it helps avoid state desync for editable fields.
       _quickItems[index] = oldItem;
@@ -361,9 +363,11 @@ class TransactionProvider extends ChangeNotifier {
         _items[catIndex] = oldItem;
       }
       notifyListeners();
+      return error;
     }
     // No need to call fetchData() if successful, unless we suspect side effects not covered here.
     // Optimistic update is sufficient for this use case.
+    return null;
   }
 
   Future<void> deleteItem(String id) async {

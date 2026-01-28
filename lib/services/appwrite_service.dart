@@ -20,8 +20,8 @@ class AppwriteService {
   void init() {
     client = Client()
         .setEndpoint(AppwriteConfig.endpoint)
-        .setProject(AppwriteConfig.projectId)
-        .setSelfSigned(status: true);
+        .setProject(AppwriteConfig.projectId);
+    // .setSelfSigned(status: true); // Removed for production domain
 
     account = Account(client);
     databases = Databases(client);
@@ -47,19 +47,27 @@ class AppwriteService {
       'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.notificationsCollectionId}.documents',
     ]);
 
-    subscription.stream.listen((response) {
-      // Check if any event is a create event
-      final isCreate = response.events.any(
-        (event) => event.endsWith('.create'),
-      );
+    subscription.stream.listen(
+      (response) {
+        // Check if any event is a create event
+        final isCreate = response.events.any(
+          (event) => event.endsWith('.create'),
+        );
 
-      if (isCreate) {
-        final data = response.payload;
-        if (data['userId'] == userId) {
-          onNotification(data);
+        if (isCreate) {
+          final data = response.payload;
+          if (data['userId'] == userId) {
+            onNotification(data);
+          }
         }
-      }
-    });
+      },
+      onError: (error) {
+        print('Appwrite Realtime Error: $error');
+      },
+      onDone: () {
+        print('Appwrite Realtime Connection Closed');
+      },
+    );
 
     return subscription;
   }
@@ -320,14 +328,16 @@ class AppwriteService {
   Future<List<Map<String, dynamic>>> getTransactions() async {
     try {
       final user = await account.get();
-      final result = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.transactionsCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-          Query.orderDesc('dateTime'),
-        ],
-      );
+      final result = await databases
+          .listDocuments(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.transactionsCollectionId,
+            queries: [
+              Query.equal('userId', [user.$id]),
+              Query.orderDesc('dateTime'),
+            ],
+          )
+          .timeout(const Duration(seconds: 10));
 
       return result.documents.map((doc) {
         final data = doc.data;
@@ -364,6 +374,10 @@ class AppwriteService {
         collectionId: AppwriteConfig.transactionsCollectionId,
         documentId: ID.unique(),
         data: data,
+        permissions: [
+          Permission.read(Role.user(user.$id)),
+          Permission.write(Role.user(user.$id)),
+        ],
       );
 
       // Increment Usage Counts
@@ -505,14 +519,16 @@ class AppwriteService {
   Future<List<Map<String, dynamic>>> getCategories() async {
     try {
       final user = await account.get();
-      final result = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.categoriesCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-          Query.orderDesc('usageCount'),
-        ],
-      );
+      final result = await databases
+          .listDocuments(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.categoriesCollectionId,
+            queries: [
+              Query.equal('userId', [user.$id]),
+              Query.orderDesc('usageCount'),
+            ],
+          )
+          .timeout(const Duration(seconds: 10));
 
       return result.documents.map((doc) {
         final data = doc.data;
@@ -543,6 +559,10 @@ class AppwriteService {
         collectionId: AppwriteConfig.categoriesCollectionId,
         documentId: ID.unique(),
         data: categoryData,
+        permissions: [
+          Permission.read(Role.user(user.$id)),
+          Permission.write(Role.user(user.$id)),
+        ],
       );
 
       final response = doc.data;
@@ -599,15 +619,17 @@ class AppwriteService {
   Future<List<Map<String, dynamic>>> getQuickItems() async {
     try {
       final user = await account.get();
-      final result = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.itemsCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-          Query.orderDesc('\$createdAt'), // Newest first
-          Query.limit(100),
-        ],
-      );
+      final result = await databases
+          .listDocuments(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.itemsCollectionId,
+            queries: [
+              Query.equal('userId', [user.$id]),
+              Query.orderDesc('\$createdAt'), // Newest first
+              Query.limit(100),
+            ],
+          )
+          .timeout(const Duration(seconds: 10));
 
       return result.documents.map((doc) {
         final data = doc.data;
@@ -624,15 +646,17 @@ class AppwriteService {
   Future<List<Map<String, dynamic>>> getItems(String categoryId) async {
     try {
       final user = await account.get();
-      final result = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.itemsCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-          Query.equal('categoryId', [categoryId]),
-          Query.orderDesc('usageCount'),
-        ],
-      );
+      final result = await databases
+          .listDocuments(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.itemsCollectionId,
+            queries: [
+              Query.equal('userId', [user.$id]),
+              Query.equal('categoryId', [categoryId]),
+              Query.orderDesc('usageCount'),
+            ],
+          )
+          .timeout(const Duration(seconds: 10));
 
       return result.documents.map((doc) {
         final data = doc.data;
@@ -657,6 +681,8 @@ class AppwriteService {
         'usageCount': 0,
         'frequency': data['frequency'] ?? 'daily',
         if (data['icon'] != null) 'icon': data['icon'],
+        'isVariable': data['isVariable'] ?? false,
+        if (data['dueDay'] != null) 'dueDay': data['dueDay'],
       };
 
       final doc = await databases.createDocument(
@@ -664,6 +690,10 @@ class AppwriteService {
         collectionId: AppwriteConfig.itemsCollectionId,
         documentId: ID.unique(),
         data: itemData,
+        permissions: [
+          Permission.read(Role.user(user.$id)),
+          Permission.write(Role.user(user.$id)),
+        ],
       );
 
       final response = doc.data;
@@ -675,7 +705,7 @@ class AppwriteService {
     }
   }
 
-  Future<bool> updateItem(String itemId, Map<String, dynamic> data) async {
+  Future<String?> updateItem(String itemId, Map<String, dynamic> data) async {
     try {
       await databases.updateDocument(
         databaseId: AppwriteConfig.databaseId,
@@ -683,10 +713,13 @@ class AppwriteService {
         documentId: itemId,
         data: data,
       );
-      return true;
+      return null; // Success
     } catch (e) {
       print('Error updating item: $e');
-      return false;
+      if (e is AppwriteException) {
+        return e.message;
+      }
+      return e.toString();
     }
   }
 
@@ -726,6 +759,12 @@ class AppwriteService {
           'banks': banks,
           'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
         },
+        permissions: [
+          Permission.read(
+            Role.any(),
+          ), // Allow anyone to find this profile (needed for Ledger search)
+          Permission.write(Role.user(userId)),
+        ],
       );
     } catch (e) {
       print('Error creating profile: $e');
@@ -882,11 +921,37 @@ class AppwriteService {
         'date': data['dateTime'],
       };
 
+      List<String> permissions = [
+        Permission.read(Role.user(user.$id)),
+        Permission.write(Role.user(user.$id)),
+      ];
+
+      // Try to give permission to the other user
+      if (otherContact.isNotEmpty && !otherContact.startsWith('local:')) {
+        try {
+          final otherUserDocs = await databases.listDocuments(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.profilesCollectionId,
+            queries: [
+              Query.equal('phone', [otherContact]),
+            ],
+          );
+          if (otherUserDocs.documents.isNotEmpty) {
+            final otherUserId = otherUserDocs.documents.first.data['userId'];
+            permissions.add(Permission.read(Role.user(otherUserId)));
+            permissions.add(Permission.write(Role.user(otherUserId)));
+          }
+        } catch (e) {
+          print('Could not find other user to grant permission: $e');
+        }
+      }
+
       final doc = await databases.createDocument(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.ledgerCollectionId,
         documentId: ID.unique(),
         data: ledgerData,
+        permissions: permissions,
       );
 
       final response = doc.data;
@@ -1135,6 +1200,10 @@ class AppwriteService {
           'isRead': false,
           'createdAt': DateTime.now().toIso8601String(),
         },
+        permissions: [
+          Permission.read(Role.user(userId)),
+          Permission.write(Role.user(userId)),
+        ],
       );
     } catch (e) {
       print('Error sending notification: $e');
@@ -1185,6 +1254,10 @@ class AppwriteService {
         collectionId: AppwriteConfig.investmentsCollectionId,
         documentId: ID.unique(),
         data: investmentData,
+        permissions: [
+          Permission.read(Role.user(user.$id)),
+          Permission.write(Role.user(user.$id)),
+        ],
       );
 
       final response = doc.data;
@@ -1278,6 +1351,10 @@ class AppwriteService {
         collectionId: AppwriteConfig.investmentTransactionsCollectionId,
         documentId: ID.unique(),
         data: txData,
+        permissions: [
+          Permission.read(Role.user(user.$id)),
+          Permission.write(Role.user(user.$id)),
+        ],
       );
 
       final response = doc.data;

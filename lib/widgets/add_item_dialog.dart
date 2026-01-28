@@ -14,6 +14,7 @@ class AddItemDialog extends StatefulWidget {
   final Item?
   existingItem; // Item to add transaction from (One-Time mode equivalent)
   final bool isDaily; // Default frequency
+  final bool initialIsVariable; // Default to variable mode
 
   const AddItemDialog({
     super.key,
@@ -21,6 +22,7 @@ class AddItemDialog extends StatefulWidget {
     this.editingItem,
     this.existingItem,
     this.isDaily = true,
+    this.initialIsVariable = false,
   });
 
   @override
@@ -64,8 +66,14 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
     if (widget.editingItem != null) {
       // Editing Mode
-      _isDaily = widget.editingItem?.frequency == 'daily';
-      _isVariable = false; // Always entry mode when editing
+      _isVariable = widget.editingItem!.isVariable ?? false;
+      // Initialize _isDaily logic: Daily if frequency is daily, OR if variable but no dueDay (default)
+      // If it has a DueDay, we treat it as "Monthly" UI-wise
+      if (_isVariable) {
+        _isDaily = widget.editingItem?.dueDay == null;
+      } else {
+        _isDaily = widget.editingItem?.frequency == 'daily';
+      }
     } else if (widget.existingItem != null) {
       // Add Transaction Mode (from existing item)
       _isDaily = widget.existingItem?.frequency == 'daily'; // inherited
@@ -73,7 +81,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
     } else {
       // Add New Mode
       _isDaily = widget.isDaily;
-      _isVariable = false;
+      _isVariable = widget.initialIsVariable;
     }
 
     // Restore missing initialization
@@ -157,7 +165,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
               Text(
                 widget.editingItem != null
-                    ? 'Edit Quick Entry'
+                    ? (_isVariable ? 'Edit Variable Entry' : 'Edit Quick Entry')
                     : (_isVariable ? 'New Variable Entry' : 'New Quick Entry'),
                 style: GoogleFonts.inter(
                   fontSize: 20,
@@ -250,10 +258,8 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 const SizedBox(height: 16),
               ],
 
-              // Variable: No Payment Method | Entry: Frequency & Due Date
-              if (_isVariable) ...[
-                // No instructions for Variable mode here (Amount/Payment hidden)
-              ] else ...[
+              // Frequency & Due Date (Available for both types now)
+              if (!_isVariable) ...[
                 _buildFrequencyToggle(context),
                 if (!_isDaily) ...[
                   const SizedBox(height: 16),
@@ -566,52 +572,45 @@ class _AddItemDialogState extends State<AddItemDialog> {
       return;
     }
 
-    if (_isVariable) {
-      // Save Variable Quick Entry (No immediate transaction)
-      final itemData = {
-        'title': _titleController.text,
-        'amount': 0.0, // Variable amount
-        'frequency': 'variable', // New frequency/type
-        'categoryId': finalCategoryId == 'other_virtual'
-            ? null
-            : finalCategoryId,
-        'isExpense': _isExpense,
-        'icon': _selectedIcon,
-        'isVariable': true,
-        // userId handled by backend service
-      };
+    // Consolidate Save Logic
+    final itemData = {
+      'title': _titleController.text,
+      'amount': _isVariable
+          ? 0.0
+          : (double.tryParse(_amountController.text) ?? 0.0),
+      'frequency': _isVariable ? 'variable' : (_isDaily ? 'daily' : 'monthly'),
+      'categoryId': finalCategoryId == 'other_virtual' ? null : finalCategoryId,
+      'isExpense': _isExpense,
+      'icon': _selectedIcon,
+      'dueDay': _isDaily ? null : _dueDay,
+      'isVariable': _isVariable,
+      // userId handled by backend service
+    };
 
-      await provider.addItem(itemData);
-      // Notification might not be needed for variable? Or maybe just 'Created Variable Entry'
-    } else {
-      // Add/Update Regular Quick Entry
-      final itemData = {
-        'title': _titleController.text,
-        'amount': double.tryParse(_amountController.text) ?? 0.0,
-        'frequency': _isDaily ? 'daily' : 'monthly',
-        'categoryId': finalCategoryId == 'other_virtual'
-            ? null
-            : finalCategoryId,
-        'isExpense': _isExpense,
-        'icon': _selectedIcon,
-        'dueDay': _dueDay,
-        'isVariable': false,
-        // userId handled by backend service
-      };
-
-      if (widget.editingItem != null) {
-        await provider.updateItem(widget.editingItem!.id, itemData);
-        await _handleNotification(widget.editingItem!.id, isUpdate: true);
+    if (widget.editingItem != null) {
+      // Update existing item
+      final error = await provider.updateItem(widget.editingItem!.id, itemData);
+      if (error != null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Updated ${_titleController.text}')),
+            SnackBar(
+              content: Text('Update failed: $error'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
-      } else {
-        final newItem = await provider.addItem(itemData);
-        if (newItem != null) {
-          await _handleNotification(newItem.id, isUpdate: false);
-        }
+        return; // Do not close dialog on error
+      }
+      await _handleNotification(widget.editingItem!.id, isUpdate: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Updated ${_titleController.text}')),
+        );
+      }
+    } else {
+      final newItem = await provider.addItem(itemData);
+      if (newItem != null) {
+        await _handleNotification(newItem.id, isUpdate: false);
       }
     }
     if (mounted) Navigator.pop(context);

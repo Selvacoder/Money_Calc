@@ -51,32 +51,48 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             },
             child: SizedBox(
               height: 240,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                switchInCurve: Curves.easeInOut,
-                switchOutCurve: Curves.easeInOut,
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(
-                      scale: Tween<double>(
-                        begin: 0.9,
-                        end: 1.0,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  );
-                },
+              child: provider.isLoading
+                  ? Shimmer.fromColors(
+                      baseColor: theme.brightness == Brightness.dark
+                          ? Colors.grey[800]!
+                          : Colors.grey[300]!,
+                      highlightColor: theme.brightness == Brightness.dark
+                          ? Colors.grey[700]!
+                          : Colors.grey[100]!,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                    )
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      switchInCurve: Curves.easeInOut,
+                      switchOutCurve: Curves.easeInOut,
+                      transitionBuilder:
+                          (Widget child, Animation<double> animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.9,
+                                  end: 1.0,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
 
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_currentPage),
-                  child: _buildCurrentBalanceCard(
-                    provider,
-                    colorScheme,
-                    currencySymbol,
-                  ),
-                ),
-              ),
+                      child: KeyedSubtree(
+                        key: ValueKey<int>(_currentPage),
+                        child: _buildCurrentBalanceCard(
+                          provider,
+                          colorScheme,
+                          currencySymbol,
+                        ),
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),
@@ -201,6 +217,30 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
           // Recent Transactions - Last 24 Hours with Show More/Less
           () {
+            if (provider.isLoading) {
+              return Shimmer.fromColors(
+                baseColor: theme.brightness == Brightness.dark
+                    ? Colors.grey[800]!
+                    : Colors.grey[300]!,
+                highlightColor: theme.brightness == Brightness.dark
+                    ? Colors.grey[700]!
+                    : Colors.grey[100]!,
+                child: Column(
+                  children: List.generate(
+                    3,
+                    (index) => Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
             final now = DateTime.now();
             final last24Hours = now.subtract(const Duration(hours: 24));
 
@@ -670,6 +710,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     String? preSelectedCategoryId,
     bool? preSelectedIsExpense,
     bool? preSelectedIsDaily,
+    bool? preSelectedIsVariable, // NEW
     Item? editingItem,
   }) {
     showDialog(
@@ -678,6 +719,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
         category: null, // We don't have a category context here
         editingItem: editingItem,
         isDaily: preSelectedIsDaily ?? (_entryMode == 'daily'),
+        initialIsVariable:
+            preSelectedIsVariable ?? (_entryMode == 'variable'), // NEW
       ),
     );
   }

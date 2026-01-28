@@ -15,6 +15,7 @@ import '../widgets/ledger_dashboard.dart';
 import '../widgets/investment_dashboard.dart';
 
 import 'ledger_history_screen.dart';
+import 'ledger/ledger_due_date_screen.dart'; // NEW
 import 'ledger_graph_screen.dart';
 import 'personal_history_screen.dart';
 import 'personal_graph_screen.dart';
@@ -184,6 +185,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icon(Icons.category),
                 label: 'Category',
               ),
+            if (_currentMode == 1) // Ledger Mode
+              const NavigationDestination(
+                icon: Icon(Icons.calendar_month),
+                label: 'Due Date',
+              ),
             if (_currentMode == 2) // Investment Mode
               const NavigationDestination(
                 icon: Icon(Icons.auto_awesome),
@@ -251,49 +257,66 @@ class _HomeScreenState extends State<HomeScreen> {
     // Mode 0: 0=Home, 1=Category, 2=History, 3=Report
     // Mode 1/2: 0=Home, 1=History, 2=Report
 
-    int adjustedIndex = _selectedIndex;
-    if (_currentMode != 0 && _selectedIndex > 0) {
-      // If not personal mode, indices shift because Category (index 1) is missing
-      // 1 (History) -> should be treated as navigation index 1 but logic index 2?
-      // No, let's normalize to content types.
-      // Content Types: 0=Dashboard, 1=Category, 2=History, 3=Report
+    // Simplified Logic Index Mapping:
 
-      // Navigation Index in Non-Personal Mode:
-      // Mode 1 (Ledger): 0=Home, 1=History, 2=Report
-      // Mode 2 (Investment): 0=Home, 1=AI, 2=History, 3=Report
+    // Mode 0 (Personal): 0=Dash, 1=Category, 2=History, 3=Report
+    // Mode 1 (Ledger):   0=Dash, 1=DueDate, 2=History, 3=Report
+    // Mode 2 (Invest):   0=Dash, 1=AI,      2=History, 3=Report
 
-      // Logic Index Mapping:
-      // 0: Dashboard (All)
-      // 1: Category (Personal Only)
-      // 2: AI Analyzer (Investment Only) -> New Logic Index!
-      // 3: History (All)
-      // 4: Report (All)
+    int adjustedIndex = 0;
 
-      // We need to map _selectedIndex to strict Case IDs.
-      // Let's redefine cases:
-      // 0: Dashboard
-      // 1: Category
-      // 2: AI
-      // 3: History
-      // 4: Report
-
-      if (_currentMode == 0) {
-        // Personal: 0->0, 1->1, 2->3, 3->4
-        if (_selectedIndex == 2) adjustedIndex = 3;
-        if (_selectedIndex == 3) adjustedIndex = 4;
-      } else if (_currentMode == 1) {
-        // Ledger: 0->0, 1->3, 2->4
-        if (_selectedIndex == 1) adjustedIndex = 3;
-        if (_selectedIndex == 2) adjustedIndex = 4;
-      } else {
-        // Investment: 0->0, 1->2, 2->3, 3->4
-        if (_selectedIndex == 1) adjustedIndex = 2;
-        if (_selectedIndex == 2) adjustedIndex = 3;
-        if (_selectedIndex == 3) adjustedIndex = 4;
-      }
+    if (_currentMode == 0) {
+      // Personal matches standard flow
+      adjustedIndex = _selectedIndex;
+    } else if (_currentMode == 1) {
+      // Ledger: 0, 1(Due), 2(Hist), 3(Rep)
+      // Since bottom bar has 4 items in this mode, _selectedIndex maps 1:1 to desired tabs
+      adjustedIndex = _selectedIndex;
+    } else if (_currentMode == 2) {
+      // Investment: 0, 1(AI), 2(Hist), 3(Rep)
+      // Standard 1:1 mapping
+      adjustedIndex = _selectedIndex;
     }
 
-    switch (adjustedIndex) {
+    // However, the SWITCH below uses global "Content Type" IDs which were previously:
+    // 0: Dash, 1: Category, 2: AI, 3: History, 4: Report
+    // We need to map `adjustedIndex` to these `case` IDs.
+
+    int contentId = 0;
+
+    if (_currentMode == 0) {
+      // 0->0, 1->1, 2->3, 3->4
+      if (_selectedIndex == 0)
+        contentId = 0;
+      else if (_selectedIndex == 1)
+        contentId = 1; // Category
+      else if (_selectedIndex == 2)
+        contentId = 3; // History
+      else if (_selectedIndex == 3)
+        contentId = 4; // Report
+    } else if (_currentMode == 1) {
+      // 0->0, 1->5 (NEW DueDate), 2->3 (History), 3->4 (Report)
+      if (_selectedIndex == 0)
+        contentId = 0;
+      else if (_selectedIndex == 1)
+        contentId = 5; // Due Date
+      else if (_selectedIndex == 2)
+        contentId = 3; // History
+      else if (_selectedIndex == 3)
+        contentId = 4; // Report
+    } else {
+      // 0->0, 1->2 (AI), 2->3 (History), 3->4 (Report)
+      if (_selectedIndex == 0)
+        contentId = 0;
+      else if (_selectedIndex == 1)
+        contentId = 2; // AI
+      else if (_selectedIndex == 2)
+        contentId = 3; // History
+      else if (_selectedIndex == 3)
+        contentId = 4; // Report
+    }
+
+    switch (contentId) {
       case 0: // Dashboard
         if (_currentMode == 0) return const PersonalDashboard();
         if (_currentMode == 1) return const LedgerDashboard();
@@ -331,6 +354,9 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         return const InvestmentGraphScreen();
+
+      case 5: // Due Date (Ledger)
+        return const LedgerDueDateScreen();
 
       default:
         return const SizedBox.shrink();

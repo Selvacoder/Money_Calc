@@ -29,6 +29,9 @@ void main() async {
 
   await Hive.initFlutter();
 
+  // Clear cache on startup to ensure fresh data fetch (Requested Fix)
+  await Hive.deleteFromDisk();
+
   Hive.registerAdapter(TransactionAdapter());
   Hive.registerAdapter(CategoryAdapter());
   Hive.registerAdapter(ItemAdapter());
@@ -135,7 +138,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     await NotificationService().requestPermissions();
 
     // Setup Realtime Listener if logged in
-    final user = context.read<UserProvider>().user;
+    // final user = context.read<UserProvider>().user;
+    /* 
+    // Temporarily disabled due to WebSocket 400 Error (Invalid Channel/Collection ID)
     if (user != null) {
       AppwriteService().subscribeToNotifications(user.userId, (data) {
         NotificationService().showNotification(
@@ -146,6 +151,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         );
       });
     }
+    */
   }
 
   @override

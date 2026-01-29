@@ -31,7 +31,8 @@ class PersonLedgerScreen extends StatefulWidget {
   final OnAddTransactionCallback onAddTransaction;
   final Function() onRemind;
   final List<String> myIdentities;
-  final String currentUserId; // Added
+  final String currentUserId;
+  final bool isNotesMode; // Added
 
   const PersonLedgerScreen({
     super.key,
@@ -43,7 +44,8 @@ class PersonLedgerScreen extends StatefulWidget {
     required this.onAddTransaction,
     required this.onRemind,
     required this.myIdentities,
-    required this.currentUserId, // Added
+    required this.currentUserId,
+    this.isNotesMode = false, // Added
   });
 
   @override
@@ -149,49 +151,70 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                       final amount =
                           double.tryParse(amountController.text) ?? 0.0;
                       final isReceived = _currentBalance > 0;
-
+                      final description = descController.text;
                       Navigator.pop(context);
 
+                      // OPTIMISTIC UPDATE - Show immediately!
+                      final tempId =
+                          'temp_${DateTime.now().millisecondsSinceEpoch}';
+
+                      // To prevent flicker at top, ensure this is the NEWEST timestamp in the list
+                      DateTime now = DateTime.now();
+                      if (_localTransactions.isNotEmpty) {
+                        final latestDate = _localTransactions
+                            .map((tx) => tx.dateTime)
+                            .reduce((a, b) => a.isAfter(b) ? a : b);
+                        if (now.isBefore(latestDate) ||
+                            now.isAtSameMomentAs(latestDate)) {
+                          now = latestDate.add(const Duration(milliseconds: 1));
+                        }
+                      }
+
+                      final optimisticTx = LedgerTransaction(
+                        id: tempId,
+                        senderId: isReceived ? '' : widget.currentUserId,
+                        senderName: isReceived ? widget.personName : 'Me',
+                        senderPhone: isReceived
+                            ? widget.personPhone
+                            : (widget.myIdentities.isNotEmpty
+                                  ? widget.myIdentities.first
+                                  : ''),
+                        receiverName: isReceived ? 'Me' : widget.personName,
+                        receiverPhone: isReceived
+                            ? (widget.myIdentities.isNotEmpty
+                                  ? widget.myIdentities.first
+                                  : '')
+                            : widget.personPhone,
+                        receiverId: isReceived ? widget.currentUserId : '',
+                        amount: amount,
+                        description: description,
+                        dateTime: now,
+                        status: widget.isNotesMode ? 'notes' : 'pending',
+                      );
+
+                      setState(() {
+                        _currentBalance = 0; // Balance is now settled
+                        _localTransactions.add(optimisticTx);
+                      });
+
+                      // NETWORK CALL - Run in background
                       final userProvider = context.read<UserProvider>();
                       final error = await widget.onAddTransaction(
                         widget.personName,
                         widget.personPhone,
                         amount,
-                        descController.text,
+                        description,
                         isReceived: isReceived,
                         currentUserPhone: userProvider.user?.phone,
                         currentUserEmail: userProvider.user?.email,
                       );
 
-                      if (error == null) {
-                        // Success - Optimistic Update
-                        setState(() {
-                          _currentBalance = 0;
-                          _localTransactions.add(
-                            LedgerTransaction(
-                              id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-                              senderId: isReceived ? '' : 'me',
-                              senderName: isReceived ? widget.personName : 'Me',
-                              senderPhone: isReceived
-                                  ? widget.personPhone
-                                  : widget.myIdentities.first,
-                              receiverName: isReceived
-                                  ? 'Me'
-                                  : widget.personName,
-                              receiverPhone: isReceived
-                                  ? widget.myIdentities.first
-                                  : widget.personPhone,
-                              amount: amount,
-                              description: descController.text,
-                              dateTime: DateTime.now(),
-                            ),
-                          );
-                        });
-                      } else {
+                      if (error != null) {
                         if (mounted) {
                           ScaffoldMessenger.of(
                             context,
                           ).showSnackBar(SnackBar(content: Text(error)));
+                          // Optionally revert balance if failed, but usually ledger handles sync
                         }
                       }
                     }
@@ -430,9 +453,9 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Sort: Oldest first (Top to Bottom)
+    // Sort: Newest first (Index 0 at bottom with reverse: true)
     final sortedTransactions = List<LedgerTransaction>.from(_localTransactions)
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
     final isOwesYou = _currentBalance > 0;
     final isYouOwe = _currentBalance < 0;
@@ -540,9 +563,9 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
             ),
           ),
 
-          // Chat List
           Expanded(
             child: ListView.builder(
+              reverse: true, // Anchor to bottom
               padding: const EdgeInsets.all(16),
               itemCount: sortedTransactions.length,
               itemBuilder: (context, index) {
@@ -676,12 +699,26 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        Text(
-                          DateFormat('MMM d, h:mm a').format(t.dateTime),
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              DateFormat('MMM d, h:mm a').format(t.dateTime),
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            if (t.status == 'pending' ||
+                                t.status == 'pending_approval') ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.access_time_filled,
+                                size: 12,
+                                color: Colors.orange.shade300,
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -923,20 +960,41 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                           // OPTIMISTIC UPDATE - Show immediately!
                           final tempId =
                               'temp_${DateTime.now().millisecondsSinceEpoch}';
+
+                          // To prevent flicker at top, ensure this is the NEWEST timestamp in the list
+                          DateTime now = DateTime.now();
+                          if (_localTransactions.isNotEmpty) {
+                            final latestDate = _localTransactions
+                                .map((tx) => tx.dateTime)
+                                .reduce((a, b) => a.isAfter(b) ? a : b);
+                            if (now.isBefore(latestDate) ||
+                                now.isAtSameMomentAs(latestDate)) {
+                              now = latestDate.add(
+                                const Duration(milliseconds: 1),
+                              );
+                            }
+                          }
+
                           final optimisticTx = LedgerTransaction(
                             id: tempId,
-                            senderId: isReceived ? '' : 'me',
+                            senderId: isReceived ? '' : widget.currentUserId,
                             senderName: isReceived ? widget.personName : 'Me',
                             senderPhone: isReceived
                                 ? widget.personPhone
-                                : widget.myIdentities.first,
+                                : (widget.myIdentities.isNotEmpty
+                                      ? widget.myIdentities.first
+                                      : ''),
                             receiverName: isReceived ? 'Me' : widget.personName,
                             receiverPhone: isReceived
-                                ? widget.myIdentities.first
+                                ? (widget.myIdentities.isNotEmpty
+                                      ? widget.myIdentities.first
+                                      : '')
                                 : widget.personPhone,
+                            receiverId: isReceived ? widget.currentUserId : '',
                             amount: amount,
                             description: description,
-                            dateTime: DateTime.now(),
+                            dateTime: now,
+                            status: widget.isNotesMode ? 'notes' : 'pending',
                           );
 
                           setState(() {

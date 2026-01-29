@@ -236,6 +236,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
+                        print(
+                          'DEBUG: Add Btn Pressed. Name: ${nameController.text}, Amount: ${amountController.text}, Phone: ${phoneController.text}',
+                        );
                         if (nameController.text.isNotEmpty &&
                             amountController.text.isNotEmpty) {
                           Navigator.pop(context); // Close dialog first
@@ -243,6 +246,8 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                           final phoneStr = phoneController.text.isEmpty
                               ? null
                               : '$selectedCountryCode${phoneController.text}';
+                          print('DEBUG: passing phoneStr: $phoneStr');
+
                           final userProvider = context.read<UserProvider>();
                           final currentUser = userProvider.user;
 
@@ -257,11 +262,22 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                                 currentUserId: currentUser?.userId ?? '',
                                 currentUserName: currentUser?.name ?? '',
                                 currentUserPhone: currentUser?.phone ?? '',
-                                customStatus:
-                                    (!_isNotesMode && isRegistered == false)
-                                    ? 'notes'
-                                    : customStatus,
+                                customStatus: _isNotesMode ? 'notes' : null,
                               );
+                          print('DEBUG: Provider returned error: $error');
+
+                          print('DEBUG: Provider returned error: $error');
+
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Debug: Phone=$phoneStr, Reg=$isRegistered, Err=$error',
+                                ),
+                                duration: const Duration(seconds: 5),
+                              ),
+                            );
+                          }
 
                           if (error == null &&
                               !_isNotesMode &&
@@ -279,21 +295,18 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                           }
 
                           if (error != null && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              Theme.of(context).brightness == Brightness.dark
-                                  ? SnackBar(
-                                      content: Text(
-                                        error,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      backgroundColor: Colors.redAccent,
-                                    )
-                                  : SnackBar(
-                                      content: Text(error),
-                                      backgroundColor: Colors.red,
-                                    ),
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Error Adding'),
+                                content: Text(error),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
                             );
                           }
                         }
@@ -328,7 +341,11 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     // Data Source Switch
     final activeTransactions = _isNotesMode
         ? ledgerProvider.notes
-        : ledgerProvider.ledgerTransactions;
+        : [
+            ...ledgerProvider.ledgerTransactions,
+            ...ledgerProvider.outgoingRequests,
+            ...ledgerProvider.incomingRequests,
+          ]; // Merge pending with confirmed for visibility
 
     final user = userProvider.user;
     final myIdentities = [
@@ -879,6 +896,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               currencySymbol: currencySymbol,
               myIdentities: myIdentities,
               currentUserId: provider.currentUserId ?? '',
+              isNotesMode: _isNotesMode,
               onAddTransaction:
                   (
                     pName,

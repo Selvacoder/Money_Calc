@@ -25,8 +25,11 @@ class AppwriteService {
 
     account = Account(client);
     databases = Databases(client);
-    realtime = Realtime(client); // Initialize Realtime
+    realtime = Realtime(client);
+    functions = Functions(client);
   }
+
+  late Functions functions;
 
   // Subscribe to Realtime Notifications
   RealtimeSubscription subscribeToNotifications(
@@ -399,55 +402,167 @@ class AppwriteService {
   ) async {
     try {
       final user = await account.get();
-      String status = 'confirmed';
-      String? receiverId;
-      List<String> readPermissions = [Permission.read(Role.user(user.$id))];
-      List<String> writePermissions = [Permission.write(Role.user(user.$id))];
+      final myId = user.$id;
 
-      // Check if receiver exists by phone
-      final receiverPhone = transactionData['receiverPhone'];
-      if (receiverPhone != null &&
-          receiverPhone.toString().isNotEmpty &&
-          !receiverPhone.toString().startsWith('local:')) {
-        final existingUser = await getUserByPhone(receiverPhone);
-        if (existingUser != null) {
-          status = 'pending';
-          receiverId = existingUser['userId'];
+      String senderId = transactionData['senderId'] ?? '';
+      String receiverId = transactionData['receiverId'] ?? '';
+      final senderPhone = transactionData['senderPhone'] ?? '';
+      final receiverPhone = transactionData['receiverPhone'] ?? '';
 
-          // Grant receiver permissions to see and update (accept/reject)
-          readPermissions.add(Permission.read(Role.user(receiverId!)));
-          writePermissions.add(Permission.write(Role.user(receiverId)));
-        }
-      }
-
-      final data = {
-        'senderId': transactionData['senderId'] ?? '',
-        'senderName': transactionData['senderName'] ?? '',
-        'senderPhone': transactionData['senderPhone'] ?? '',
-        'receiverName': transactionData['receiverName'] ?? '',
-        'receiverPhone': transactionData['receiverPhone'] ?? '',
-        'receiverId': transactionData['receiverId'] ?? receiverId ?? '',
-        'amount': transactionData['amount'],
-        'description': transactionData['description'] ?? '',
-        'date': transactionData['dateTime'], // Support legacy 'date' field
-        'dateTime': transactionData['dateTime'],
-        'status': transactionData['status'] ?? status,
-      };
-
-      final doc = await databases.createDocument(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.ledgerCollectionId,
-        documentId: ID.unique(),
-        data: data,
-        permissions: [...readPermissions, ...writePermissions],
+      print(
+        'DEBUG: Init - Sender: $senderId ($senderPhone), Receiver: $receiverId ($receiverPhone)',
       );
 
-      final response = doc.data;
-      response['id'] = doc.$id;
-      return response;
+      // Universal ID Resolution: Check both parties
+      try {
+        if (senderId.isEmpty &&
+            senderPhone.isNotEmpty &&
+            !senderPhone.toString().startsWith('local:')) {
+          final sUser = await getUserByPhone(senderPhone);
+          if (sUser != null) {
+            senderId = sUser['userId'];
+            print('DEBUG: Resolved Sender ID: $senderId');
+          } else {
+            print('DEBUG: Failed to resolve Sender: $senderPhone');
+          }
+        }
+
+        if (receiverId.isEmpty &&
+            receiverPhone.isNotEmpty &&
+            !receiverPhone.toString().startsWith('local:')) {
+          final rUser = await getUserByPhone(receiverPhone);
+          if (rUser != null) {
+            receiverId = rUser['userId'];
+            print('DEBUG: Resolved Receiver ID: $receiverId');
+          } else {
+            print('DEBUG: Failed to resolve Receiver: $receiverPhone');
+          }
+        }
+      } catch (e) {
+        print('DEBUG: ID Resolution Failed (Non-fatal): $e');
+        // Continue without linking if resolution fails
+      }
+
+      // Determine Status & Permissions
+      String status = transactionData['status'] ?? 'confirmed';
+      final perms = <String>{
+        Permission.read(Role.user(myId)),
+        Permission.write(Role.user(myId)),
+      };
+
+      if (senderId.isNotEmpty) {
+        perms.add(Permission.read(Role.user(senderId)));
+        perms.add(Permission.write(Role.user(senderId)));
+      }
+      if (receiverId.isNotEmpty) {
+        perms.add(Permission.read(Role.user(receiverId)));
+        perms.add(Permission.write(Role.user(receiverId)));
+      }
+
+      // If both parties are identified and distinct, it's a shared transaction (Pending)
+      if (senderId.isNotEmpty &&
+          receiverId.isNotEmpty &&
+          senderId != receiverId) {
+        status = 'pending';
+      }
+      print(
+        'DEBUG: Final decision - Sender: $senderId, Receiver: $receiverId, Status: $status',
+      );
+
+      final data = {
+        'senderId': senderId,
+        'senderName': transactionData['senderName'] ?? '',
+        'senderPhone': senderPhone,
+        'receiverName': transactionData['receiverName'] ?? '',
+        'receiverPhone': receiverPhone,
+        'receiverId': receiverId,
+        'amount': transactionData['amount'],
+        'description': transactionData['description'] ?? '',
+        'date': transactionData['dateTime'],
+        'dateTime': transactionData['dateTime'],
+        'status': status,
+      };
+      try {
+        print(
+          'DEBUG: Creating Document. Data: $data, Perms: ${perms.toList()}',
+        );
+        final doc = await databases.createDocument(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.ledgerCollectionId,
+          documentId: ID.unique(),
+          data: data,
+          permissions: perms.toList(),
+        );
+
+        final response = doc.data;
+        response['id'] = doc.$id;
+        return response;
+      } on AppwriteException catch (e) {
+        if (e.code == 401) {
+          print(
+            'DEBUG: Permission Error (401). Retrying with MINIMAL permissions (Me Only)...',
+          );
+          // Retry with ONLY my permissions
+          final minPerms = [
+            Permission.read(Role.user(myId)),
+            Permission.write(Role.user(myId)),
+          ];
+          final doc = await databases.createDocument(
+            databaseId: AppwriteConfig.databaseId,
+            collectionId: AppwriteConfig.ledgerCollectionId,
+            documentId: ID.unique(),
+            data: data,
+            permissions: minPerms,
+          );
+          final response = doc.data;
+          response['id'] = doc.$id;
+
+          // Attempt to share via Cloud Function
+          if (receiverId != null && receiverId.isNotEmpty) {
+            shareLedgerTransaction(doc.$id, receiverId)
+                .then((_) {
+                  print('DEBUG: Triggered share function for ${doc.$id}');
+                })
+                .catchError((e) {
+                  print('DEBUG: Share function failed: $e');
+                });
+          }
+          return response;
+        }
+        rethrow;
+      } catch (e) {
+        print('DEBUG: Generic Error in createDocument: $e');
+        rethrow;
+      }
     } catch (e) {
       print('Error creating ledger transaction: $e');
       rethrow;
+    }
+  }
+
+  // Call Appwrite Cloud Function
+  Future<void> shareLedgerTransaction(
+    String transactionId,
+    String receiverId,
+  ) async {
+    print(
+      'DEBUG: shareLedgerTransaction called. TxID: $transactionId, Receiver: $receiverId',
+    );
+    try {
+      final execution = await functions.createExecution(
+        functionId: '697b2e5a00268c4ab313',
+        body: jsonEncode({
+          'transactionId': transactionId,
+          'receiverId': receiverId,
+          'databaseId': AppwriteConfig.databaseId,
+          'collectionId': AppwriteConfig.ledgerCollectionId,
+        }),
+      );
+      print(
+        'DEBUG: Function Execution Triggered. Status: ${execution.status}, ID: ${execution.$id}',
+      );
+    } catch (e) {
+      print('DEBUG: Error calling share function: $e');
     }
   }
 
@@ -477,7 +592,11 @@ class AppwriteService {
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.profilesCollectionId,
         queries: [
-          Query.equal('phone', [phone, '+$cleanPhone']), // Try both formats
+          Query.equal('phone', [
+            phone,
+            '+$cleanPhone',
+            cleanPhone,
+          ]), // Try all formats
           Query.limit(1),
         ],
       );
@@ -983,7 +1102,9 @@ class AppwriteService {
         String? d2 = b['dateTime'] ?? b['date'] ?? b['\$createdAt'];
         if (d1 == null || d2 == null) return 0;
         try {
-          return DateTime.parse(d2).compareTo(DateTime.parse(d1));
+          return DateTime.parse(
+            d2,
+          ).toLocal().compareTo(DateTime.parse(d1).toLocal());
         } catch (e) {
           return 0;
         }

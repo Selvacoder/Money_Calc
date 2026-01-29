@@ -1,0 +1,9 @@
+{
+  "name": "share_transaction",
+  "version": "1.0.0",
+  "description": "Appwrite Function to share ledger transactions securely.",
+  "main": "main.js",
+  "dependencies": {
+    "node-appwrite": "^11.0.0"
+  }
+}

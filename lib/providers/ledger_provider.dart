@@ -168,11 +168,14 @@ class LedgerProvider extends ChangeNotifier {
       status: status,
     );
 
+    // OPTIMISTIC UPDATE
+
     if (status == 'confirmed') {
       _ledgerTransactions.insert(0, optimisticTx);
     } else if (status == 'notes') {
       _notes.insert(0, optimisticTx);
     } else {
+      // Pending
       _outgoingRequests.insert(0, optimisticTx);
     }
     notifyListeners();
@@ -192,7 +195,17 @@ class LedgerProvider extends ChangeNotifier {
       });
 
       if (result != null) {
-        final realTx = LedgerTransaction.fromJson(result);
+        LedgerTransaction realTx;
+        try {
+          realTx = LedgerTransaction.fromJson(result);
+        } catch (e) {
+          print('DEBUG: JSON Parse Error: $e');
+          _removeFromLocal(tempId, status);
+          notifyListeners();
+          return 'JSON Parse Failed: $e';
+        }
+
+        // Remove optimistic
         if (status == 'confirmed') {
           _ledgerTransactions.removeWhere((t) => t.id == tempId);
         } else if (status == 'notes') {
@@ -201,6 +214,7 @@ class LedgerProvider extends ChangeNotifier {
           _outgoingRequests.removeWhere((t) => t.id == tempId);
         }
 
+        // Add real
         if (realTx.status == 'confirmed') {
           _ledgerTransactions.add(realTx);
           _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
@@ -208,6 +222,7 @@ class LedgerProvider extends ChangeNotifier {
           _notes.add(realTx);
           _notes.sort((a, b) => b.dateTime.compareTo(a.dateTime));
         } else {
+          // Pending
           _outgoingRequests.add(realTx);
           _outgoingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
         }
@@ -218,6 +233,7 @@ class LedgerProvider extends ChangeNotifier {
         notifyListeners();
         return null;
       } else {
+        // print('DEBUG: Backend returned NULL result');
         _removeFromLocal(tempId, status);
         notifyListeners();
         return 'Failed to create transaction';
@@ -415,6 +431,49 @@ class LedgerProvider extends ChangeNotifier {
         }
       }
     }
+  }
+
+  List<LedgerTransaction> getTransactionsForPerson(
+    String personName,
+    String? personPhone,
+    String currentUserId,
+    List<String> myIdentities,
+  ) {
+    // Combine all sources: Confirmed + Notes + Outgoing(Pending) + Incoming(Pending)
+    final all = [
+      ..._ledgerTransactions,
+      ..._notes,
+      ..._outgoingRequests,
+      ..._incomingRequests,
+    ];
+
+    return all.where((t) {
+      // 1. Check if ANY participant matches the target person (Name OR Phone)
+      final isSender =
+          t.senderName == personName ||
+          _arePhonesEqual(t.senderPhone, personPhone);
+      final isReceiver =
+          t.receiverName == personName ||
+          _arePhonesEqual(t.receiverPhone, personPhone);
+
+      if (!isSender && !isReceiver) return false;
+
+      // 2. Ensuring the OTHER participant is ME
+      // If target is sender, I must be receiver.
+      // If target is receiver, I must be sender.
+      if (isSender) {
+        return t.receiverId == currentUserId ||
+            myIdentities.any((id) => _arePhonesEqual(t.receiverPhone, id));
+      } else {
+        return t.senderId == currentUserId ||
+            myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id));
+      }
+    }).toList();
+  }
+
+  bool _arePhonesEqual(String? p1, String? p2) {
+    if (p1 == null || p2 == null) return false;
+    return _normalizePhone(p1) == _normalizePhone(p2);
   }
 
   String _normalizePhone(String? phone) {

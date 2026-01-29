@@ -12,22 +12,23 @@ class LedgerProvider extends ChangeNotifier {
   List<LedgerTransaction> _ledgerTransactions = [];
   List<LedgerTransaction> _incomingRequests = [];
   List<LedgerTransaction> _outgoingRequests = [];
+  List<LedgerTransaction> _notes = [];
   bool _isLoading = false;
 
   List<LedgerTransaction> get ledgerTransactions => _ledgerTransactions;
   List<LedgerTransaction> get incomingRequests => _incomingRequests;
   List<LedgerTransaction> get outgoingRequests => _outgoingRequests;
-
+  List<LedgerTransaction> get notes => _notes;
   bool get isLoading => _isLoading;
 
   late Box<LedgerTransaction> _ledgerBox;
   late Box<String> _hiddenPeopleBox;
   bool _isHiveInitialized = false;
   List<String> _hiddenPeople = [];
-
   List<String> get hiddenPeople => _hiddenPeople;
 
   String? _currentUserId;
+  String? get currentUserId => _currentUserId;
 
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
@@ -43,7 +44,6 @@ class LedgerProvider extends ChangeNotifier {
 
     await _initHive();
 
-    // Ensure we have current user ID for filtering
     if (_currentUserId == null) {
       final user = await _appwriteService.getCurrentUser();
       if (user != null) {
@@ -52,29 +52,21 @@ class LedgerProvider extends ChangeNotifier {
     }
 
     try {
-      // 1. Load from Cache (Temporary, might show stale if we don't differentiate pending/confirmed in cache structure easily)
-      // For now, load all and filter
       final cached = _ledgerBox.values.toList();
       _processTransactions(cached);
-      notifyListeners(); // Show cached
+      notifyListeners();
 
-      // 2. Fetch from Network
       final data = await _appwriteService.getLedgerTransactions();
-
       if (data != null) {
-        // Success
         final networkTx = data
             .map((e) => LedgerTransaction.fromJson(e))
             .toList();
-
         _processTransactions(networkTx);
-
-        // Update Cache (Clear and Replace)
         await _ledgerBox.clear();
         await _ledgerBox.putAll({for (var t in networkTx) t.id: t});
       }
     } catch (e) {
-      print('Error fetching ledger: $e');
+      debugPrint('Error fetching ledger: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -85,24 +77,21 @@ class LedgerProvider extends ChangeNotifier {
     _ledgerTransactions = [];
     _incomingRequests = [];
     _outgoingRequests = [];
+    _notes = [];
 
-    // Sort valid date desc first
     all.sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
     for (var tx in all) {
       if (tx.status == 'confirmed') {
         _ledgerTransactions.add(tx);
+      } else if (tx.status == 'notes') {
+        _notes.add(tx);
       } else if (tx.status == 'pending') {
-        // If receiverId matches me, it's an incoming request
         if (_currentUserId != null && tx.receiverId == _currentUserId) {
           _incomingRequests.add(tx);
         } else if (tx.senderId == _currentUserId) {
-          // If I am sender, it's an outgoing request
           _outgoingRequests.add(tx);
         } else {
-          // Logic fallback: If I'm not receiverId but phone matches receiverPhone?
-          // For now, rely on ID if available.
-          // If ID not available (e.g. legacy data or no ID link), maybe skip or put in outgoing?
           _outgoingRequests.add(tx);
         }
       }
@@ -119,51 +108,61 @@ class LedgerProvider extends ChangeNotifier {
     required String currentUserName,
     required String currentUserPhone,
     String? currentUserEmail,
+    String? customStatus,
   }) async {
     _currentUserId = currentUserId;
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
     final now = DateTime.now();
 
-    String status = 'confirmed';
-    if (phone != null && phone.isNotEmpty && !phone.startsWith('local:')) {
-      // Optimistically assume pending if it's a real phone number
+    String status = customStatus ?? 'confirmed';
+    if (customStatus == null &&
+        phone != null &&
+        phone.isNotEmpty &&
+        !phone.startsWith('local:')) {
       status = 'pending';
     }
 
-    // CRITICAL FIX: Swap sender/receiver based on isReceived
-    // isReceived = true  -> "You Got" -> Other person GAVE, you RECEIVED
-    //                       Sender = Other person, Receiver = Current user
-    // isReceived = false -> "You Gave" -> You GAVE, other person RECEIVED
-    //                       Sender = Current user, Receiver = Other person
+    // Standardize naming to avoid "Me giving to Me" messiness
+    final displayOtherName =
+        (name.trim().toLowerCase() == currentUserName.trim().toLowerCase() ||
+            name.trim().toLowerCase() == 'me')
+        ? 'Self'
+        : name.trim();
 
     final String actualSenderName;
     final String? actualSenderPhone;
+    final String? actualSenderId;
     final String actualReceiverName;
     final String? actualReceiverPhone;
+    final String? actualReceiverId;
 
     if (isReceived) {
       // "You Got" - Other person is sender, you are receiver
-      actualSenderName = name;
+      actualSenderName = displayOtherName;
       actualSenderPhone = phone;
+      actualSenderId = null; // We don't know other person's ID unless linked
       actualReceiverName = currentUserName;
       actualReceiverPhone = currentUserPhone;
+      actualReceiverId = currentUserId;
     } else {
       // "You Gave" - You are sender, other person is receiver
       actualSenderName = currentUserName;
       actualSenderPhone = currentUserPhone;
-      actualReceiverName = name;
+      actualSenderId = currentUserId;
+      actualReceiverName = displayOtherName;
       actualReceiverPhone = phone;
+      actualReceiverId = null;
     }
 
-    // 1. Create and Add Optimistic Transaction
     final optimisticTx = LedgerTransaction(
       id: tempId,
-      senderId: currentUserId, // Creator is always current user
+      senderId: actualSenderId ?? '',
       senderName: actualSenderName,
       senderPhone: actualSenderPhone ?? '',
       receiverName: actualReceiverName,
       receiverPhone: actualReceiverPhone,
-      amount: amount.abs(), // Always store positive amount
+      receiverId: actualReceiverId,
+      amount: amount.abs(),
       description: description,
       dateTime: now,
       status: status,
@@ -171,6 +170,8 @@ class LedgerProvider extends ChangeNotifier {
 
     if (status == 'confirmed') {
       _ledgerTransactions.insert(0, optimisticTx);
+    } else if (status == 'notes') {
+      _notes.insert(0, optimisticTx);
     } else {
       _outgoingRequests.insert(0, optimisticTx);
     }
@@ -180,28 +181,32 @@ class LedgerProvider extends ChangeNotifier {
       final result = await _appwriteService.createLedgerTransaction({
         'senderName': actualSenderName,
         'senderPhone': actualSenderPhone ?? '',
+        'senderId': actualSenderId ?? '',
         'receiverName': actualReceiverName,
         'receiverPhone': actualReceiverPhone ?? '',
-        'amount': amount.abs(), // Always store positive
+        'receiverId': actualReceiverId ?? '',
+        'amount': amount.abs(),
         'description': description,
         'dateTime': now.toIso8601String(),
+        'status': status,
       });
 
       if (result != null) {
-        // Replace optimistic with real
         final realTx = LedgerTransaction.fromJson(result);
-
-        // Remove optimistic from wherever it was put
         if (status == 'confirmed') {
           _ledgerTransactions.removeWhere((t) => t.id == tempId);
+        } else if (status == 'notes') {
+          _notes.removeWhere((t) => t.id == tempId);
         } else {
           _outgoingRequests.removeWhere((t) => t.id == tempId);
         }
 
-        // Add real based on ACTUAL status
         if (realTx.status == 'confirmed') {
           _ledgerTransactions.add(realTx);
           _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        } else if (realTx.status == 'notes') {
+          _notes.add(realTx);
+          _notes.sort((a, b) => b.dateTime.compareTo(a.dateTime));
         } else {
           _outgoingRequests.add(realTx);
           _outgoingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
@@ -211,51 +216,42 @@ class LedgerProvider extends ChangeNotifier {
           _ledgerBox.put(realTx.id, realTx);
         }
         notifyListeners();
-        return null; // Success
+        return null;
       } else {
-        // Failed
-        if (status == 'confirmed') {
-          _ledgerTransactions.removeWhere((t) => t.id == tempId);
-        } else {
-          _outgoingRequests.removeWhere((t) => t.id == tempId);
-        }
+        _removeFromLocal(tempId, status);
         notifyListeners();
-        return 'Failed to create transaction (Unknown error)';
+        return 'Failed to create transaction';
       }
     } catch (e) {
-      print('Error adding ledger tx: $e');
-      _ledgerTransactions.removeWhere((t) => t.id == tempId);
-      _outgoingRequests.removeWhere((t) => t.id == tempId);
+      _removeFromLocal(tempId, status);
       notifyListeners();
       return 'Error: $e';
     }
   }
 
+  void _removeFromLocal(String id, String status) {
+    if (status == 'confirmed') {
+      _ledgerTransactions.removeWhere((t) => t.id == id);
+    } else if (status == 'notes') {
+      _notes.removeWhere((t) => t.id == id);
+    } else {
+      _outgoingRequests.removeWhere((t) => t.id == id);
+    }
+  }
+
   Future<bool> acceptLedgerTransaction(LedgerTransaction tx) async {
-    // Optimistic update
-    _incomingRequests.remove(tx);
-    // Create a modified copy with confirmed status
-    // Since Hive objects are immutable/adapters, better create new instance or assume internal update if mutable (not Recoomended)
-    // We'll create a new instance via hack or just waiting.
-    // Actually, let's wait for server response to be safe, but show loading?
-    // User wants "if they accept it will add confirmed".
-
-    // We add it to ledgerTransactions locally
-    // But we need to update the status in the backend.
-
     try {
       final success = await _appwriteService.updateLedgerTransactionStatus(
         tx.id,
         'confirmed',
       );
       if (success) {
-        // Re-fetch to get clean state or manually move
         await fetchLedgerTransactions();
         return true;
       }
       return false;
     } catch (e) {
-      print('Error accepting transaction: $e');
+      debugPrint('Error accepting transaction: $e');
       return false;
     }
   }
@@ -272,7 +268,7 @@ class LedgerProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('Error rejecting transaction: $e');
+      debugPrint('Error rejecting transaction: $e');
       return false;
     }
   }
@@ -281,6 +277,8 @@ class LedgerProvider extends ChangeNotifier {
     final success = await _appwriteService.deleteLedgerTransaction(id);
     if (success) {
       _ledgerTransactions.removeWhere((t) => t.id == id);
+      _notes.removeWhere((t) => t.id == id);
+      _outgoingRequests.removeWhere((t) => t.id == id);
       if (_isHiveInitialized) {
         _ledgerBox.delete(id);
       }
@@ -289,12 +287,6 @@ class LedgerProvider extends ChangeNotifier {
     }
     return false;
   }
-
-  // ... (fetchLedgerTransactions)
-
-  // ... (addLedgerTransaction)
-
-  // ... (deleteLedgerTransaction)
 
   Future<void> hidePerson(String name) async {
     if (!_hiddenPeople.contains(name)) {
@@ -307,30 +299,18 @@ class LedgerProvider extends ChangeNotifier {
   Future<void> unhidePerson(String name) async {
     if (_hiddenPeople.contains(name)) {
       _hiddenPeople.remove(name);
-
-      // Hive doesn't support easy remove mostly by value without index loops
-      // Simple way: clear and rewrite or find key.
-      // Since it's a simple list, let's just clear and rewriting or find key.
-
       final Map<dynamic, String> boxMap = _hiddenPeopleBox
           .toMap()
           .cast<dynamic, String>();
       dynamic keyToDelete;
       boxMap.forEach((key, value) {
-        if (value == name) {
-          keyToDelete = key;
-        }
+        if (value == name) keyToDelete = key;
       });
-
-      if (keyToDelete != null) {
-        await _hiddenPeopleBox.delete(keyToDelete);
-      }
-
+      if (keyToDelete != null) await _hiddenPeopleBox.delete(keyToDelete);
       notifyListeners();
     }
   }
 
-  // Edit Person (Batch Update)
   Future<bool> updatePerson({
     required String oldName,
     required String oldPhone,
@@ -343,17 +323,13 @@ class LedgerProvider extends ChangeNotifier {
       newName: newName,
       newPhone: newPhone,
     );
-
     if (success) {
-      // Refresh to get updated transactions
-      // Or we could try to update local state manually, but it's complex with many transactions.
       await fetchLedgerTransactions();
       return true;
     }
     return false;
   }
 
-  // Delete Person (Batch Delete)
   Future<bool> deletePerson({
     required String name,
     required String phone,
@@ -362,43 +338,32 @@ class LedgerProvider extends ChangeNotifier {
       name: name,
       phone: phone,
     );
-
     if (success) {
-      // Refresh to clear deleted transactions
       await fetchLedgerTransactions();
       return true;
     }
     return false;
   }
 
-  // Sync Logic
   Future<void> syncLedgerToWallet(
     TransactionProvider transactionProvider,
     String currentUserPhone,
     List<Category> categories,
   ) async {
-    // This logic mimics the one in _HomePageState._syncLedgerToWallet
-    // It requires access to TransactionProvider to check existence and add new ones.
-
     for (var ledgerTx in _ledgerTransactions) {
       if (ledgerTx.dateTime.isBefore(
         DateTime.now().subtract(const Duration(minutes: 5)),
-      )) {
+      ))
         continue;
-      }
-
       final isSynced = transactionProvider.transactions.any(
         (t) => t.ledgerId == ledgerTx.id,
       );
-
       if (!isSynced) {
         final normUserContact = _normalizePhone(currentUserPhone);
         final normSender = _normalizePhone(ledgerTx.senderPhone);
         final normReceiver = _normalizePhone(ledgerTx.receiverPhone);
-
         final isSender = normSender == normUserContact;
         final isReceiver = normReceiver == normUserContact;
-
         if (!isSender && !isReceiver) continue;
         if (isSender && isReceiver) continue;
 
@@ -416,7 +381,6 @@ class LedgerProvider extends ChangeNotifier {
           title = 'Borrowed from $otherName';
         }
 
-        // Find Category 'Others'
         String? categoryId;
         try {
           final targetType = isExpense ? 'expense' : 'income';
@@ -432,24 +396,21 @@ class LedgerProvider extends ChangeNotifier {
 
         if (categoryId != null) {
           try {
-            final transactionData = {
+            final result = await _appwriteService.createTransaction({
               'title': title,
               'amount': ledgerTx.amount,
               'isExpense': isExpense,
               'dateTime': ledgerTx.dateTime.toIso8601String(),
               'categoryId': categoryId,
               'ledgerId': ledgerTx.id,
-            };
-
-            final result = await _appwriteService.createTransaction(
-              transactionData,
-            );
+            });
             if (result != null) {
-              final newTx = Transaction.fromJson(result);
-              transactionProvider.addSyncedTransaction(newTx);
+              transactionProvider.addSyncedTransaction(
+                Transaction.fromJson(result),
+              );
             }
           } catch (e) {
-            print("Sync Error for tx ${ledgerTx.id}: $e");
+            debugPrint("Sync Error for tx ${ledgerTx.id}: $e");
           }
         }
       }
@@ -459,9 +420,6 @@ class LedgerProvider extends ChangeNotifier {
   String _normalizePhone(String? phone) {
     if (phone == null || phone.isEmpty) return '';
     String digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length > 10) {
-      return digits.substring(digits.length - 10);
-    }
-    return digits;
+    return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
   }
 }

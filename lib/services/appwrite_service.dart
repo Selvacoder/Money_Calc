@@ -421,16 +421,17 @@ class AppwriteService {
       }
 
       final data = {
-        'senderId': user.$id, // Creator is always current user for permissions
-        'senderName': transactionData['senderName'] ?? '', // Use passed value
-        'senderPhone': transactionData['senderPhone'] ?? '', // Use passed value
+        'senderId': transactionData['senderId'] ?? '',
+        'senderName': transactionData['senderName'] ?? '',
+        'senderPhone': transactionData['senderPhone'] ?? '',
         'receiverName': transactionData['receiverName'] ?? '',
         'receiverPhone': transactionData['receiverPhone'] ?? '',
+        'receiverId': transactionData['receiverId'] ?? receiverId ?? '',
         'amount': transactionData['amount'],
         'description': transactionData['description'] ?? '',
+        'date': transactionData['dateTime'], // Support legacy 'date' field
         'dateTime': transactionData['dateTime'],
-        'status': status,
-        if (receiverId != null) 'receiverId': receiverId,
+        'status': transactionData['status'] ?? status,
       };
 
       final doc = await databases.createDocument(
@@ -891,7 +892,7 @@ class AppwriteService {
   Future<List<Map<String, dynamic>>?> getLedgerTransactions() async {
     try {
       final user = await account.get();
-      // final contact = user.phone.isNotEmpty ? user.phone : user.email; // OLD
+      final userId = user.$id;
 
       String contact = user.phone;
       // If auth phone is empty, try fetching from profile
@@ -900,7 +901,7 @@ class AppwriteService {
           databaseId: AppwriteConfig.databaseId,
           collectionId: AppwriteConfig.profilesCollectionId,
           queries: [
-            Query.equal('userId', [user.$id]),
+            Query.equal('userId', [userId]),
           ],
         );
         if (profileDocs.documents.isNotEmpty) {
@@ -908,65 +909,84 @@ class AppwriteService {
         }
       }
 
-      // If still empty, we can't fetch ledger transactions reliably by phone
-      if (contact.isEmpty) return [];
+      final Map<String, Map<String, dynamic>> transactionMap = {};
 
-      // Fetch 1: I am the sender
-      final sent = await databases.listDocuments(
+      // 1. Where I am the sender (by ID)
+      final sentById = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.ledgerCollectionId,
         queries: [
-          Query.equal('senderPhone', [contact]),
+          Query.equal('senderId', [userId]),
           Query.orderDesc('date'),
         ],
       );
-      // Fetch 2: I am the receiver (by Phone)
-      final received = await databases.listDocuments(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.ledgerCollectionId,
-        queries: [
-          Query.equal('receiverPhone', [contact]),
-          Query.orderDesc('date'),
-        ],
-      );
+      for (var doc in sentById.documents) {
+        final data = doc.data;
+        data['id'] = doc.$id;
+        transactionMap[doc.$id] = data;
+      }
 
-      // Fetch 3: I am the receiver (by ID - for App users)
+      // 2. Where I am the receiver (by ID)
       final receivedById = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.ledgerCollectionId,
         queries: [
-          Query.equal('receiverId', [user.$id]),
+          Query.equal('receiverId', [userId]),
           Query.orderDesc('date'),
         ],
       );
-
-      // Merge and Deduplicate based on $id
-      final Map<String, Map<String, dynamic>> transactionMap = {};
-
-      for (var doc in sent.documents) {
-        final data = doc.data;
-        data['id'] = doc.$id; // Ensure ID is part of data
-        transactionMap[doc.$id] = data;
-      }
-
-      for (var doc in received.documents) {
-        final data = doc.data;
-        data['id'] = doc.$id; // Ensure ID is part of data
-        transactionMap[doc.$id] = data;
-      }
-
       for (var doc in receivedById.documents) {
         final data = doc.data;
         data['id'] = doc.$id;
         transactionMap[doc.$id] = data;
       }
 
+      // 3. Search by contact (Phone/Email) if available
+      if (contact.isNotEmpty) {
+        final sentByPhone = await databases.listDocuments(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.ledgerCollectionId,
+          queries: [
+            Query.equal('senderPhone', [contact]),
+            Query.orderDesc('date'),
+          ],
+        );
+        for (var doc in sentByPhone.documents) {
+          if (!transactionMap.containsKey(doc.$id)) {
+            final data = doc.data;
+            data['id'] = doc.$id;
+            transactionMap[doc.$id] = data;
+          }
+        }
+
+        final receivedByPhone = await databases.listDocuments(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: AppwriteConfig.ledgerCollectionId,
+          queries: [
+            Query.equal('receiverPhone', [contact]),
+            Query.orderDesc('date'),
+          ],
+        );
+        for (var doc in receivedByPhone.documents) {
+          if (!transactionMap.containsKey(doc.$id)) {
+            final data = doc.data;
+            data['id'] = doc.$id;
+            transactionMap[doc.$id] = data;
+          }
+        }
+      }
+
       // Convert back to list and sort by date descending
       final allTransactions = transactionMap.values.toList();
       allTransactions.sort((a, b) {
-        DateTime dateA = DateTime.parse(a['date']);
-        DateTime dateB = DateTime.parse(b['date']);
-        return dateB.compareTo(dateA);
+        String? d1 = a['dateTime'] ?? a['date'] ?? a['\$createdAt'];
+        String? d2 = b['dateTime'] ?? b['date'] ?? b['\$createdAt'];
+        if (d1 == null || d2 == null) return 0;
+        try {
+          return DateTime.parse(d2).compareTo(DateTime.parse(d1));
+        } catch (e) {
+          return 0;
+        }
       });
 
       return allTransactions;

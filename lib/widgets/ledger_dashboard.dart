@@ -25,6 +25,7 @@ class LedgerDashboard extends StatefulWidget {
 
 class _LedgerDashboardState extends State<LedgerDashboard> {
   bool _showAllPeople = false;
+  bool _isNotesMode = false;
 
   // Copied Dialog Logic
   void _showAddDialog({
@@ -32,6 +33,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String? initialPhone,
     double? initialAmount,
     bool isReceived = false,
+    String? customStatus,
   }) {
     final nameController = TextEditingController(text: initialName);
     final phoneController = TextEditingController(text: initialPhone);
@@ -41,164 +43,275 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     final descController = TextEditingController();
     String selectedCountryCode = '+91';
 
+    bool? isRegistered;
+    bool checkingRegistration = false;
+
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  isReceived ? 'Borrow Money' : 'Lend Money',
-                  style: GoogleFonts.inter(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Autocomplete<Map<String, dynamic>>(
-                  optionsBuilder: (TextEditingValue textEditingValue) async {
-                    if (textEditingValue.text.isEmpty) {
-                      return const Iterable<Map<String, dynamic>>.empty();
-                    }
-                    return await AppwriteService().searchContacts(
-                      textEditingValue.text,
-                    );
-                  },
-                  displayStringForOption: (option) => option['name'] ?? '',
-                  onSelected: (Map<String, dynamic> selection) {
-                    nameController.text = selection['name'];
-                    if (selection['phone'] != null) {
-                      phoneController.text = selection['phone'];
-                    }
-                  },
-                  fieldViewBuilder:
-                      (context, controller, focusNode, onFieldSubmitted) {
-                        controller.addListener(
-                          () => nameController.text = controller.text,
-                        );
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          textCapitalization: TextCapitalization.sentences,
-                          inputFormatters: [
-                            CapitalizeFirstLetterTextFormatter(),
-                          ],
-                          decoration: InputDecoration(
-                            labelText: isReceived
-                                ? 'Lender Name'
-                                : 'Borrower Name',
-                            prefixIcon: const Icon(Icons.person),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        );
-                      },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: CountryCodePicker(
-                        onChanged: (code) =>
-                            selectedCountryCode = code.dialCode ?? '+91',
-                        initialSelection: 'IN',
-                        showCountryOnly: false,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          labelText: 'Phone',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Amount',
-                    prefixText:
-                        '${context.read<CurrencyProvider>().currencySymbol} ',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _isNotesMode
+                        ? (isReceived ? 'Get Item' : 'Give Item')
+                        : (isReceived ? 'Borrow Money' : 'Lend Money'),
+                    style: GoogleFonts.inter(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      if (nameController.text.isNotEmpty &&
-                          amountController.text.isNotEmpty) {
-                        Navigator.pop(context); // Close dialog first
-
-                        final phoneStr = phoneController.text.isEmpty
-                            ? null
-                            : '$selectedCountryCode${phoneController.text}';
-                        final userProvider = context.read<UserProvider>();
-                        final currentUser = userProvider.user;
-
-                        final error = await context
-                            .read<LedgerProvider>()
-                            .addLedgerTransaction(
-                              nameController.text,
-                              phoneStr,
-                              double.tryParse(amountController.text) ?? 0.0,
-                              descController.text,
-                              isReceived: isReceived,
-                              currentUserId: currentUser?.userId ?? '',
-                              currentUserName: currentUser?.name ?? '',
-                              currentUserPhone: currentUser?.phone ?? '',
-                            );
-
-                        if (error != null && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            Theme.of(context).brightness == Brightness.dark
-                                ? SnackBar(
-                                    content: Text(
-                                      error,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    backgroundColor: Colors.redAccent,
-                                  )
-                                : SnackBar(
-                                    content: Text(error),
-                                    backgroundColor: Colors.red,
-                                  ),
-                          );
-                        }
+                  const SizedBox(height: 24),
+                  Autocomplete<Map<String, dynamic>>(
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<Map<String, dynamic>>.empty();
+                      }
+                      return await AppwriteService().searchContacts(
+                        textEditingValue.text,
+                      );
+                    },
+                    displayStringForOption: (option) => option['name'] ?? '',
+                    onSelected: (Map<String, dynamic> selection) {
+                      nameController.text = selection['name'];
+                      if (selection['phone'] != null) {
+                        phoneController.text = selection['phone'];
                       }
                     },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(isReceived ? 'Add Record' : 'Lend Money'),
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                          controller.addListener(
+                            () => nameController.text = controller.text,
+                          );
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            textCapitalization: TextCapitalization.sentences,
+                            inputFormatters: [
+                              CapitalizeFirstLetterTextFormatter(),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: _isNotesMode
+                                  ? 'Person Name'
+                                  : (isReceived
+                                        ? 'Lender Name'
+                                        : 'Borrower Name'),
+                              prefixIcon: const Icon(Icons.person),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
                   ),
-                ),
-              ],
+                  if (!_isNotesMode) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: CountryCodePicker(
+                            onChanged: (code) =>
+                                selectedCountryCode = code.dialCode ?? '+91',
+                            initialSelection: 'IN',
+                            showCountryOnly: false,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: phoneController,
+                            keyboardType: TextInputType.phone,
+                            onChanged: (value) async {
+                              final phone = value.replaceAll(RegExp(r'\D'), '');
+                              if (phone.length >= 10) {
+                                setDialogState(
+                                  () => checkingRegistration = true,
+                                );
+                                final fullPhone = '$selectedCountryCode$phone';
+                                try {
+                                  final user = await AppwriteService()
+                                      .getUserByPhone(fullPhone);
+                                  setDialogState(() {
+                                    isRegistered = user != null;
+                                    checkingRegistration = false;
+                                  });
+                                } catch (e) {
+                                  setDialogState(
+                                    () => checkingRegistration = false,
+                                  );
+                                }
+                              } else {
+                                if (isRegistered != null) {
+                                  setDialogState(() => isRegistered = null);
+                                }
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Phone',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              suffixIcon: checkingRegistration
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: Padding(
+                                        padding: EdgeInsets.all(12.0),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : isRegistered == true
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (isRegistered == false) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Colors.orange,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'This user is not on MoneyCalc. We recommend tracking this in the Notes section.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade800,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      prefixText:
+                          '${context.read<CurrencyProvider>().currencySymbol} ',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (nameController.text.isNotEmpty &&
+                            amountController.text.isNotEmpty) {
+                          Navigator.pop(context); // Close dialog first
+
+                          final phoneStr = phoneController.text.isEmpty
+                              ? null
+                              : '$selectedCountryCode${phoneController.text}';
+                          final userProvider = context.read<UserProvider>();
+                          final currentUser = userProvider.user;
+
+                          final error = await context
+                              .read<LedgerProvider>()
+                              .addLedgerTransaction(
+                                nameController.text,
+                                phoneStr,
+                                double.tryParse(amountController.text) ?? 0.0,
+                                descController.text,
+                                isReceived: isReceived,
+                                currentUserId: currentUser?.userId ?? '',
+                                currentUserName: currentUser?.name ?? '',
+                                currentUserPhone: currentUser?.phone ?? '',
+                                customStatus:
+                                    (!_isNotesMode && isRegistered == false)
+                                    ? 'notes'
+                                    : customStatus,
+                              );
+
+                          if (error == null &&
+                              !_isNotesMode &&
+                              isRegistered == false &&
+                              mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'User not on MoneyCalc. Added to Notes.',
+                                  style: GoogleFonts.inter(color: Colors.white),
+                                ),
+                                backgroundColor: Colors.orange.shade700,
+                              ),
+                            );
+                          }
+
+                          if (error != null && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? SnackBar(
+                                      content: Text(
+                                        error,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      backgroundColor: Colors.redAccent,
+                                    )
+                                  : SnackBar(
+                                      content: Text(error),
+                                      backgroundColor: Colors.red,
+                                    ),
+                            );
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        _isNotesMode
+                            ? 'Add Note'
+                            : (isReceived ? 'Add Record' : 'Lend Money'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -211,7 +324,11 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     final ledgerProvider = context.watch<LedgerProvider>();
     final userProvider = context.watch<UserProvider>();
     final currencySymbol = context.watch<CurrencyProvider>().currencySymbol;
-    final transactions = ledgerProvider.ledgerTransactions;
+
+    // Data Source Switch
+    final activeTransactions = _isNotesMode
+        ? ledgerProvider.notes
+        : ledgerProvider.ledgerTransactions;
 
     final user = userProvider.user;
     final myIdentities = [
@@ -219,7 +336,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       if (user?.email != null && user!.email.isNotEmpty) user.email,
     ].cast<String>();
 
-    // Fallback for simple display/logic if needed, but identities list is primary
+    final currentUserId = ledgerProvider.currentUserId;
 
     if (ledgerProvider.isLoading) {
       return Padding(
@@ -240,19 +357,19 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       );
     }
 
-    // Logic Correction:
-    // Total Received = Money I took/borrowed -> I need TO PAY this back.
-    // Total Sent = Money I gave/lent -> I expect TO RECEIVE this back.
-
-    double totalReceived = transactions
+    double totalReceived = activeTransactions
         .where(
-          (t) => !myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)),
+          (t) =>
+              !((currentUserId != null && t.senderId == currentUserId) ||
+                  myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id))),
         )
         .fold(0, (sum, t) => sum + t.amount);
 
-    double totalSent = transactions
+    double totalSent = activeTransactions
         .where(
-          (t) => myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)),
+          (t) =>
+              (currentUserId != null && t.senderId == currentUserId) ||
+              myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)),
         )
         .fold(0, (sum, t) => sum + t.amount);
 
@@ -271,23 +388,31 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             currencySymbol,
           ),
           const SizedBox(height: 24),
+          _buildToggleSwitch(),
+          const SizedBox(height: 24),
           Row(
             children: [
               Expanded(
                 child: _buildActionButton(
                   Icons.upload,
-                  'Lend',
+                  _isNotesMode ? 'Give' : 'Lend',
                   const Color(0xFFFF6B6B),
-                  () => _showAddDialog(isReceived: false),
+                  () => _showAddDialog(
+                    isReceived: false,
+                    customStatus: _isNotesMode ? 'notes' : null,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _buildActionButton(
                   Icons.download,
-                  'Receive',
+                  _isNotesMode ? 'Get' : 'Receive',
                   const Color(0xFF51CF66),
-                  () => _showAddDialog(isReceived: true),
+                  () => _showAddDialog(
+                    isReceived: true,
+                    customStatus: _isNotesMode ? 'notes' : null,
+                  ),
                 ),
               ),
             ],
@@ -297,46 +422,113 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'People',
+                _isNotesMode ? 'Recent Notes' : 'People',
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'hidden') {
-                    _showHiddenPeopleDialog();
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'hidden',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.visibility_off,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(width: 8),
-                        Text('Hidden People'),
-                      ],
+              if (!_isNotesMode)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'hidden') {
+                      _showHiddenPeopleDialog();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'hidden',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_off,
+                            size: 20,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Hidden People'),
+                        ],
+                      ),
                     ),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Icon(Icons.more_horiz),
                   ),
-                ],
-                child: const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Icon(Icons.more_horiz),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
-
-          _buildPeopleGrid(transactions, myIdentities, currencySymbol),
+          _buildPeopleGrid(
+            activeTransactions,
+            myIdentities,
+            currencySymbol,
+            currentUserId,
+          ),
           const SizedBox(height: 80),
         ],
+      ),
+    );
+  }
+
+  Widget _buildToggleSwitch() {
+    final theme = Theme.of(context);
+    return Center(
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildToggleItem(
+              'Tracker',
+              !_isNotesMode,
+              Icons.analytics_outlined,
+            ),
+            _buildToggleItem('Notes', _isNotesMode, Icons.notes_outlined),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleItem(String label, bool isActive, IconData icon) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () => setState(() => _isNotesMode = label == 'Notes'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: isActive ? Colors.white : Colors.grey),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                color: isActive ? Colors.white : Colors.grey,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -346,8 +538,13 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     List<LedgerTransaction> transactions,
     List<String> myIdentities,
     String currencySymbol,
+    String? currentUserId,
   ) {
-    final balances = _calculateUserBalances(transactions, myIdentities);
+    final balances = _calculateUserBalances(
+      transactions,
+      myIdentities,
+      currentUserId,
+    );
     if (balances.isEmpty) {
       return const EmptyState(
         title: 'No records',
@@ -380,6 +577,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               transactions,
               myIdentities,
               currencySymbol,
+              currentUserId,
               onLongPress: () => _showPersonOptions(
                 b['name'],
                 b['phone'],
@@ -403,14 +601,15 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String personName,
     String personPhone,
     List<String> myIdentities,
+    String? currentUserId,
   ) {
     return allTx.where((t) {
-      final isMeSender = myIdentities.any(
-        (id) => _arePhonesEqual(t.senderPhone, id),
-      );
-      final isMeReceiver = myIdentities.any(
-        (id) => _arePhonesEqual(t.receiverPhone, id),
-      );
+      final isMeSender =
+          (currentUserId != null && t.senderId == currentUserId) ||
+          myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id));
+      final isMeReceiver =
+          (currentUserId != null && t.receiverId == currentUserId) ||
+          myIdentities.any((id) => _arePhonesEqual(t.receiverPhone, id));
 
       if (isMeSender) {
         // I sent, checking if receiver is this person
@@ -446,6 +645,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
   List<Map<String, dynamic>> _calculateUserBalances(
     List<LedgerTransaction> transactions,
     List<String> myIdentities,
+    String? currentUserId,
   ) {
     // Filter hidden people
     final hiddenPeople = context.read<LedgerProvider>().hiddenPeople;
@@ -455,9 +655,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     Map<String, String> phones = {};
 
     for (var t in transactions) {
-      final isSent = myIdentities.any(
-        (id) => _arePhonesEqual(t.senderPhone, id),
-      );
+      final isSent =
+          (currentUserId != null && t.senderId == currentUserId) ||
+          myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id));
       final otherName = isSent ? t.receiverName : t.senderName;
       final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
 
@@ -646,24 +846,26 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     double bal,
     List<LedgerTransaction> tx,
     List<String> myIdentities,
-    String currencySymbol, {
+    String currencySymbol,
+    String? currentUserId, {
     VoidCallback? onLongPress,
   }) {
     return GestureDetector(
       onLongPress: onLongPress,
       onTap: () {
         final provider = context.read<LedgerProvider>();
-        final allTransactions = [
-          ...provider.ledgerTransactions,
-          ...provider.incomingRequests,
-          ...provider.outgoingRequests,
-        ];
-
         final personTransactions = _getPersonTransactions(
-          allTransactions,
+          _isNotesMode
+              ? provider.notes
+              : [
+                  ...provider.ledgerTransactions,
+                  ...provider.incomingRequests,
+                  ...provider.outgoingRequests,
+                ],
           name,
           phone,
           myIdentities,
+          currentUserId,
         );
 
         Navigator.push(
@@ -676,6 +878,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               transactions: personTransactions,
               currencySymbol: currencySymbol,
               myIdentities: myIdentities,
+              currentUserId: provider.currentUserId ?? '',
               onAddTransaction:
                   (
                     pName,
@@ -700,6 +903,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                       currentUserPhone:
                           currentUserPhone ?? currentUser?.phone ?? '',
                       currentUserEmail: currentUserEmail ?? currentUser?.email,
+                      customStatus: _isNotesMode ? 'notes' : null,
                     );
                   },
               onRemind: () {

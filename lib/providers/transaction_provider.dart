@@ -75,9 +75,8 @@ class TransactionProvider extends ChangeNotifier {
       _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
       _categories = _categoryBox.values.toList();
-      _quickItems = _itemBox.values
-          .where((i) => i.frequency != null)
-          .toList(); // Assuming items in box are quick items or we filter?
+      _quickItems = _itemBox.values.where((i) => i.frequency != null).toList();
+      _quickItems.sort((a, b) => a.order.compareTo(b.order));
       // Actually handling 'items' (category specific) vs 'quickItems' (global favorites) in one box needs care.
       // For now, let's assume _itemBox stores all synced items.
 
@@ -173,36 +172,62 @@ class TransactionProvider extends ChangeNotifier {
       // If network fails, we rely on _initHive()'s cache load (which we should also update to sort)
     }
   }
-  }
 
-  Future<void> reorderItems(int oldIndex, int newIndex) async {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
-    final Item item = _quickItems.removeAt(oldIndex);
-    _quickItems.insert(newIndex, item);
+  Future<void> updateItemsOrder(List<Item> reorderedSubset) async {
+    // 1. Get current 'order' values of these items (sorted) to know which 'slots' are available
+    final currentOrders = reorderedSubset.map((item) {
+      final existing = _quickItems.firstWhere(
+        (q) => q.id == item.id,
+        orElse: () => item,
+      );
+      return existing.order;
+    }).toList()..sort();
 
-    // Update order for all items based on new list position
-    for (int i = 0; i < _quickItems.length; i++) {
-        final updatedItem = Item(
-            id: _quickItems[i].id,
-            userId: _quickItems[i].userId,
-            title: _quickItems[i].title,
-            amount: _quickItems[i].amount,
-            isExpense: _quickItems[i].isExpense,
-            categoryId: _quickItems[i].categoryId,
-            usageCount: _quickItems[i].usageCount,
-            frequency: _quickItems[i].frequency,
-            icon: _quickItems[i].icon,
-            dueDay: _quickItems[i].dueDay,
-            isVariable: _quickItems[i].isVariable,
-            order: i, // New order
-        );
-        _quickItems[i] = updatedItem; // Update list memory
-        if (_isHiveInitialized) {
-            await _itemBox.put(updatedItem.id, updatedItem); // Update local cache
-        }
+    // If all orders are default 9999, we need to generate new distinct orders.
+    // Use current index in global list as fallback?
+    if (currentOrders.every((o) => o == 9999)) {
+      // Fallback: Assign 0..N based on new sequence, but this might overlap hidden items.
+      // Ideally we should fix data integrity first.
+      // For now, let's just accept the loop index + generic offset?
+      // Or use timestamp? No.
+      // Let's just use 0, 1, 2... for these.
+      for (int i = 0; i < currentOrders.length; i++) currentOrders[i] = i;
     }
+
+    // 2. Assign new orders
+    for (int i = 0; i < reorderedSubset.length; i++) {
+      int newOrder = currentOrders[i];
+
+      final item = reorderedSubset[i];
+      final updatedItem = Item(
+        id: item.id,
+        userId: item.userId,
+        title: item.title,
+        amount: item.amount,
+        isExpense: item.isExpense,
+        categoryId: item.categoryId,
+        usageCount: item.usageCount,
+        frequency: item.frequency,
+        icon: item.icon,
+        dueDay: item.dueDay,
+        isVariable: item.isVariable,
+        order: newOrder,
+      );
+
+      // Update global list
+      final index = _quickItems.indexWhere((q) => q.id == item.id);
+      if (index != -1) {
+        _quickItems[index] = updatedItem;
+      }
+
+      // Update local cache
+      if (_isHiveInitialized) {
+        await _itemBox.put(updatedItem.id, updatedItem);
+      }
+    }
+
+    // 3. Sort global list again
+    _quickItems.sort((a, b) => a.order.compareTo(b.order));
     notifyListeners();
   }
 

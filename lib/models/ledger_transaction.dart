@@ -54,8 +54,21 @@ class LedgerTransaction {
   });
 
   factory LedgerTransaction.fromJson(Map<String, dynamic> json) {
+    // Robust date parsing
+    String? dateStr = json['dateTime'] ?? json['date'] ?? json['\$createdAt'];
+    DateTime parsedDate;
+    if (dateStr != null) {
+      try {
+        parsedDate = DateTime.parse(dateStr);
+      } catch (e) {
+        parsedDate = DateTime.now();
+      }
+    } else {
+      parsedDate = DateTime.now();
+    }
+
     return LedgerTransaction(
-      id: json['\$id'] ?? '',
+      id: json['\$id'] ?? json['id'] ?? '',
       senderId: json['senderId'] ?? '',
       senderName: json['senderName'] ?? '',
       senderPhone: json['senderPhone'] ?? '',
@@ -63,9 +76,7 @@ class LedgerTransaction {
       receiverPhone: json['receiverPhone'],
       amount: (json['amount'] ?? 0.0).toDouble(),
       description: json['description'] ?? '',
-      dateTime: DateTime.parse(
-        json['dateTime'] ?? DateTime.now().toIso8601String(),
-      ),
+      dateTime: parsedDate,
       status: json['status'] ?? 'confirmed',
       receiverId: json['receiverId'],
     );

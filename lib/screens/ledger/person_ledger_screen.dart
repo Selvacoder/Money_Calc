@@ -30,7 +30,8 @@ class PersonLedgerScreen extends StatefulWidget {
   final String currencySymbol;
   final OnAddTransactionCallback onAddTransaction;
   final Function() onRemind;
-  final List<String> myIdentities; // Changed from currentUserContact
+  final List<String> myIdentities;
+  final String currentUserId; // Added
 
   const PersonLedgerScreen({
     super.key,
@@ -41,7 +42,8 @@ class PersonLedgerScreen extends StatefulWidget {
     required this.currencySymbol,
     required this.onAddTransaction,
     required this.onRemind,
-    required this.myIdentities, // Changed
+    required this.myIdentities,
+    required this.currentUserId, // Added
   });
 
   @override
@@ -57,6 +59,18 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     super.initState();
     _localTransactions = List.from(widget.transactions);
     _currentBalance = widget.currentBalance;
+  }
+
+  @override
+  void didUpdateWidget(PersonLedgerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.transactions != widget.transactions ||
+        oldWidget.currentBalance != widget.currentBalance) {
+      setState(() {
+        _localTransactions = List.from(widget.transactions);
+        _currentBalance = widget.currentBalance;
+      });
+    }
   }
 
   // Updated to support email comparison
@@ -534,9 +548,17 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               itemBuilder: (context, index) {
                 final t = sortedTransactions[index];
                 // Check against ANY identity
-                final isSentByMe = widget.myIdentities.any(
-                  (id) => _arePhonesEqual(t.senderPhone, id),
-                );
+                // Improved logic: Match by ID first, then phone/email, then name fallback
+                final isSentByMe =
+                    (widget.currentUserId.isNotEmpty &&
+                        t.senderId == widget.currentUserId) ||
+                    widget.myIdentities.any(
+                      (id) => _arePhonesEqual(t.senderPhone, id),
+                    ) ||
+                    (t.senderName.toLowerCase() == 'me' ||
+                        t.senderName == 'Self' ||
+                        t.senderName ==
+                            context.read<UserProvider>().user?.name);
 
                 // Check if it's a settlement
                 final isSettlement = t.description.toLowerCase().contains(

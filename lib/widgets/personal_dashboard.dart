@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:shimmer/shimmer.dart';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/transaction.dart';
@@ -21,6 +22,7 @@ class PersonalDashboard extends StatefulWidget {
 
 class _PersonalDashboardState extends State<PersonalDashboard> {
   String _entryMode = 'daily'; // daily, monthly, variable
+  bool _isReordering = false; // Track reordering mode
 
   bool _showMoreTransactions = false;
   int _currentPage = 0;
@@ -105,17 +107,26 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Quick Entries',
+                _isReordering ? 'Reordering Items...' : 'Quick Entries',
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              IconButton(
-                onPressed: _showAddItemDialog, // Updated
-                icon: const Icon(Icons.add_circle),
-                color: colorScheme.primary,
-              ),
+              _isReordering
+                  ? TextButton.icon(
+                      onPressed: () => setState(() => _isReordering = false),
+                      icon: const Icon(Icons.check),
+                      label: const Text('Done'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: colorScheme.primary,
+                      ),
+                    )
+                  : IconButton(
+                      onPressed: _showAddItemDialog, // Updated
+                      icon: const Icon(Icons.add_circle),
+                      color: colorScheme.primary,
+                    ),
             ],
           ),
 
@@ -184,7 +195,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               );
             }
 
-            return GridView.builder(
+            return ReorderableGridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -194,9 +205,17 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                 mainAxisSpacing: 12,
               ),
               itemCount: items.length,
+              onReorder: (oldIndex, newIndex) {
+                final item = items.removeAt(oldIndex);
+                items.insert(newIndex, item);
+                provider.updateItemsOrder(items);
+              },
               itemBuilder: (context, index) {
                 final item = items[index];
-                return _buildItemButton(item, currencySymbol);
+                return Container(
+                  key: ValueKey(item.id),
+                  child: _buildItemButton(item, currencySymbol),
+                );
               },
             );
           }(),
@@ -492,30 +511,32 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     }
 
     return GestureDetector(
-      onTap: () async {
-        if (item.isVariable) {
-          await _showVariableEntryDialog(item);
-          return;
-        }
+      onTap: _isReordering
+          ? null
+          : () async {
+              if (item.isVariable) {
+                await _showVariableEntryDialog(item);
+                return;
+              }
 
-        // Regular Quick Entry Logic
-        // Ask for Payment Method for ALL transactions
-        String? paymentMethod = await _selectPaymentMethod();
-        if (paymentMethod == null) return; // Cancelled
+              // Regular Quick Entry Logic
+              // Ask for Payment Method for ALL transactions
+              String? paymentMethod = await _selectPaymentMethod();
+              if (paymentMethod == null) return; // Cancelled
 
-        context.read<TransactionProvider>().addTransaction(
-          item.title,
-          item.amount,
-          item.isExpense,
-          categoryId: item.categoryId,
-          itemId: item.id,
-          paymentMethod: paymentMethod,
-        );
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Added ${item.title}')));
-      },
-      onLongPress: () => _showItemOptions(item),
+              context.read<TransactionProvider>().addTransaction(
+                item.title,
+                item.amount,
+                item.isExpense,
+                categoryId: item.categoryId,
+                itemId: item.id,
+                paymentMethod: paymentMethod,
+              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Added ${item.title}')));
+            },
+      onLongPress: _isReordering ? null : () => _showItemOptions(item),
       child: Container(
         decoration: BoxDecoration(
           color: backgroundColor,
@@ -691,6 +712,14 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               ),
             ),
             const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.swap_vert),
+              title: const Text('Reorder Items'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => _isReordering = true);
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.edit),
               title: const Text('Edit'),

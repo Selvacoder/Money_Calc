@@ -37,6 +37,9 @@ class LedgerTransaction {
   @HiveField(10)
   final String? receiverId;
 
+  @HiveField(11)
+  final String creatorId;
+
   String get ledgerId => id; // Alias if needed
 
   LedgerTransaction({
@@ -51,6 +54,7 @@ class LedgerTransaction {
     required this.dateTime,
     this.status = 'confirmed',
     this.receiverId,
+    this.creatorId = '',
   });
 
   factory LedgerTransaction.fromJson(Map<String, dynamic> json) {
@@ -80,6 +84,7 @@ class LedgerTransaction {
       dateTime: parsedDate,
       status: json['status'] ?? 'confirmed',
       receiverId: json['receiverId'],
+      creatorId: json['creatorId'] ?? '',
     );
   }
 
@@ -95,6 +100,37 @@ class LedgerTransaction {
       'dateTime': dateTime.toIso8601String(),
       'status': status,
       'receiverId': receiverId,
+      'creatorId': creatorId,
     };
+  }
+
+  LedgerTransaction copyWith({
+    String? id,
+    String? senderId,
+    String? senderName,
+    String? senderPhone,
+    String? receiverName,
+    String? receiverPhone,
+    double? amount,
+    String? description,
+    DateTime? dateTime,
+    String? status,
+    String? receiverId,
+    String? creatorId,
+  }) {
+    return LedgerTransaction(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      senderPhone: senderPhone ?? this.senderPhone,
+      receiverName: receiverName ?? this.receiverName,
+      receiverPhone: receiverPhone ?? this.receiverPhone,
+      amount: amount ?? this.amount,
+      description: description ?? this.description,
+      dateTime: dateTime ?? this.dateTime,
+      status: status ?? this.status,
+      receiverId: receiverId ?? this.receiverId,
+      creatorId: creatorId ?? this.creatorId,
+    );
   }
 }

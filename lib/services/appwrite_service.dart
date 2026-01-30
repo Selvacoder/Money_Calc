@@ -2,6 +2,7 @@ import 'package:appwrite/appwrite.dart';
 // ignore_for_file: deprecated_member_use
 import '../config/appwrite_config.dart';
 import 'dart:convert'; // Added for jsonEncode
+import 'dart:io';
 
 import 'package:appwrite/models.dart';
 
@@ -440,7 +441,6 @@ class AppwriteService {
         }
       } catch (e) {
         print('DEBUG: ID Resolution Failed (Non-fatal): $e');
-        // Continue without linking if resolution fails
       }
 
       // Determine Status & Permissions
@@ -464,6 +464,12 @@ class AppwriteService {
           receiverId.isNotEmpty &&
           senderId != receiverId) {
         status = 'pending';
+      } else if (status == 'pending') {
+        // If we expected it to be pending (based on input) but failed to resolve IDs
+        if (senderId.isEmpty)
+          throw 'Cannot request money: Sender not registered';
+        if (receiverId.isEmpty)
+          throw 'Cannot request money: Receiver not registered';
       }
       print(
         'DEBUG: Final decision - Sender: $senderId, Receiver: $receiverId, Status: $status',
@@ -476,6 +482,7 @@ class AppwriteService {
         'receiverName': transactionData['receiverName'] ?? '',
         'receiverPhone': receiverPhone,
         'receiverId': receiverId,
+        'creatorId': myId, // Track who created it
         'amount': transactionData['amount'],
         'description': transactionData['description'] ?? '',
         'date': transactionData['dateTime'],
@@ -518,8 +525,16 @@ class AppwriteService {
           response['id'] = doc.$id;
 
           // Attempt to share via Cloud Function
-          if (receiverId != null && receiverId.isNotEmpty) {
-            shareLedgerTransaction(doc.$id, receiverId)
+          // Determine who to share with (The OTHER person)
+          String? targetId;
+          if (myId == senderId) {
+            targetId = receiverId;
+          } else if (myId == receiverId) {
+            targetId = senderId;
+          }
+
+          if (targetId != null && targetId.isNotEmpty) {
+            shareLedgerTransaction(doc.$id, targetId)
                 .then((_) {
                   print('DEBUG: Triggered share function for ${doc.$id}');
                 })
@@ -561,6 +576,7 @@ class AppwriteService {
       print(
         'DEBUG: Function Execution Triggered. Status: ${execution.status}, ID: ${execution.$id}',
       );
+      print('DEBUG: Function Response Body: ${execution.responseBody}');
     } catch (e) {
       print('DEBUG: Error calling share function: $e');
     }
@@ -1500,6 +1516,63 @@ class AppwriteService {
       return true;
     } catch (e) {
       print('Error deleting investment transaction: $e');
+      return false;
+    }
+  }
+
+  // Realtime Subscription for Ledger
+  RealtimeSubscription subscribeToLedgerUpdates(
+    Function(RealtimeMessage) onMessage, {
+    Function(dynamic)? onError,
+  }) {
+    print(
+      'DEBUG: Subscribing to Ledger Updates: databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents',
+    );
+    final subscription = realtime.subscribe([
+      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents',
+    ]);
+
+    subscription.stream.listen(
+      (message) {
+        onMessage(message);
+      },
+      onError: (e) {
+        print('DEBUG: Realtime Error: $e');
+        if (onError != null) onError(e);
+      },
+    );
+
+    return subscription;
+  }
+
+  // Connection Probe
+  Future<bool> checkRealtimeConnection() async {
+    try {
+      final endpoint = AppwriteConfig.endpoint;
+      final projectId = AppwriteConfig.projectId;
+      // Convert https -> wss
+      final wsEndpoint = endpoint
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+
+      // Construct a valid realtime URL with a dummy or actual channel to test auth/handshake
+      // Appwrite Realtime URL format: /realtime?project={projectId}&channels[]={channel}
+      final channel =
+          'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents';
+      final url = '$wsEndpoint/realtime?project=$projectId&channels[]=$channel';
+
+      print('DEBUG: Probing WebSocket Connection: $url');
+
+      // Attempt connection with a short timeout
+      final socket = await WebSocket.connect(
+        url,
+      ).timeout(const Duration(seconds: 5));
+
+      print('DEBUG: WebSocket Probe Successful');
+      socket.close();
+      return true;
+    } catch (e) {
+      print('DEBUG: WebSocket Probe Failed: $e');
       return false;
     }
   }

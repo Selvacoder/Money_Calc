@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart' hide Category;
+import 'dart:async';
+import 'package:appwrite/appwrite.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/ledger_transaction.dart';
 import '../services/appwrite_service.dart';
@@ -14,6 +16,7 @@ class LedgerProvider extends ChangeNotifier {
   List<LedgerTransaction> _outgoingRequests = [];
   List<LedgerTransaction> _notes = [];
   bool _isLoading = false;
+  Timer? _pollingTimer;
 
   List<LedgerTransaction> get ledgerTransactions => _ledgerTransactions;
   List<LedgerTransaction> get incomingRequests => _incomingRequests;
@@ -38,9 +41,11 @@ class LedgerProvider extends ChangeNotifier {
     _isHiveInitialized = true;
   }
 
-  Future<void> fetchLedgerTransactions() async {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> fetchLedgerTransactions({bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     await _initHive();
 
@@ -64,6 +69,13 @@ class LedgerProvider extends ChangeNotifier {
         _processTransactions(networkTx);
         await _ledgerBox.clear();
         await _ledgerBox.putAll({for (var t in networkTx) t.id: t});
+      }
+      final isConnected = await _appwriteService.checkRealtimeConnection();
+      if (isConnected) {
+        _subscribeToRealtime();
+      } else {
+        print('Realtime probe failed. Switching to Polling Mode.');
+        startPolling();
       }
     } catch (e) {
       debugPrint('Error fetching ledger: $e');
@@ -121,6 +133,9 @@ class LedgerProvider extends ChangeNotifier {
         !phone.startsWith('local:')) {
       status = 'pending';
     }
+    print(
+      'DEBUG: addLedgerTransaction - Phone: $phone, Status: $status, CustomStatus: $customStatus',
+    );
 
     // Standardize naming to avoid "Me giving to Me" messiness
     final displayOtherName =
@@ -166,6 +181,7 @@ class LedgerProvider extends ChangeNotifier {
       description: description,
       dateTime: now,
       status: status,
+      creatorId: currentUserId,
     );
 
     // OPTIMISTIC UPDATE
@@ -256,35 +272,75 @@ class LedgerProvider extends ChangeNotifier {
   }
 
   Future<bool> acceptLedgerTransaction(LedgerTransaction tx) async {
+    // OPTIMISTIC UPDATE
+    final index = _incomingRequests.indexWhere((t) => t.id == tx.id);
+    if (index != -1) {
+      final updatedTx = _incomingRequests[index].copyWith(status: 'confirmed');
+      _incomingRequests.removeAt(index);
+      _ledgerTransactions.add(updatedTx);
+      _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+      notifyListeners();
+    }
+
     try {
       final success = await _appwriteService.updateLedgerTransactionStatus(
         tx.id,
         'confirmed',
       );
       if (success) {
-        await fetchLedgerTransactions();
+        // No need to fetch all if backend success confirms our optimistic change
+        // But fetching ensures consistency in case of other changes
+        // await fetchLedgerTransactions();
         return true;
+      } else {
+        // Revert if failed
+        _ledgerTransactions.removeWhere((t) => t.id == tx.id);
+        _incomingRequests.add(tx); // Add back original
+        notifyListeners();
+        return false;
       }
-      return false;
     } catch (e) {
       debugPrint('Error accepting transaction: $e');
+      // Revert if error
+      _ledgerTransactions.removeWhere((t) => t.id == tx.id);
+      _incomingRequests.add(tx);
+      notifyListeners();
       return false;
     }
   }
 
   Future<bool> rejectLedgerTransaction(String id) async {
+    // OPTIMISTIC UPDATE
+    LedgerTransaction? removedTx;
+    final inIndex = _incomingRequests.indexWhere((t) => t.id == id);
+    if (inIndex != -1) {
+      removedTx = _incomingRequests[inIndex];
+      _incomingRequests.removeAt(inIndex);
+    }
+    // Also check outgoing? usually reject is for incoming.
+
+    notifyListeners();
+
     try {
       final success = await _appwriteService.updateLedgerTransactionStatus(
         id,
         'rejected',
       );
       if (success) {
-        await fetchLedgerTransactions();
         return true;
+      } else {
+        if (removedTx != null) {
+          _incomingRequests.add(removedTx);
+          notifyListeners();
+        }
+        return false;
       }
-      return false;
     } catch (e) {
       debugPrint('Error rejecting transaction: $e');
+      if (removedTx != null) {
+        _incomingRequests.add(removedTx);
+        notifyListeners();
+      }
       return false;
     }
   }
@@ -480,5 +536,137 @@ class LedgerProvider extends ChangeNotifier {
     if (phone == null || phone.isEmpty) return '';
     String digits = phone.replaceAll(RegExp(r'\D'), '');
     return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+  }
+
+  // Realtime Logic
+  RealtimeSubscription? _ledgerSubscription;
+
+  void _subscribeToRealtime() {
+    if (_ledgerSubscription != null) return;
+
+    _ledgerSubscription = _appwriteService.subscribeToLedgerUpdates(
+      (message) {
+        final event = message.events.firstWhere(
+          (e) => e.contains('.documents.'),
+          orElse: () => '',
+        );
+        final payload = message.payload;
+        // if (payload == null) return;
+
+        print('DEBUG: Realtime Event: ${event}, Payload: $payload');
+
+        try {
+          final tx = LedgerTransaction.fromJson(payload);
+
+          if (event.endsWith('.create')) {
+            _onTransactionCreated(tx);
+          } else if (event.endsWith('.update')) {
+            _onTransactionUpdated(tx);
+          } else if (event.endsWith('.delete')) {
+            _onTransactionDeleted(tx.id);
+          }
+        } catch (e) {
+          print('Error processing realtime message: $e');
+        }
+      },
+      onError: (e) {
+        print('Realtime connection failed: $e. Switching to Polling Mode.');
+        startPolling();
+      },
+    );
+  }
+
+  void startPolling() {
+    stopPolling(); // Cancel existing if any
+    print('DEBUG: Starting Polling Mode (Every 10s)');
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      print('DEBUG: Polling Ledger Transactions...');
+      fetchLedgerTransactions(silent: true);
+    });
+  }
+
+  void stopPolling() {
+    if (_pollingTimer != null) {
+      print('DEBUG: Stopping Polling Mode');
+      _pollingTimer?.cancel();
+      _pollingTimer = null;
+    }
+  }
+
+  void _onTransactionCreated(LedgerTransaction tx) {
+    // Check if exists (avoid duplicates)
+    if (_findTransaction(tx.id) != null) return;
+    _addTransactionToLocalList(tx);
+    notifyListeners();
+  }
+
+  void _onTransactionUpdated(LedgerTransaction tx) {
+    _removeTransactionFromLocalList(tx.id);
+    _addTransactionToLocalList(tx);
+    notifyListeners();
+  }
+
+  void _onTransactionDeleted(String id) {
+    _removeTransactionFromLocalList(id);
+    if (_isHiveInitialized) {
+      _ledgerBox.delete(id);
+    }
+    notifyListeners();
+  }
+
+  LedgerTransaction? _findTransaction(String id) {
+    try {
+      return _ledgerTransactions.firstWhere((t) => t.id == id);
+    } catch (_) {
+      try {
+        return _notes.firstWhere((t) => t.id == id);
+      } catch (_) {
+        try {
+          return _outgoingRequests.firstWhere((t) => t.id == id);
+        } catch (_) {
+          try {
+            return _incomingRequests.firstWhere((t) => t.id == id);
+          } catch (_) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+
+  void _removeTransactionFromLocalList(String id) {
+    _ledgerTransactions.removeWhere((t) => t.id == id);
+    _notes.removeWhere((t) => t.id == id);
+    _outgoingRequests.removeWhere((t) => t.id == id);
+    _incomingRequests.removeWhere((t) => t.id == id);
+  }
+
+  void _addTransactionToLocalList(LedgerTransaction tx) {
+    if (tx.status == 'confirmed') {
+      _ledgerTransactions.add(tx);
+      _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    } else if (tx.status == 'notes') {
+      _notes.add(tx);
+      _notes.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    } else if (tx.status == 'pending') {
+      if (_currentUserId != null && tx.receiverId == _currentUserId) {
+        _incomingRequests.add(tx);
+        _incomingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+      } else {
+        _outgoingRequests.add(tx);
+        _outgoingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+      }
+    }
+
+    if (_isHiveInitialized) {
+      _ledgerBox.put(tx.id, tx);
+    }
+  }
+
+  @override
+  void dispose() {
+    stopPolling();
+    _ledgerSubscription?.close();
+    super.dispose();
   }
 }

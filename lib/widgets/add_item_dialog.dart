@@ -611,7 +611,11 @@ class _AddItemDialogState extends State<AddItemDialog> {
         }
         return; // Do not close dialog on error
       }
-      await _handleNotification(widget.editingItem!.id, isUpdate: true);
+      try {
+        await _handleNotification(widget.editingItem!.id, isUpdate: true);
+      } catch (e) {
+        print('Notification error (ignoring): $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Updated ${_titleController.text}')),
@@ -620,7 +624,11 @@ class _AddItemDialogState extends State<AddItemDialog> {
     } else {
       final newItem = await provider.addItem(itemData);
       if (newItem != null) {
-        await _handleNotification(newItem.id, isUpdate: false);
+        try {
+          await _handleNotification(newItem.id, isUpdate: false);
+        } catch (e) {
+          print('Notification error (ignoring): $e');
+        }
       }
     }
     if (mounted) Navigator.pop(context);

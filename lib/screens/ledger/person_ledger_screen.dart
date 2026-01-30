@@ -53,6 +53,10 @@ class PersonLedgerScreen extends StatefulWidget {
 }
 
 class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
+  final ScrollController _scrollController =
+      ScrollController(); // Added ScrollController
+  // Scroll logic replaced by reverse:true ListView
+
   late List<LedgerTransaction> _localTransactions;
   late double _currentBalance;
 
@@ -64,15 +68,16 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(PersonLedgerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.transactions != widget.transactions ||
-        oldWidget.currentBalance != widget.currentBalance) {
-      setState(() {
-        _localTransactions = List.from(widget.transactions);
-        _currentBalance = widget.currentBalance;
-      });
-    }
+    // If parent updates props, we might want to respect that, but we prioritize Provider now.
+    // We update _localTransactions only if we are treating it as a "cache" but simpler to just use Provider.
   }
 
   // Updated to support email comparison
@@ -90,6 +95,46 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
       return n1.substring(n1.length - 10) == n2.substring(n2.length - 10);
     }
     return n1 == n2;
+  }
+
+  // Helpers to fetch latest data directly from provider
+  List<LedgerTransaction> _getLiveTransactions(BuildContext context) {
+    final provider = context.watch<LedgerProvider>();
+    return provider.getTransactionsForPerson(
+      widget.personName,
+      widget.personPhone,
+      widget.currentUserId,
+      widget.myIdentities,
+    );
+  }
+
+  double _calculateLiveBalance(List<LedgerTransaction> transactions) {
+    double balance = 0;
+    for (var t in transactions) {
+      final isSentByMe =
+          (widget.currentUserId.isNotEmpty &&
+              t.senderId == widget.currentUserId) ||
+          widget.myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id)) ||
+          (t.senderName.toLowerCase() == 'me' ||
+              t.senderName == 'Self' ||
+              t.senderName ==
+                  widget.myIdentities.firstOrNull); // Approximate check
+
+      // If I sent it, I am owed (+) or I gave (-)?
+      // Logic in Dashboard:
+      // balances[key] = (balances[key] ?? 0) + (isSent ? t.amount : -t.amount);
+      // Wait, if I sent money (Lending), balance should be POSITIVE (Assuming balance means "They Owe Me")
+      // If I received money (Borrowing), balance should be NEGATIVE ("I Owe Them")
+
+      if (isSentByMe) {
+        // I sent money. They owe me.
+        balance += t.amount;
+      } else {
+        // I received money. I owe them.
+        balance -= t.amount;
+      }
+    }
+    return balance;
   }
 
   void _showSettleDialog() {
@@ -155,13 +200,21 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                       Navigator.pop(context);
 
                       // OPTIMISTIC UPDATE - Show immediately!
-                      final tempId =
-                          'temp_${DateTime.now().millisecondsSinceEpoch}';
+                      // final tempId =
+                      //    'temp_${DateTime.now().millisecondsSinceEpoch}';
 
                       // To prevent flicker at top, ensure this is the NEWEST timestamp in the list
                       DateTime now = DateTime.now();
-                      if (_localTransactions.isNotEmpty) {
-                        final latestDate = _localTransactions
+                      final currentTransactions = context
+                          .read<LedgerProvider>()
+                          .getTransactionsForPerson(
+                            widget.personName,
+                            widget.personPhone,
+                            widget.currentUserId,
+                            widget.myIdentities,
+                          );
+                      if (currentTransactions.isNotEmpty) {
+                        final latestDate = currentTransactions
                             .map((tx) => tx.dateTime)
                             .reduce((a, b) => a.isAfter(b) ? a : b);
                         if (now.isBefore(latestDate) ||
@@ -170,32 +223,12 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         }
                       }
 
-                      final optimisticTx = LedgerTransaction(
-                        id: tempId,
-                        senderId: isReceived ? '' : widget.currentUserId,
-                        senderName: isReceived ? widget.personName : 'Me',
-                        senderPhone: isReceived
-                            ? widget.personPhone
-                            : (widget.myIdentities.isNotEmpty
-                                  ? widget.myIdentities.first
-                                  : ''),
-                        receiverName: isReceived ? 'Me' : widget.personName,
-                        receiverPhone: isReceived
-                            ? (widget.myIdentities.isNotEmpty
-                                  ? widget.myIdentities.first
-                                  : '')
-                            : widget.personPhone,
-                        receiverId: isReceived ? widget.currentUserId : '',
-                        amount: amount,
-                        description: description,
-                        dateTime: now,
-                        status: widget.isNotesMode ? 'notes' : 'pending',
-                      );
+                      // Notification to provider handled via callback below, which triggers optimistic update in Provider.
+                      // No need for local setState here as we are watching the provider.
 
-                      setState(() {
-                        _currentBalance = 0; // Balance is now settled
-                        _localTransactions.add(optimisticTx);
-                      });
+                      print(
+                        'DEBUG: Settle Up Pressed. Amount: $amount, IsReceived: $isReceived',
+                      );
 
                       // NETWORK CALL - Run in background
                       final userProvider = context.read<UserProvider>();
@@ -208,13 +241,23 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         currentUserPhone: userProvider.user?.phone,
                         currentUserEmail: userProvider.user?.email,
                       );
+                      print('DEBUG: Settle Up Result: $error');
 
                       if (error != null) {
                         if (mounted) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(error)));
-                          // Optionally revert balance if failed, but usually ledger handles sync
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Settlement Failed'),
+                              content: Text(error),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('OK'),
+                                ),
+                              ],
+                            ),
+                          );
                         }
                       }
                     }
@@ -422,12 +465,16 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     }
   }
 
+  double get _liveBalance =>
+      _calculateLiveBalance(_getLiveTransactions(context));
+
   Future<void> _launchWhatsApp() async {
+    final balance = _liveBalance;
     final phone = widget.personPhone.replaceAll(RegExp(r'[^\d+]'), '');
-    final amount = NumberFormat('#,##0').format(_currentBalance.abs());
+    final amount = NumberFormat('#,##0').format(balance.abs());
 
     String message = '';
-    if (_currentBalance > 0) {
+    if (balance > 0) {
       message =
           'Hi ${widget.personName}, just a friendly reminder that you owe me ${widget.currencySymbol}$amount on MoneyCalc. Thanks!';
     } else {
@@ -453,12 +500,23 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Sort: Newest first (Index 0 at bottom with reverse: true)
-    final sortedTransactions = List<LedgerTransaction>.from(_localTransactions)
-      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    // Live Data from Provider
+    final liveTransactions = _getLiveTransactions(context);
+    final liveBalance = _calculateLiveBalance(liveTransactions);
 
-    final isOwesYou = _currentBalance > 0;
-    final isYouOwe = _currentBalance < 0;
+    // Sort: Newest First (for reverse: true ListView)
+    // We utilize stable sort with ID as tie-breaker to prevent UI jitter
+    final sortedTransactions = List<LedgerTransaction>.from(liveTransactions)
+      ..sort((a, b) {
+        int res = b.dateTime.compareTo(a.dateTime);
+        if (res == 0) {
+          return b.id.compareTo(a.id); // Tie-breaker
+        }
+        return res;
+      });
+
+    final isOwesYou = liveBalance > 0;
+    final isYouOwe = liveBalance < 0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
@@ -482,9 +540,13 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
           ],
         ),
         actions: [
+          // Refresh Button Removed
           IconButton(
             icon: const Icon(Icons.check_circle_outline),
-            onPressed: _showSettleDialog,
+            onPressed: () {
+              // Ensure scroll on return? Logic removed as reverse:true handles it
+              _showSettleDialog();
+            },
             tooltip: 'Settle Up',
           ),
           IconButton(
@@ -548,9 +610,9 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                 ),
                 Text(
                   isOwesYou
-                      ? 'Owes You ${widget.currencySymbol}${NumberFormat('#,##0').format(_currentBalance.abs())}'
+                      ? 'Owes You ${widget.currencySymbol}${NumberFormat('#,##0').format(liveBalance.abs())}'
                       : (isYouOwe
-                            ? 'You Owe ${widget.currencySymbol}${NumberFormat('#,##0').format(_currentBalance.abs())}'
+                            ? 'You Owe ${widget.currencySymbol}${NumberFormat('#,##0').format(liveBalance.abs())}'
                             : 'Settled'),
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
@@ -564,167 +626,433 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
           ),
 
           Expanded(
-            child: ListView.builder(
-              reverse: true, // Anchor to bottom
-              padding: const EdgeInsets.all(16),
-              itemCount: sortedTransactions.length,
-              itemBuilder: (context, index) {
-                final t = sortedTransactions[index];
-                // Check against ANY identity
-                // Improved logic: Match by ID first, then phone/email, then name fallback
-                final isSentByMe =
-                    (widget.currentUserId.isNotEmpty &&
-                        t.senderId == widget.currentUserId) ||
-                    widget.myIdentities.any(
-                      (id) => _arePhonesEqual(t.senderPhone, id),
-                    ) ||
-                    (t.senderName.toLowerCase() == 'me' ||
-                        t.senderName == 'Self' ||
-                        t.senderName ==
-                            context.read<UserProvider>().user?.name);
-
-                // Check if it's a settlement
-                final isSettlement = t.description.toLowerCase().contains(
-                  'settl',
-                );
-
-                if (isSettlement) {
-                  return Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 16),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                size: 16,
-                                color: Colors.grey.shade600,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Settlement Done',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())} • ${DateFormat('MMM d, h:mm a').format(t.dateTime)}',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await context.read<LedgerProvider>().fetchLedgerTransactions();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Refreshed'),
+                      duration: Duration(seconds: 1),
                     ),
-                  ).animate().fadeIn(duration: 300.ms);
+                  );
                 }
+              },
+              child: ListView.builder(
+                controller: _scrollController,
+                reverse: true, // Chat Style (Bottom-Up)
+                physics:
+                    const AlwaysScrollableScrollPhysics(), // Allow refresh even if empty
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  80,
+                ), // Extra bottom padding for fab/buttons
+                itemCount: sortedTransactions.length,
+                itemBuilder: (context, index) {
+                  final t = sortedTransactions[index];
+                  // Check against ANY identity
+                  // Improved logic: Match by ID first, then phone/email, then name fallback
+                  final isSentByMe =
+                      (widget.currentUserId.isNotEmpty &&
+                          t.senderId == widget.currentUserId) ||
+                      widget.myIdentities.any(
+                        (id) => _arePhonesEqual(t.senderPhone, id),
+                      ) ||
+                      (t.senderName.toLowerCase() == 'me' ||
+                          t.senderName == 'Self' ||
+                          t.senderName ==
+                              context.read<UserProvider>().user?.name);
 
-                return Align(
-                  alignment: isSentByMe
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.75,
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSentByMe
-                          ? const Color(0xFFFF6B6B).withOpacity(0.1)
-                          : Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
-                        bottomRight: Radius.circular(isSentByMe ? 4 : 16),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                  // Improved logic: Use creatorId if available, else fallback
+                  bool isMyRequest;
+                  if (t.creatorId.isNotEmpty) {
+                    isMyRequest = t.creatorId == widget.currentUserId;
+                  } else {
+                    // Legacy Fallback
+                    isMyRequest = isSentByMe;
+                  }
+
+                  // Check if it's a settlement
+                  final isSettlement = t.description.toLowerCase().contains(
+                    'settl',
+                  );
+
+                  if (isSettlement) {
+                    return Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isSentByMe ? 'You Gave' : 'You Got',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isSentByMe
-                                ? const Color(0xFFFF6B6B)
-                                : const Color(0xFF51CF66),
-                          ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${isSentByMe ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())}',
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: isSentByMe
-                                ? const Color(0xFFFF6B6B)
-                                : const Color(0xFF51CF66),
-                          ),
-                        ),
-                        if (t.description.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            t.description,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Row(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 16,
+                                  color: t.status == 'pending'
+                                      ? Colors.orange
+                                      : Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  t.status == 'pending'
+                                      ? 'Settlement Pending'
+                                      : 'Settlement Done',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: t.status == 'pending'
+                                        ? Colors.orange.shade800
+                                        : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
                             Text(
-                              DateFormat('MMM d, h:mm a').format(t.dateTime),
+                              '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())} • ${DateFormat('MMM d, h:mm a').format(t.dateTime)}',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 color: Colors.grey.shade500,
                               ),
                             ),
-                            if (t.status == 'pending' ||
-                                t.status == 'pending_approval') ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.access_time_filled,
-                                size: 12,
-                                color: Colors.orange.shade300,
+                            if (t.status == 'pending' && !isMyRequest) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      context
+                                          .read<LedgerProvider>()
+                                          .rejectLedgerTransaction(t.id);
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      child: Text(
+                                        'Reject',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  InkWell(
+                                    onTap: () {
+                                      context
+                                          .read<LedgerProvider>()
+                                          .acceptLedgerTransaction(t);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'Accept',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ],
                         ),
-                      ],
+                      ),
+                    ).animate().fadeIn(duration: 300.ms);
+                  }
+
+                  // PENDING REQUEST UI
+                  if (t.status == 'pending') {
+                    if (isMyRequest) {
+                      // Sent Request (Waiting)
+                      return Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.5),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Request Sent',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (t.description.isNotEmpty)
+                                Text(
+                                  t.description,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () {
+                                  context
+                                      .read<LedgerProvider>()
+                                      .deleteLedgerTransaction(t.id);
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(0, 0),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  foregroundColor: Colors.red,
+                                ),
+                                child: const Text('Cancel Request'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    } else {
+                      // Received Request (Action Needed)
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Confirmation Needed',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${widget.personName} claims you owe', // Contextual?
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              Text(
+                                '${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (t.description.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  t.description,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        context
+                                            .read<LedgerProvider>()
+                                            .rejectLedgerTransaction(t.id);
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                        side: const BorderSide(
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                      child: const Text('Reject'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        context
+                                            .read<LedgerProvider>()
+                                            .acceptLedgerTransaction(t);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Accept'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                  }
+
+                  // STANDARD CONFIRMED TRANSACTION
+                  return Align(
+                    alignment: isSentByMe
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.75,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isSentByMe
+                            ? const Color(0xFFFF6B6B).withOpacity(0.1)
+                            : Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(16),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
+                          bottomRight: Radius.circular(isSentByMe ? 4 : 16),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isSentByMe ? 'You Gave' : 'You Got',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isSentByMe
+                                  ? const Color(0xFFFF6B6B)
+                                  : const Color(0xFF51CF66),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${isSentByMe ? '-' : '+'}${widget.currencySymbol}${NumberFormat('#,##0').format(t.amount.abs())}',
+                            style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: isSentByMe
+                                  ? const Color(0xFFFF6B6B)
+                                  : const Color(0xFF51CF66),
+                            ),
+                          ),
+                          if (t.description.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              t.description,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                DateFormat('MMM d, h:mm a').format(t.dateTime),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                              // Removed the old 'pending' logic from here as it's handled above
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
-              },
+                  ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
+                },
+              ),
             ),
           ),
 

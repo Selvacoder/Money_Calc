@@ -377,67 +377,73 @@ class TransactionProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       print('Error adding item: $e');
-      rethrow;
+      return null; // Return null instead of rethrowing
     }
   }
 
   Future<String?> updateItem(String id, Map<String, dynamic> data) async {
-    // 1. Find existing item to backup for revert
-    final index = _quickItems.indexWhere((i) => i.id == id);
-    if (index == -1) return 'Item not found';
-    final oldItem = _quickItems[index];
+    try {
+      // 1. Find existing item to backup for revert
+      final index = _quickItems.indexWhere((i) => i.id == id);
+      if (index == -1) return 'Item not found';
+      final oldItem = _quickItems[index];
 
-    // 2. Create optimistic new item
-    // We need to merge 'data' with 'oldItem' fields
-    final newItem = Item(
-      id: oldItem.id,
-      userId: oldItem.userId,
-      title: data['title'] ?? oldItem.title,
-      amount: (data['amount'] ?? oldItem.amount).toDouble(),
-      isExpense: data['isExpense'] ?? oldItem.isExpense,
-      categoryId: data['categoryId'] ?? oldItem.categoryId,
-      usageCount: oldItem.usageCount,
-      frequency: data['frequency'] ?? oldItem.frequency,
-      icon: data['icon'] ?? oldItem.icon,
-      dueDay: data['dueDay'] ?? oldItem.dueDay,
-      isVariable:
-          data['isVariable'] ?? oldItem.isVariable, // Ensure isVariable copied
-    );
+      // 2. Create optimistic new item
+      // We need to merge 'data' with 'oldItem' fields
+      final newItem = Item(
+        id: oldItem.id,
+        userId: oldItem.userId,
+        title: data['title'] ?? oldItem.title,
+        amount: (data['amount'] ?? oldItem.amount).toDouble(),
+        isExpense: data['isExpense'] ?? oldItem.isExpense,
+        categoryId: data['categoryId'] ?? oldItem.categoryId,
+        usageCount: oldItem.usageCount,
+        frequency: data['frequency'] ?? oldItem.frequency,
+        icon: data['icon'] ?? oldItem.icon,
+        dueDay: data['dueDay'] ?? oldItem.dueDay,
+        isVariable:
+            data['isVariable'] ??
+            oldItem.isVariable, // Ensure isVariable copied
+      );
 
-    // 3. Update local state immediately
-    _quickItems[index] = newItem;
-    if (_isHiveInitialized) {
-      _itemBox.put(id, newItem);
-    }
-
-    // Also update category-specific list if present
-    final catIndex = _items.indexWhere((i) => i.id == id);
-    if (catIndex != -1) {
-      _items[catIndex] = newItem;
-    }
-
-    notifyListeners();
-
-    // 4. Perform API call
-    final error = await _appwriteService.updateItem(id, data);
-
-    if (error != null) {
-      print('Failed to update item $id on server: $error');
-      // Revert is fine for UPDATE, but for DELETE we want it gone.
-      // Keeping revert for update as it helps avoid state desync for editable fields.
-      _quickItems[index] = oldItem;
+      // 3. Update local state immediately
+      _quickItems[index] = newItem;
       if (_isHiveInitialized) {
-        _itemBox.put(id, oldItem);
+        _itemBox.put(id, newItem);
       }
+
+      // Also update category-specific list if present
+      final catIndex = _items.indexWhere((i) => i.id == id);
       if (catIndex != -1) {
-        _items[catIndex] = oldItem;
+        _items[catIndex] = newItem;
       }
+
       notifyListeners();
-      return error;
+
+      // 4. Perform API call
+      final error = await _appwriteService.updateItem(id, data);
+
+      if (error != null) {
+        print('Failed to update item $id on server: $error');
+        // Revert is fine for UPDATE, but for DELETE we want it gone.
+        // Keeping revert for update as it helps avoid state desync for editable fields.
+        _quickItems[index] = oldItem;
+        if (_isHiveInitialized) {
+          _itemBox.put(id, oldItem);
+        }
+        if (catIndex != -1) {
+          _items[catIndex] = oldItem;
+        }
+        notifyListeners();
+        return error;
+      }
+      // No need to call fetchData() if successful, unless we suspect side effects not covered here.
+      // Optimistic update is sufficient for this use case.
+      return null;
+    } catch (e) {
+      print('Error updating item: $e');
+      return e.toString();
     }
-    // No need to call fetchData() if successful, unless we suspect side effects not covered here.
-    // Optimistic update is sufficient for this use case.
-    return null;
   }
 
   Future<void> deleteItem(String id) async {

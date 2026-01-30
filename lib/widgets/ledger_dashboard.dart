@@ -69,50 +69,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Autocomplete<Map<String, dynamic>>(
-                    optionsBuilder: (TextEditingValue textEditingValue) async {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<Map<String, dynamic>>.empty();
-                      }
-                      return await AppwriteService().searchContacts(
-                        textEditingValue.text,
-                      );
-                    },
-                    displayStringForOption: (option) => option['name'] ?? '',
-                    onSelected: (Map<String, dynamic> selection) {
-                      nameController.text = selection['name'];
-                      if (selection['phone'] != null) {
-                        phoneController.text = selection['phone'];
-                      }
-                    },
-                    fieldViewBuilder:
-                        (context, controller, focusNode, onFieldSubmitted) {
-                          controller.addListener(
-                            () => nameController.text = controller.text,
-                          );
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            textCapitalization: TextCapitalization.sentences,
-                            inputFormatters: [
-                              CapitalizeFirstLetterTextFormatter(),
-                            ],
-                            decoration: InputDecoration(
-                              labelText: _isNotesMode
-                                  ? 'Person Name'
-                                  : (isReceived
-                                        ? 'Lender Name'
-                                        : 'Borrower Name'),
-                              prefixIcon: const Icon(Icons.person),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        },
-                  ),
                   if (!_isNotesMode) ...[
-                    const SizedBox(height: 16),
                     Row(
                       children: [
                         Container(
@@ -142,9 +99,14 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                                 try {
                                   final user = await AppwriteService()
                                       .getUserByPhone(fullPhone);
+
                                   setDialogState(() {
                                     isRegistered = user != null;
                                     checkingRegistration = false;
+                                    // Auto-fill Name if found!
+                                    if (user != null && user['name'] != null) {
+                                      nameController.text = user['name'];
+                                    }
                                   });
                                 } catch (e) {
                                   setDialogState(
@@ -217,7 +179,67 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 16),
                   ],
+                  Autocomplete<Map<String, dynamic>>(
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<Map<String, dynamic>>.empty();
+                      }
+                      return await AppwriteService().searchContacts(
+                        textEditingValue.text,
+                      );
+                    },
+                    displayStringForOption: (option) => option['name'] ?? '',
+                    onSelected: (Map<String, dynamic> selection) {
+                      nameController.text = selection['name'];
+                      if (selection['phone'] != null) {
+                        phoneController.text = selection['phone'];
+                      }
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      // Ensure controller stays in sync if manually updated (e.g. by auto-fill)
+                      // But here, 'controller' is local to Autocomplete.
+                      // We need to sync our external 'nameController' to this internal 'controller'.
+                      // Actually, we are passing 'nameController' text to 'controller' initially?
+                      // No, Autocomplete manages its own controller usually unless passed...
+                      // Wait, fieldViewBuilder gives us a controller.
+
+                      // Problem: We want to update the Name field when Phone updates.
+                      // But Autocomplete's text is managed by the controller provided in builder.
+                      // So we need to listen to nameController changes? Or just set the text?
+
+                      // Fix: We can't easily "push" text into the Autocomplete's internal controller from outside
+                      // unless we hack it or rebuild.
+                      // EASIER: In the fieldViewBuilder, check if nameController has text and set it?
+                      // Or better: Just use a standard TextField if checking phone first,
+                      // and Autocomplete is secondary.
+
+                      // Let's attach the nameController listener to update the builder's controller
+                      if (controller.text != nameController.text) {
+                        controller.text = nameController.text;
+                      }
+
+                      controller.addListener(
+                        () => nameController.text = controller.text,
+                      );
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        textCapitalization: TextCapitalization.sentences,
+                        inputFormatters: [CapitalizeFirstLetterTextFormatter()],
+                        decoration: InputDecoration(
+                          labelText: _isNotesMode
+                              ? 'Person Name'
+                              : (isReceived ? 'Lender Name' : 'Borrower Name'),
+                          prefixIcon: const Icon(Icons.person),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: amountController,
@@ -241,6 +263,8 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         );
                         if (nameController.text.isNotEmpty &&
                             amountController.text.isNotEmpty) {
+                          // Capture messenger before dialog closes
+                          final messenger = ScaffoldMessenger.of(context);
                           Navigator.pop(context); // Close dialog first
 
                           final phoneStr = phoneController.text.isEmpty
@@ -251,8 +275,11 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                           final userProvider = context.read<UserProvider>();
                           final currentUser = userProvider.user;
 
-                          final error = await context
-                              .read<LedgerProvider>()
+                          // Note: Reading provider after pop might be risky if context is invalidated,
+                          // but usually works if provider is higher up. Better to capture provider too.
+                          final ledgerProvider = context.read<LedgerProvider>();
+
+                          final error = await ledgerProvider
                               .addLedgerTransaction(
                                 nameController.text,
                                 phoneStr,
@@ -269,7 +296,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                           print('DEBUG: Provider returned error: $error');
 
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                 content: Text(
                                   'Debug: Phone=$phoneStr, Reg=$isRegistered, Err=$error',
@@ -283,7 +310,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                               !_isNotesMode &&
                               isRegistered == false &&
                               mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                 content: Text(
                                   'User not on MoneyCalc. Added to Notes.',
@@ -393,97 +420,104 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     // Net Balance formula: Received - Given
     double netBalance = totalReceived - totalSent;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildBalanceCard(
-            netBalance,
-            totalSent, // Rec (To Receive) = Money I Sent
-            totalReceived, // Sent (To Pay) = Money I Received
-            currencySymbol,
-          ),
-          const SizedBox(height: 24),
-          _buildToggleSwitch(),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  Icons.upload,
-                  _isNotesMode ? 'Give' : 'Lend',
-                  const Color(0xFFFF6B6B),
-                  () => _showAddDialog(
-                    isReceived: false,
-                    customStatus: _isNotesMode ? 'notes' : null,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildActionButton(
-                  Icons.download,
-                  _isNotesMode ? 'Get' : 'Receive',
-                  const Color(0xFF51CF66),
-                  () => _showAddDialog(
-                    isReceived: true,
-                    customStatus: _isNotesMode ? 'notes' : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _isNotesMode ? 'Recent Notes' : 'People',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (!_isNotesMode)
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'hidden') {
-                      _showHiddenPeopleDialog();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'hidden',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.visibility_off,
-                            size: 20,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(width: 8),
-                          Text('Hidden People'),
-                        ],
-                      ),
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ledgerProvider.fetchLedgerTransactions();
+      },
+      child: SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(), // Ensure scrollable even if content is short
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildBalanceCard(
+              netBalance,
+              totalSent, // Rec (To Receive) = Money I Sent
+              totalReceived, // Sent (To Pay) = Money I Received
+              currencySymbol,
+            ),
+            const SizedBox(height: 24),
+            _buildToggleSwitch(),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    Icons.upload,
+                    _isNotesMode ? 'Give' : 'Lend',
+                    const Color(0xFFFF6B6B),
+                    () => _showAddDialog(
+                      isReceived: false,
+                      customStatus: _isNotesMode ? 'notes' : null,
                     ),
-                  ],
-                  child: const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Icon(Icons.more_horiz),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildPeopleGrid(
-            activeTransactions,
-            myIdentities,
-            currencySymbol,
-            currentUserId,
-          ),
-          const SizedBox(height: 80),
-        ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildActionButton(
+                    Icons.download,
+                    _isNotesMode ? 'Get' : 'Receive',
+                    const Color(0xFF51CF66),
+                    () => _showAddDialog(
+                      isReceived: true,
+                      customStatus: _isNotesMode ? 'notes' : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isNotesMode ? 'Recent Notes' : 'People',
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (!_isNotesMode)
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'hidden') {
+                        _showHiddenPeopleDialog();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'hidden',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.visibility_off,
+                              size: 20,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(width: 8),
+                            Text('Hidden People'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.more_horiz),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildPeopleGrid(
+              activeTransactions,
+              myIdentities,
+              currencySymbol,
+              currentUserId,
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
       ),
     );
   }
@@ -667,9 +701,11 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     // Filter hidden people
     final hiddenPeople = context.read<LedgerProvider>().hiddenPeople;
 
+    // Use a complex key for grouping: Phone (priority) -> Name
     Map<String, double> balances = {};
     Map<String, String> names = {};
     Map<String, String> phones = {};
+    Map<String, DateTime> lastInteraction = {};
 
     for (var t in transactions) {
       final isSent =
@@ -678,29 +714,54 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       final otherName = isSent ? t.receiverName : t.senderName;
       final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
 
-      // Skip if hidden
+      // Skip if hidden (Check both name AND phone?)
       if (hiddenPeople.contains(otherName)) continue;
 
-      // Simple keying by name for now if phone is missing, but ideally phone
-      final key = otherName;
-      names[key] = otherName;
+      // Grouping Key Logic
+      String key;
+      if (otherPhone != null &&
+          otherPhone.isNotEmpty &&
+          !otherPhone.startsWith('local:')) {
+        // Primary Key: Normalized Phone
+        key = _normalizePhone(otherPhone);
+      } else {
+        // Fallback Key: Name (Lowercased for loose matching)
+        key = otherName.trim().toLowerCase();
+      }
 
-      // Store phone if available (prefer non-empty)
+      // Update Metadata (Keep most recent name, or non-phone name?)
+      // Strategy: Use the name associated with the transaction if we don't have one,
+      // or if this transaction is newer?
+      // Let's keep the longest name found? Or just the first encountered?
+      // Better: Keep the name from the *most recent* transaction.
+      if (!names.containsKey(key) ||
+          t.dateTime.isAfter(lastInteraction[key] ?? DateTime(2000))) {
+        names[key] = otherName;
+        lastInteraction[key] = t.dateTime;
+      }
+
       if (otherPhone != null && otherPhone.isNotEmpty) {
         phones[key] = otherPhone;
       }
 
+      // Aggregate Balance
       balances[key] = (balances[key] ?? 0) + (isSent ? t.amount : -t.amount);
     }
+
     return balances.entries
         .map(
           (e) => {
-            'name': names[e.key],
+            'name': names[e.key] ?? 'Unknown',
             'phone': phones[e.key] ?? '',
             'balance': e.value,
           },
         )
         .toList();
+  }
+
+  String _normalizePhone(String phone) {
+    String digits = phone.replaceAll(RegExp(r'\D'), '');
+    return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
   }
 
   Widget _buildBalanceCard(

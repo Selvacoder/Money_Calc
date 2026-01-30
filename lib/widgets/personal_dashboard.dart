@@ -40,373 +40,383 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Balance Cards
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _currentPage = (_currentPage + 1) % 5;
-              });
-            },
-            child: SizedBox(
-              height: 240,
-              child: provider.isLoading
-                  ? Shimmer.fromColors(
-                      baseColor: theme.brightness == Brightness.dark
-                          ? Colors.grey[800]!
-                          : Colors.grey[300]!,
-                      highlightColor: theme.brightness == Brightness.dark
-                          ? Colors.grey[700]!
-                          : Colors.grey[100]!,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
+    return RefreshIndicator(
+      onRefresh: () async {
+        await provider.fetchData();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Balance Cards
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _currentPage = (_currentPage + 1) % 5;
+                });
+              },
+              child: SizedBox(
+                height: 240,
+                child: provider.isLoading
+                    ? Shimmer.fromColors(
+                        baseColor: theme.brightness == Brightness.dark
+                            ? Colors.grey[800]!
+                            : Colors.grey[300]!,
+                        highlightColor: theme.brightness == Brightness.dark
+                            ? Colors.grey[700]!
+                            : Colors.grey[100]!,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                      )
+                    : AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        switchInCurve: Curves.easeInOut,
+                        switchOutCurve: Curves.easeInOut,
+                        transitionBuilder:
+                            (Widget child, Animation<double> animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.9,
+                                    end: 1.0,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              );
+                            },
+
+                        child: KeyedSubtree(
+                          key: ValueKey<int>(_currentPage),
+                          child: _buildCurrentBalanceCard(
+                            provider,
+                            colorScheme,
+                            currencySymbol,
+                          ),
                         ),
                       ),
-                    )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      switchInCurve: Curves.easeInOut,
-                      switchOutCurve: Curves.easeInOut,
-                      transitionBuilder:
-                          (Widget child, Animation<double> animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: ScaleTransition(
-                                scale: Tween<double>(
-                                  begin: 0.9,
-                                  end: 1.0,
-                                ).animate(animation),
-                                child: child,
-                              ),
-                            );
-                          },
+              ),
+            ),
+            const SizedBox(height: 16),
 
-                      child: KeyedSubtree(
-                        key: ValueKey<int>(_currentPage),
-                        child: _buildCurrentBalanceCard(
-                          provider,
-                          colorScheme,
-                          currencySymbol,
+            const SizedBox(height: 32),
+
+            // Quick Entries Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isReordering ? 'Reordering Items...' : 'Quick Entries',
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                _isReordering
+                    ? TextButton.icon(
+                        onPressed: () => setState(() => _isReordering = false),
+                        icon: const Icon(Icons.check),
+                        label: const Text('Done'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colorScheme.primary,
                         ),
+                      )
+                    : IconButton(
+                        onPressed: _showAddItemDialog, // Updated
+                        icon: const Icon(Icons.add_circle),
+                        color: colorScheme.primary,
                       ),
-                    ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
 
-          const SizedBox(height: 32),
+            const SizedBox(height: 12),
 
-          // Quick Entries Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _isReordering ? 'Reordering Items...' : 'Quick Entries',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(20),
               ),
-              _isReordering
-                  ? TextButton.icon(
-                      onPressed: () => setState(() => _isReordering = false),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Done'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: colorScheme.primary,
-                      ),
-                    )
-                  : IconButton(
-                      onPressed: _showAddItemDialog, // Updated
-                      icon: const Icon(Icons.add_circle),
-                      color: colorScheme.primary,
-                    ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min, // Center content
-                children: [
-                  _buildToggleOption(
-                    'Daily',
-                    _entryMode == 'daily',
-                    () => setState(() => _entryMode = 'daily'),
-                  ),
-                  _buildToggleOption(
-                    'Monthly',
-                    _entryMode == 'monthly',
-                    () => setState(() => _entryMode = 'monthly'),
-                  ),
-                  _buildToggleOption(
-                    'Variable',
-                    _entryMode == 'variable',
-                    () => setState(() => _entryMode = 'variable'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Quick Entries - Dynamic Display
-          () {
-            if (provider.isLoading) {
-              return _buildSkeletonLoader();
-            }
-
-            final items = provider.items.where((item) {
-              if (_entryMode == 'variable') {
-                return item.isVariable ?? false;
-              } else {
-                // Show fixed AND variable items matching the frequency
-                return item.frequency == _entryMode;
-              }
-            }).toList();
-
-            if (items.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    _entryMode == 'daily'
-                        ? 'No daily entries yet.'
-                        : (_entryMode == 'monthly'
-                              ? 'No monthly entries yet.'
-                              : 'No variable entries yet.'),
-                    style: GoogleFonts.inter(color: Colors.grey),
-                  ),
-                ),
-              );
-            }
-
-            return ReorderableGridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1.1,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: items.length,
-              onReorder: (oldIndex, newIndex) {
-                final item = items.removeAt(oldIndex);
-                items.insert(newIndex, item);
-                provider.updateItemsOrder(items);
-              },
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Container(
-                  key: ValueKey(item.id),
-                  child: _buildItemButton(item, currencySymbol),
-                );
-              },
-            );
-          }(),
-
-          const SizedBox(height: 32),
-
-          const SizedBox(height: 16),
-
-          // Recent Transactions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Recent Transactions',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Recent Transactions - Last 24 Hours with Show More/Less
-          () {
-            if (provider.isLoading) {
-              return Shimmer.fromColors(
-                baseColor: theme.brightness == Brightness.dark
-                    ? Colors.grey[800]!
-                    : Colors.grey[300]!,
-                highlightColor: theme.brightness == Brightness.dark
-                    ? Colors.grey[700]!
-                    : Colors.grey[100]!,
-                child: Column(
-                  children: List.generate(
-                    3,
-                    (index) => Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      height: 70,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            final now = DateTime.now();
-            final last24Hours = now.subtract(const Duration(hours: 24));
-
-            final last24HoursTransactions = provider.transactions
-                .where((tx) => tx.dateTime.isAfter(last24Hours))
-                .toList();
-
-            final transactionsToShow = _showMoreTransactions
-                ? last24HoursTransactions
-                : last24HoursTransactions.take(5).toList();
-
-            if (last24HoursTransactions.isEmpty) {
-              return Center(
-                child: Column(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min, // Center content
                   children: [
-                    const Icon(
-                      Icons.receipt_long_outlined,
-                      size: 48,
-                      color: Colors.grey,
+                    _buildToggleOption(
+                      'Daily',
+                      _entryMode == 'daily',
+                      () => setState(() => _entryMode = 'daily'),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No transactions in last 24 hours',
-                      style: GoogleFonts.inter(color: Colors.grey),
+                    _buildToggleOption(
+                      'Monthly',
+                      _entryMode == 'monthly',
+                      () => setState(() => _entryMode = 'monthly'),
+                    ),
+                    _buildToggleOption(
+                      'Variable',
+                      _entryMode == 'variable',
+                      () => setState(() => _entryMode = 'variable'),
                     ),
                   ],
                 ),
-              );
-            }
+              ),
+            ),
 
-            return Column(
-              children: [
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: transactionsToShow.length,
-                  itemBuilder: (context, index) {
-                    final tx = transactionsToShow[index];
-                    return Dismissible(
-                      key: Key(tx.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        color: Colors.red,
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      // Removed confirmDismiss to allow instant delete
-                      onDismissed: (direction) {
-                        context.read<TransactionProvider>().deleteTransaction(
-                          tx.id,
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Deleted ${tx.title}')),
-                        );
-                      },
-                      child: ListTile(
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => TransactionDetailsDialog(
-                              transaction: tx,
-                              currencySymbol: currencySymbol,
-                            ),
-                          );
-                        },
-                        leading: CircleAvatar(
-                          backgroundColor: tx.isExpense
-                              ? Colors.red.withOpacity(0.1)
-                              : Colors.green.withOpacity(0.1),
-                          child: Icon(
-                            tx.isExpense
-                                ? Icons.arrow_downward
-                                : Icons.arrow_upward,
-                            color: tx.isExpense ? Colors.red : Colors.green,
-                          ),
-                        ),
-                        title: Text(
-                          tx.title,
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                          tx.dateTime.toString().split(' ')[0],
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${tx.isExpense ? '-' : '+'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                color: tx.isExpense ? Colors.red : Colors.green,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                                size: 20,
-                              ),
-                              onPressed: () => _deleteTransaction(tx),
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                if (last24HoursTransactions.length > 5) ...[
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _showMoreTransactions = !_showMoreTransactions;
-                      });
-                    },
-                    icon: Icon(
-                      _showMoreTransactions
-                          ? Icons.expand_less
-                          : Icons.expand_more,
-                      size: 16,
-                    ),
-                    label: Text(
-                      _showMoreTransactions
-                          ? 'Show Less'
-                          : 'Show More (${last24HoursTransactions.length - 5} more)',
-                      style: GoogleFonts.inter(fontSize: 12),
+            const SizedBox(height: 16),
+
+            // Quick Entries - Dynamic Display
+            () {
+              if (provider.isLoading) {
+                return _buildSkeletonLoader();
+              }
+
+              final items = provider.items.where((item) {
+                if (_entryMode == 'variable') {
+                  return item.isVariable ?? false;
+                } else {
+                  // Show fixed AND variable items matching the frequency
+                  return item.frequency == _entryMode;
+                }
+              }).toList();
+
+              if (items.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      _entryMode == 'daily'
+                          ? 'No daily entries yet.'
+                          : (_entryMode == 'monthly'
+                                ? 'No monthly entries yet.'
+                                : 'No variable entries yet.'),
+                      style: GoogleFonts.inter(color: Colors.grey),
                     ),
                   ),
-                ],
+                );
+              }
+
+              return ReorderableGridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1.1,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: items.length,
+                onReorder: (oldIndex, newIndex) {
+                  final item = items.removeAt(oldIndex);
+                  items.insert(newIndex, item);
+                  provider.updateItemsOrder(items);
+                },
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  return Container(
+                    key: ValueKey(item.id),
+                    child: _buildItemButton(item, currencySymbol),
+                  );
+                },
+              );
+            }(),
+
+            const SizedBox(height: 32),
+
+            const SizedBox(height: 16),
+
+            // Recent Transactions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Transactions',
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
-            );
-          }(),
-          const SizedBox(height: 80),
-        ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Recent Transactions - Last 24 Hours with Show More/Less
+            () {
+              if (provider.isLoading) {
+                return Shimmer.fromColors(
+                  baseColor: theme.brightness == Brightness.dark
+                      ? Colors.grey[800]!
+                      : Colors.grey[300]!,
+                  highlightColor: theme.brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[100]!,
+                  child: Column(
+                    children: List.generate(
+                      3,
+                      (index) => Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final now = DateTime.now();
+              final last24Hours = now.subtract(const Duration(hours: 24));
+
+              final last24HoursTransactions = provider.transactions
+                  .where((tx) => tx.dateTime.isAfter(last24Hours))
+                  .toList();
+
+              final transactionsToShow = _showMoreTransactions
+                  ? last24HoursTransactions
+                  : last24HoursTransactions.take(5).toList();
+
+              if (last24HoursTransactions.isEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.receipt_long_outlined,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No transactions in last 24 hours',
+                        style: GoogleFonts.inter(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Column(
+                children: [
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: transactionsToShow.length,
+                    itemBuilder: (context, index) {
+                      final tx = transactionsToShow[index];
+                      return Dismissible(
+                        key: Key(tx.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          color: Colors.red,
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        // Removed confirmDismiss to allow instant delete
+                        onDismissed: (direction) {
+                          context.read<TransactionProvider>().deleteTransaction(
+                            tx.id,
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Deleted ${tx.title}')),
+                          );
+                        },
+                        child: ListTile(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => TransactionDetailsDialog(
+                                transaction: tx,
+                                currencySymbol: currencySymbol,
+                              ),
+                            );
+                          },
+                          leading: CircleAvatar(
+                            backgroundColor: tx.isExpense
+                                ? Colors.red.withOpacity(0.1)
+                                : Colors.green.withOpacity(0.1),
+                            child: Icon(
+                              tx.isExpense
+                                  ? Icons.arrow_downward
+                                  : Icons.arrow_upward,
+                              color: tx.isExpense ? Colors.red : Colors.green,
+                            ),
+                          ),
+                          title: Text(
+                            tx.title,
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: Text(
+                            tx.dateTime.toString().split(' ')[0],
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${tx.isExpense ? '-' : '+'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  color: tx.isExpense
+                                      ? Colors.red
+                                      : Colors.green,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                  size: 20,
+                                ),
+                                onPressed: () => _deleteTransaction(tx),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (last24HoursTransactions.length > 5) ...[
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _showMoreTransactions = !_showMoreTransactions;
+                        });
+                      },
+                      icon: Icon(
+                        _showMoreTransactions
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                      ),
+                      label: Text(
+                        _showMoreTransactions
+                            ? 'Show Less'
+                            : 'Show More (${last24HoursTransactions.length - 5} more)',
+                        style: GoogleFonts.inter(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            }(),
+            const SizedBox(height: 80),
+          ],
+        ),
       ),
     );
   }

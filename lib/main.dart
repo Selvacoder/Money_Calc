@@ -15,14 +15,16 @@ import 'models/transaction.dart';
 import 'models/category.dart';
 import 'models/item.dart';
 import 'models/ledger_transaction.dart';
+import 'models/user_profile.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/ledger_screen.dart';
 import 'providers/investment_provider.dart';
+import 'providers/dutch_provider.dart';
+import 'providers/notification_provider.dart';
 
 import 'services/notification_service.dart';
-import 'services/appwrite_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +39,7 @@ void main() async {
   Hive.registerAdapter(LedgerTransactionAdapter());
   Hive.registerAdapter(InvestmentAdapter());
   Hive.registerAdapter(InvestmentTransactionAdapter());
+  Hive.registerAdapter(UserProfileAdapter());
 
   runApp(const MyApp());
 }
@@ -54,6 +57,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => CurrencyProvider()),
         ChangeNotifierProvider(create: (_) => InvestmentProvider()),
+        ChangeNotifierProvider(create: (_) => DutchProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: Consumer2<UserProvider, ThemeProvider>(
         builder: (context, userProvider, themeProvider, _) {
@@ -136,21 +141,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
     await NotificationService().init();
     await NotificationService().requestPermissions();
 
-    // Setup Realtime Listener if logged in
-    // final user = context.read<UserProvider>().user;
-    /* 
-    // Temporarily disabled due to WebSocket 400 Error (Invalid Channel/Collection ID)
-    if (user != null) {
-      AppwriteService().subscribeToNotifications(user.userId, (data) {
-        NotificationService().showNotification(
-          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          title: data['title'] ?? 'New Notification',
-          body: data['message'] ?? '',
-          payload: data['type'],
-        );
-      });
+    // Setup Notification Provider
+    if (mounted) {
+      final user = context.read<UserProvider>().user;
+      if (user != null) {
+        context.read<NotificationProvider>().init(user.userId);
+      }
     }
-    */
   }
 
   @override

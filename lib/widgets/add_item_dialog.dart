@@ -400,7 +400,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: iconOptions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (context, index) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final iconName = iconOptions[index];
           final isSelected = _selectedIcon == iconName;
@@ -639,8 +639,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
     required bool isUpdate,
   }) async {
     if (_dueDay == null || _isDaily) {
-      if (isUpdate)
+      if (isUpdate) {
         await NotificationService().cancelNotification(itemId.hashCode);
+      }
       return;
     }
 

@@ -1,0 +1,10 @@
+{
+  "name": "create_dutch_group",
+  "version": "1.0.0",
+  "description": "Create Dutch Group with Secure RLS Permissions",
+  "main": "main.js",
+  "dependencies": {
+    "node-appwrite": "^14.0.0",
+    "nanoid": "^5.0.0"
+  }
+}

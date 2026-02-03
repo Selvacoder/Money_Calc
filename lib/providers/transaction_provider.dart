@@ -82,6 +82,14 @@ class TransactionProvider extends ChangeNotifier {
 
       notifyListeners(); // Show cached data
 
+      // Check Login before network call
+      if (!await _appwriteService.isLoggedIn()) {
+        print('DEBUG: Not logged in, skipping network fetch for transactions');
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
       // 2. Fetch from Network
       // Transactions
       final transactionData = await _appwriteService.getTransactions();
@@ -191,7 +199,9 @@ class TransactionProvider extends ChangeNotifier {
       // For now, let's just accept the loop index + generic offset?
       // Or use timestamp? No.
       // Let's just use 0, 1, 2... for these.
-      for (int i = 0; i < currentOrders.length; i++) currentOrders[i] = i;
+      for (int i = 0; i < currentOrders.length; i++) {
+        currentOrders[i] = i;
+      }
     }
 
     // 2. Assign new orders

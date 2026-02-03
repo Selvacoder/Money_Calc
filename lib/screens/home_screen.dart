@@ -13,9 +13,10 @@ import '../providers/investment_provider.dart';
 import '../widgets/personal_dashboard.dart';
 import '../widgets/ledger_dashboard.dart';
 import '../widgets/investment_dashboard.dart';
+import '../widgets/dutch_dashboard.dart';
 
 import 'ledger_history_screen.dart';
-import 'ledger/ledger_due_date_screen.dart'; // NEW
+import 'ledger/ledger_due_date_screen.dart';
 import 'notification_screen.dart';
 import 'ledger_graph_screen.dart';
 import 'personal_history_screen.dart';
@@ -25,6 +26,9 @@ import 'investment_graph_screen.dart';
 import 'account_screen.dart';
 import 'category_screen.dart';
 import 'ai_analyzer_screen.dart';
+import 'dutch/dutch_history_screen.dart';
+import 'dutch/dutch_reports_screen.dart';
+import '../providers/dutch_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -77,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<TransactionProvider>().fetchData();
       context.read<LedgerProvider>().fetchLedgerTransactions();
       context.read<InvestmentProvider>().fetchInvestments();
+      context.read<DutchProvider>().fetchGlobalData();
     });
   }
 
@@ -181,6 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildToggleBtn('Personal', 0),
                   _buildToggleBtn('Ledger', 1),
                   _buildToggleBtn('Investment', 2),
+                  _buildToggleBtn('Dutch', 3), // NEW
                 ],
               ),
             ),
@@ -219,6 +225,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icon(Icons.auto_awesome),
                 label: 'AI Analyzer',
               ),
+            // Dutch Mode (3) currently has no special second tab, or maybe "Scan"?
+            // For now, standard History/Report
             const NavigationDestination(
               icon: Icon(Icons.history),
               label: 'History',
@@ -277,74 +285,60 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUserContact = userProvider.user?.phone ?? '';
     final ledgerTransactions = ledgerProvider.ledgerTransactions;
 
-    // Index Mapping Logic
-    // Mode 0: 0=Home, 1=Category, 2=History, 3=Report
-    // Mode 1/2: 0=Home, 1=History, 2=Report
-
-    // Simplified Logic Index Mapping:
-
-    // Mode 0 (Personal): 0=Dash, 1=Category, 2=History, 3=Report
-    // Mode 1 (Ledger):   0=Dash, 1=DueDate, 2=History, 3=Report
-    // Mode 2 (Invest):   0=Dash, 1=AI,      2=History, 3=Report
-
-    int adjustedIndex = 0;
-
-    if (_currentMode == 0) {
-      // Personal matches standard flow
-      adjustedIndex = _selectedIndex;
-    } else if (_currentMode == 1) {
-      // Ledger: 0, 1(Due), 2(Hist), 3(Rep)
-      // Since bottom bar has 4 items in this mode, _selectedIndex maps 1:1 to desired tabs
-      adjustedIndex = _selectedIndex;
-    } else if (_currentMode == 2) {
-      // Investment: 0, 1(AI), 2(Hist), 3(Rep)
-      // Standard 1:1 mapping
-      adjustedIndex = _selectedIndex;
-    }
-
-    // However, the SWITCH below uses global "Content Type" IDs which were previously:
-    // 0: Dash, 1: Category, 2: AI, 3: History, 4: Report
-    // We need to map `adjustedIndex` to these `case` IDs.
+    // Index Logic Update for Dutch (Mode 3)
+    // Mode 3: 0=Dash, 1=History, 2=Report
 
     int contentId = 0;
 
     if (_currentMode == 0) {
-      // 0->0, 1->1, 2->3, 3->4
-      if (_selectedIndex == 0)
+      if (_selectedIndex == 0) {
         contentId = 0;
-      else if (_selectedIndex == 1)
+      } else if (_selectedIndex == 1) {
         contentId = 1; // Category
-      else if (_selectedIndex == 2)
+      } else if (_selectedIndex == 2) {
         contentId = 3; // History
-      else if (_selectedIndex == 3)
+      } else if (_selectedIndex == 3) {
         contentId = 4; // Report
+      }
     } else if (_currentMode == 1) {
-      // 0->0, 1->5 (NEW DueDate), 2->3 (History), 3->4 (Report)
-      if (_selectedIndex == 0)
+      if (_selectedIndex == 0) {
         contentId = 0;
-      else if (_selectedIndex == 1)
+      } else if (_selectedIndex == 1) {
         contentId = 5; // Due Date
-      else if (_selectedIndex == 2)
-        contentId = 3; // History
-      else if (_selectedIndex == 3)
-        contentId = 4; // Report
-    } else {
-      // 0->0, 1->2 (AI), 2->3 (History), 3->4 (Report)
-      if (_selectedIndex == 0)
+      } else if (_selectedIndex == 2) {
+        contentId = 3;
+      } else if (_selectedIndex == 3) {
+        contentId = 4;
+      }
+    } else if (_currentMode == 2) {
+      if (_selectedIndex == 0) {
         contentId = 0;
-      else if (_selectedIndex == 1)
+      } else if (_selectedIndex == 1) {
         contentId = 2; // AI
-      else if (_selectedIndex == 2)
-        contentId = 3; // History
-      else if (_selectedIndex == 3)
-        contentId = 4; // Report
+      } else if (_selectedIndex == 2) {
+        contentId = 3;
+      } else if (_selectedIndex == 3) {
+        contentId = 4;
+      }
+    } else if (_currentMode == 3) {
+      // Dutch
+      if (_selectedIndex == 0) {
+        contentId = 0;
+      }
+      // Index 1 triggers History because we have no middle tab
+      else if (_selectedIndex == 1) {
+        contentId = 3;
+      } else if (_selectedIndex == 2) {
+        contentId = 4;
+      }
     }
 
     switch (contentId) {
       case 0: // Dashboard
         if (_currentMode == 0) return const PersonalDashboard();
         if (_currentMode == 1) return const LedgerDashboard();
-        return const InvestmentDashboard();
+        if (_currentMode == 2) return const InvestmentDashboard();
+        return const DutchDashboard(); // Mode 3
 
       case 1: // Category (Personal)
         return const CategoryScreen();
@@ -360,10 +354,9 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         if (_currentMode == 1) {
-          final userProvider = context.watch<UserProvider>();
           final myIdentities = [
-            if (userProvider.user?.phone != null) userProvider.user!.phone!,
-            if (userProvider.user?.email != null) userProvider.user!.email!,
+            if (userProvider.user?.phone != null) userProvider.user!.phone,
+            if (userProvider.user?.email != null) userProvider.user!.email,
           ].cast<String>();
 
           return LedgerHistoryScreen(
@@ -372,7 +365,8 @@ class _HomeScreenState extends State<HomeScreen> {
             currencySymbol: currencySymbol,
           );
         }
-        return const InvestmentHistoryScreen();
+        if (_currentMode == 2) return const InvestmentHistoryScreen();
+        return const DutchHistoryScreen(isGlobal: true);
 
       case 4: // Graph/Report
         if (_currentMode == 0) return const PersonalGraphScreen();
@@ -383,7 +377,8 @@ class _HomeScreenState extends State<HomeScreen> {
             currencySymbol: currencySymbol,
           );
         }
-        return const InvestmentGraphScreen();
+        if (_currentMode == 2) return const InvestmentGraphScreen();
+        return const DutchReportsScreen(isGlobal: true);
 
       case 5: // Due Date (Ledger)
         return const LedgerDueDateScreen();

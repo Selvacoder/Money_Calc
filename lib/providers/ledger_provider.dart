@@ -53,6 +53,11 @@ class LedgerProvider extends ChangeNotifier {
       final user = await _appwriteService.getCurrentUser();
       if (user != null) {
         _currentUserId = user['userId'];
+      } else {
+        debugPrint('DEBUG: No user for ledger, skipping network fetch');
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
     }
 
@@ -425,8 +430,9 @@ class LedgerProvider extends ChangeNotifier {
     for (var ledgerTx in _ledgerTransactions) {
       if (ledgerTx.dateTime.isBefore(
         DateTime.now().subtract(const Duration(minutes: 5)),
-      ))
+      )) {
         continue;
+      }
       final isSynced = transactionProvider.transactions.any(
         (t) => t.ledgerId == ledgerTx.id,
       );
@@ -544,7 +550,7 @@ class LedgerProvider extends ChangeNotifier {
   void _subscribeToRealtime() {
     if (_ledgerSubscription != null) return;
 
-    _ledgerSubscription = _appwriteService.subscribeToLedgerUpdates(
+    final sub = _appwriteService.subscribeToLedgerUpdates(
       (message) {
         final event = message.events.firstWhere(
           (e) => e.contains('.documents.'),
@@ -553,7 +559,7 @@ class LedgerProvider extends ChangeNotifier {
         final payload = message.payload;
         // if (payload == null) return;
 
-        print('DEBUG: Realtime Event: ${event}, Payload: $payload');
+        print('DEBUG: Realtime Event: $event, Payload: $payload');
 
         try {
           final tx = LedgerTransaction.fromJson(payload);
@@ -571,16 +577,24 @@ class LedgerProvider extends ChangeNotifier {
       },
       onError: (e) {
         print('Realtime connection failed: $e. Switching to Polling Mode.');
+        _ledgerSubscription?.close().catchError((_) {});
+        _ledgerSubscription = null;
         startPolling();
       },
     );
+
+    if (sub != null) {
+      _ledgerSubscription = sub;
+    } else {
+      print('DEBUG: Realtime subscription unavailable, starting polling');
+      startPolling();
+    }
   }
 
   void startPolling() {
-    stopPolling(); // Cancel existing if any
-    print('DEBUG: Starting Polling Mode (Every 10s)');
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      print('DEBUG: Polling Ledger Transactions...');
+    if (_pollingTimer != null) return;
+    print('DEBUG: Starting Fallback Polling for Ledger (30s)...');
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       fetchLedgerTransactions(silent: true);
     });
   }

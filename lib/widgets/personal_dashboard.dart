@@ -219,7 +219,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   final item = items[index];
                   return Container(
                     key: ValueKey(item.id),
-                    child: _buildItemButton(item, currencySymbol),
+                    child: _buildItemButton(
+                      item,
+                      currencySymbol,
+                      provider.transactions, // Pass transactions here
+                    ),
                   );
                 },
               );
@@ -465,7 +469,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     );
   }
 
-  Widget _buildItemButton(dynamic item, String currencySymbol) {
+  Widget _buildItemButton(
+    dynamic item,
+    String currencySymbol,
+    List<Transaction> transactions,
+  ) {
     final theme = Theme.of(context);
 
     // Map icon string to IconData
@@ -490,12 +498,19 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     Color backgroundColor = theme.cardColor;
     Color borderColor = theme.colorScheme.primary.withOpacity(0.3);
 
+    String displayAmount = '$currencySymbol${item.amount.toStringAsFixed(0)}';
+
     if (item.isVariable) {
-      backgroundColor = Colors.yellow.shade100;
-      if (theme.brightness == Brightness.dark) {
-        backgroundColor = Colors.yellow.shade900.withOpacity(0.3);
+      // Find last transaction amount for this item
+      try {
+        final lastTransaction = transactions.firstWhere(
+          (t) => t.itemId == item.id,
+        );
+        displayAmount =
+            '$currencySymbol${lastTransaction.amount.toStringAsFixed(0)}';
+      } catch (e) {
+        displayAmount = 'Variable';
       }
-      borderColor = Colors.yellow.shade700;
     } else if (item.dueDay != null) {
       final now = DateTime.now();
       DateTime nextDue = DateTime(now.year, now.month, item.dueDay!);
@@ -562,7 +577,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   Icon(
                     iconData,
                     color: item.isVariable
-                        ? Colors.orange
+                        ? Colors.amber.shade700
                         : (item.isExpense ? Colors.red : Colors.green),
                     size: 28,
                   ),
@@ -583,14 +598,12 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    item.isVariable
-                        ? 'Variable'
-                        : '$currencySymbol${item.amount.toStringAsFixed(0)}',
+                    displayAmount,
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: item.isVariable
-                          ? Colors.orange.shade800
+                          ? Colors.amber.shade700
                           : (item.isExpense ? Colors.red : Colors.green),
                     ),
                   ),

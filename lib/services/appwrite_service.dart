@@ -3,6 +3,7 @@ import 'package:appwrite/appwrite.dart';
 import '../config/appwrite_config.dart';
 import 'dart:convert'; // Added for jsonEncode
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 
 import 'package:appwrite/models.dart';
 
@@ -12,6 +13,8 @@ class AppwriteService {
   AppwriteService._internal() {
     init();
   }
+
+  static bool _realtimeFailed = false; // Global flag to avoid repeated failures
 
   late Client client;
   late Account account;
@@ -33,43 +36,67 @@ class AppwriteService {
   late Functions functions;
 
   // Subscribe to Realtime Notifications
-  RealtimeSubscription subscribeToNotifications(
+  RealtimeSubscription? subscribeToNotifications(
     String userId,
-    Function(Map<String, dynamic>) onNotification,
-  ) {
-    // Listen to changes in the 'notifications' collection
-    // Filter by userId would be ideal, but Realtime channels are usually collection-level or document-level.
-    // We can listen to the collection and filter client-side, OR listen to a channel query if supported.
-    // Appwrite Realtime supports channels like 'databases.{id}.collections.{id}.documents'
+    void Function(Map<String, dynamic>) onNotification, {
+    void Function(dynamic)? onError,
+  }) {
+    if (_realtimeFailed) return null;
 
-    // We will listen to the entire collection but we need to secure it so users only see their own.
-    // Since we can't easily filter Realtime *streams* by query in client SDK (it receives all events for the channel permission),
-    // we rely on Row Level Security (RLS). If RLS is set up, the user only receives events for docs they can read.
-    // Assuming 'notifications' collection has RLS set to 'users' or specific user permission.
+    final channel =
+        'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.notificationsCollectionId}.documents';
 
-    final subscription = realtime.subscribe([
-      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.notificationsCollectionId}.documents',
-    ]);
+    final subscription = realtime.subscribe([channel]);
 
     subscription.stream.listen(
       (response) {
-        // Check if any event is a create event
         final isCreate = response.events.any(
           (event) => event.endsWith('.create'),
         );
-
         if (isCreate) {
           final data = response.payload;
-          if (data['userId'] == userId) {
+          // Filter by receiverId (formerly userId)
+          if (data['receiverId'] == userId) {
             onNotification(data);
           }
         }
       },
       onError: (error) {
-        print('Appwrite Realtime Error: $error');
+        print('Notification Realtime Error: $error');
+        if (error.toString().contains('400')) {
+          _realtimeFailed = true;
+        }
+        if (onError != null) onError(error);
       },
-      onDone: () {
-        print('Appwrite Realtime Connection Closed');
+    );
+
+    return subscription;
+  }
+
+  // Subscribe to Dutch Group Updates (Expenses & Settlements)
+  RealtimeSubscription? subscribeToDutchUpdates(
+    String groupId,
+    void Function(RealtimeMessage) onUpdate, {
+    void Function(dynamic)? onError,
+  }) {
+    if (_realtimeFailed) return null;
+    final subscription = realtime.subscribe([
+      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.dutchExpensesCollectionId}.documents',
+      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.dutchSettlementsCollectionId}.documents',
+    ]);
+
+    subscription.stream.listen(
+      (response) {
+        if (response.payload['groupId'] == groupId) {
+          onUpdate(response);
+        }
+      },
+      onError: (error) {
+        print('Dutch Realtime Error: $error');
+        if (error.toString().contains('400')) {
+          _realtimeFailed = true;
+        }
+        if (onError != null) onError(error);
       },
     );
 
@@ -466,10 +493,12 @@ class AppwriteService {
         status = 'pending';
       } else if (status == 'pending') {
         // If we expected it to be pending (based on input) but failed to resolve IDs
-        if (senderId.isEmpty)
+        if (senderId.isEmpty) {
           throw 'Cannot request money: Sender not registered';
-        if (receiverId.isEmpty)
+        }
+        if (receiverId.isEmpty) {
           throw 'Cannot request money: Receiver not registered';
+        }
       }
       print(
         'DEBUG: Final decision - Sender: $senderId, Receiver: $receiverId, Status: $status',
@@ -565,7 +594,7 @@ class AppwriteService {
     );
     try {
       final execution = await functions.createExecution(
-        functionId: '697b2e5a00268c4ab313',
+        functionId: AppwriteConfig.shareTransactionFunctionId,
         body: jsonEncode({
           'transactionId': transactionId,
           'receiverId': receiverId,
@@ -597,6 +626,30 @@ class AppwriteService {
     }
   }
 
+  // Get multiple profiles by their userIds
+  Future<List<Map<String, dynamic>>> getProfilesByIds(
+    List<String> userIds,
+  ) async {
+    try {
+      if (userIds.isEmpty) return [];
+
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.profilesCollectionId,
+        queries: [Query.equal('userId', userIds), Query.limit(userIds.length)],
+      );
+
+      return result.documents.map((doc) {
+        final data = doc.data;
+        data['id'] = doc.$id;
+        return data;
+      }).toList();
+    } catch (e) {
+      print('Error fetching profiles by IDs: $e');
+      return [];
+    }
+  }
+
   // Get User by Phone (for Ledger linking)
   Future<Map<String, dynamic>?> getUserByPhone(String phone) async {
     try {
@@ -618,7 +671,10 @@ class AppwriteService {
       );
 
       if (result.documents.isNotEmpty) {
-        return result.documents.first.data;
+        final doc = result.documents.first;
+        final data = doc.data;
+        data['\$id'] = doc.$id; // Inject ID
+        return data;
       }
       return null;
     } catch (e) {
@@ -1327,40 +1383,23 @@ class AppwriteService {
     required String message,
     required String type, // 'nudge', 'reminder', etc.
   }) async {
-    try {
-      await databases.createDocument(
-        databaseId: AppwriteConfig.databaseId,
-        collectionId: AppwriteConfig.notificationsCollectionId,
-        documentId: ID.unique(),
-        data: {
-          'userId': userId,
-          'title': title,
-          'message': message,
-          'type': type,
-          'isRead': false,
-          'createdAt': DateTime.now().toIso8601String(),
-        },
-        permissions: [
-          Permission.read(Role.user(userId)),
-          Permission.write(Role.user(userId)),
-        ],
-      );
-    } catch (e) {
-      print('Error sending notification: $e');
-      rethrow;
-    }
+    // Forward to unified createNotification method
+    await createNotification(
+      receiverId: userId,
+      title: title,
+      message: message,
+      type: type,
+    );
   }
   // --- INVESTMENTS ---
 
   Future<List<Map<String, dynamic>>> getInvestments() async {
     try {
-      final user = await account.get();
+      // final user = await account.get(); // Not needed for RLS
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.investmentsCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-        ],
+        queries: [], // Empty for RLS strict mode
       );
 
       return result.documents.map((doc) {
@@ -1449,14 +1488,11 @@ class AppwriteService {
 
   Future<List<Map<String, dynamic>>> getInvestmentTransactions() async {
     try {
-      final user = await account.get();
+      // final user = await account.get(); // Not needed for RLS
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.investmentTransactionsCollectionId,
-        queries: [
-          Query.equal('userId', [user.$id]),
-          Query.orderDesc('dateTime'),
-        ],
+        queries: [], // Empty for RLS strict mode
       );
 
       return result.documents.map((doc) {
@@ -1521,10 +1557,11 @@ class AppwriteService {
   }
 
   // Realtime Subscription for Ledger
-  RealtimeSubscription subscribeToLedgerUpdates(
+  RealtimeSubscription? subscribeToLedgerUpdates(
     Function(RealtimeMessage) onMessage, {
     Function(dynamic)? onError,
   }) {
+    if (_realtimeFailed) return null;
     print(
       'DEBUG: Subscribing to Ledger Updates: databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents',
     );
@@ -1538,6 +1575,9 @@ class AppwriteService {
       },
       onError: (e) {
         print('DEBUG: Realtime Error: $e');
+        if (e.toString().contains('400')) {
+          _realtimeFailed = true;
+        }
         if (onError != null) onError(e);
       },
     );
@@ -1550,6 +1590,11 @@ class AppwriteService {
     try {
       final endpoint = AppwriteConfig.endpoint;
       final projectId = AppwriteConfig.projectId;
+
+      if (kIsWeb) {
+        return true; // Skip manual WebSocket probe on Web (Handled by SDK)
+      }
+
       // Convert https -> wss
       final wsEndpoint = endpoint
           .replaceFirst('https://', 'wss://')
@@ -1573,6 +1618,61 @@ class AppwriteService {
       return true;
     } catch (e) {
       print('DEBUG: WebSocket Probe Failed: $e');
+      return false;
+    }
+  }
+
+  // Fetch notifications for a user
+  Future<List<Map<String, dynamic>>> getNotifications(
+    String userId, {
+    int limit = 20,
+  }) async {
+    try {
+      final result = await databases.listDocuments(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.notificationsCollectionId,
+        queries: [
+          Query.equal('receiverId', userId),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(limit),
+        ],
+      );
+      return result.documents.map((d) {
+        final data = d.data;
+        data['\$id'] = d.$id;
+        return data;
+      }).toList();
+    } catch (e) {
+      print('Error fetching notifications: $e');
+      return [];
+    }
+  }
+
+  // Create a notification for a user
+  Future<bool> createNotification({
+    required String receiverId,
+    required String title,
+    required String message,
+    required String type,
+    String? settlementId,
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.notificationsCollectionId,
+        documentId: ID.unique(),
+        data: {
+          'receiverId': receiverId,
+          'title': title,
+          'message': message,
+          'type': type,
+          'settlementId': settlementId,
+          'isRead': false,
+        },
+      );
+      return true;
+    } catch (e) {
+      print('Error creating notification: $e');
       return false;
     }
   }

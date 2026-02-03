@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -59,6 +60,7 @@ class NotificationService {
   }
 
   Future<bool> requestPermissions() async {
+    if (kIsWeb) return false; // Web doesn't use this permissions plugin flow
     if (Platform.isAndroid) {
       final status = await Permission.notification.request();
       if (status.isDenied) {

@@ -1,0 +1,9 @@
+{
+    "name": "create_dutch_expense",
+    "version": "1.0.0",
+    "description": "Create Dutch Expense with Secure Permissions",
+    "main": "main.js",
+    "dependencies": {
+        "node-appwrite": "^14.0.0"
+    }
+}

@@ -54,6 +54,14 @@ class InvestmentProvider extends ChangeNotifier {
 
       notifyListeners();
 
+      // Check Login before network call to avoid 401 noise
+      if (!await _appwriteService.isLoggedIn()) {
+        print('DEBUG: Not logged in, skipping network fetch for investments');
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
       // 2. Fetch from Network
       final invData = await _appwriteService.getInvestments();
       final networkInv = invData.map((d) => Investment.fromJson(d)).toList();

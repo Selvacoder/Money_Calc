@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../models/ledger_transaction.dart';
+
 import '../providers/ledger_provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/currency_provider.dart';
@@ -29,8 +29,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final transactions = ledgerProvider.ledgerTransactions;
     // Construct multiple identities for correct filtering
     final myIdentities = [
-      if (userProvider.user?.phone != null) userProvider.user!.phone!,
-      if (userProvider.user?.email != null) userProvider.user!.email!,
+      if (userProvider.user?.phone != null) userProvider.user!.phone,
+      if (userProvider.user?.email != null) userProvider.user!.email,
     ].cast<String>();
 
     return DefaultTabController(

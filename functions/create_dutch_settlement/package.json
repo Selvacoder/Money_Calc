@@ -1,0 +1,9 @@
+{
+    "name": "create_dutch_settlement",
+    "version": "1.0.0",
+    "description": "Create Dutch Settlement with Secure Permissions",
+    "main": "main.js",
+    "dependencies": {
+        "node-appwrite": "^14.0.0"
+    }
+}

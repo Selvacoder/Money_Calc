@@ -29,6 +29,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   String _splitType = 'equal'; // 'equal' or 'exact'
   Map<String, bool> _involvedMembers = {};
   Map<String, double> _exactAmounts = {};
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -62,7 +63,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
 
   void _submit() async {
+    if (_isSubmitting) return; // Prevent double-click
     if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
 
     final description = _descriptionController.text.trim();
     final amount = double.parse(_amountController.text);
@@ -76,6 +80,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           .toList();
       if (beneficiaries.isEmpty) {
         _showError('Select at least one person to split with');
+        setState(() => _isSubmitting = false);
         return;
       }
       splitData = jsonEncode(beneficiaries);
@@ -89,6 +94,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         _showError(
           'Exact amounts must sum up to ₹$amount (Current: ₹$totalExact)',
         );
+        setState(() => _isSubmitting = false);
         return;
       }
       splitData = jsonEncode(_exactAmounts);
@@ -107,6 +113,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       _showError('Failed to add expense: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -277,14 +285,23 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _submit,
+                    onPressed: _isSubmitting ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Add Expense'),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Add Expense'),
                   ),
                 ),
               ],

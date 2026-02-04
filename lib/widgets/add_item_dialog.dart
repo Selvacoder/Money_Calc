@@ -38,6 +38,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
   String _selectedIcon = 'star';
   int? _dueDay;
   bool _isVariable = false;
+  bool _isSaving = false;
 
   final List<String> iconOptions = [
     'star',
@@ -309,14 +310,23 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: _handleSave,
-                  child: Text(
-                    widget.editingItem != null
-                        ? 'Update Entry'
-                        : (_isVariable
-                              ? 'Save Variable Entry'
-                              : 'Save Quick Entry'),
-                  ),
+                  onPressed: _isSaving ? null : _handleSave,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          widget.editingItem != null
+                              ? 'Update Entry'
+                              : (_isVariable
+                                    ? 'Save Variable Entry'
+                                    : 'Save Quick Entry'),
+                        ),
                 ),
               ),
             ],
@@ -546,6 +556,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
   }
 
   Future<void> _handleSave() async {
+    if (_isSaving) return; // Prevent double-click
+    setState(() => _isSaving = true);
+
     final provider = context.read<TransactionProvider>();
 
     // Resolve Category ID
@@ -565,6 +578,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please enter a title')));
+      setState(() => _isSaving = false);
       return;
     }
 
@@ -572,6 +586,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please enter an amount')));
+      setState(() => _isSaving = false);
       return;
     }
 
@@ -579,6 +594,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please select a category')));
+      setState(() => _isSaving = false);
       return;
     }
 

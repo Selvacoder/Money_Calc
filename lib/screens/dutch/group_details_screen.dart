@@ -1015,72 +1015,101 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Settle Up',
-          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Record payment to $otherUserName'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: amountController,
-              decoration: const InputDecoration(
-                labelText: 'Amount',
-                prefixText: '₹ ',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
+      builder: (context) {
+        bool isSubmitting = false;
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text(
+              'Settle Up',
+              style: GoogleFonts.inter(fontWeight: FontWeight.bold),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final amount = double.tryParse(amountController.text) ?? 0.0;
-              if (amount <= 0) return;
-
-              final provider = context.read<DutchProvider>();
-              // Get all member IDs for permissions
-              final group = provider.groups.firstWhere(
-                (g) => g['id'] == provider.currentGroupId,
-                orElse: () => {},
-              );
-              final List<String> groupMembers = List<String>.from(
-                group['members'] ?? [],
-              );
-
-              await provider.settleDebt(
-                payerId: provider.currentUserId!,
-                receiverId: otherUserId,
-                amount: amount,
-                groupMembers: groupMembers,
-              );
-
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      provider.error == null
-                          ? 'Settlement recorded! Waiting for approval.'
-                          : 'Failed: ${provider.error}',
-                    ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Record payment to $otherUserName'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountController,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: '₹ ',
+                    border: OutlineInputBorder(),
                   ),
-                );
-              }
-            },
-            child: const Text('Confirm Payment'),
+                  keyboardType: TextInputType.number,
+                  enabled: !isSubmitting,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final amount =
+                            double.tryParse(amountController.text) ?? 0.0;
+                        if (amount <= 0) return;
+
+                        setState(() => isSubmitting = true);
+
+                        final provider = context.read<DutchProvider>();
+                        // Get all member IDs for permissions
+                        final group = provider.groups.firstWhere(
+                          (g) => g['id'] == provider.currentGroupId,
+                          orElse: () => {},
+                        );
+                        final List<String> groupMembers = List<String>.from(
+                          group['members'] ?? [],
+                        );
+
+                        try {
+                          await provider.settleDebt(
+                            payerId: provider.currentUserId!,
+                            receiverId: otherUserId,
+                            amount: amount,
+                            groupMembers: groupMembers,
+                          );
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  provider.error == null
+                                      ? 'Settlement recorded! Waiting for approval.'
+                                      : 'Failed: ${provider.error}',
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                            setState(() => isSubmitting = false);
+                          }
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Confirm Payment'),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

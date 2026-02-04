@@ -1,17 +1,21 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
+
 import '../services/dutch_service.dart';
 import '../services/appwrite_service.dart';
-import '../config/appwrite_config.dart';
-import 'dart:async'; // Added for Timer
+import 'package:appwrite/appwrite.dart';
 
 class DutchProvider extends ChangeNotifier {
   final DutchService _service = DutchService();
 
   List<Map<String, dynamic>> _groups = [];
   bool _isLoading = false;
-  String? _error;
+  String? _error = null;
+  bool _isInit = true; // Flag for first build
+
+  bool _hasMoreGroups = true;
+  String? _lastGroupId;
+  bool get hasMoreGroups => _hasMoreGroups;
 
   // Current Group State
   String? _currentGroupId;
@@ -79,17 +83,40 @@ class DutchProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    if (!await AppwriteService().isLoggedIn()) {
-      print('DEBUG: Not logged in, skipping fetchGroups');
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-
     try {
-      _groups = await _service.getMyGroups();
+      _groups = await _service.getMyGroups(limit: 25);
+      if (_groups.isNotEmpty) {
+        _lastGroupId = _safeId(_groups.last);
+        _hasMoreGroups = _groups.length >= 25;
+      } else {
+        _hasMoreGroups = false;
+      }
     } catch (e) {
       _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreGroups() async {
+    if (!_hasMoreGroups || _isLoading) return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newData = await _service.getMyGroups(
+        lastId: _lastGroupId,
+        limit: 25,
+      );
+      if (newData.isNotEmpty) {
+        _groups.addAll(newData);
+        _lastGroupId = _safeId(newData.last);
+        _hasMoreGroups = newData.length >= 25;
+      } else {
+        _hasMoreGroups = false;
+      }
+    } catch (e) {
+      print('Error loading more groups: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -101,20 +128,20 @@ class DutchProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _globalSettlements = [];
   Map<String, double> _globalBalances = {};
 
+  bool _hasMoreExpenses = true;
+  String? _lastExpenseId;
+  bool _hasMoreSettlements = true;
+  String? _lastSettlementId;
+
   List<Map<String, dynamic>> get globalExpenses => _globalExpenses;
   List<Map<String, dynamic>> get globalSettlements => _globalSettlements;
   Map<String, double> get globalBalances => _globalBalances;
+  bool get hasMoreExpenses => _hasMoreExpenses;
+  bool get hasMoreSettlements => _hasMoreSettlements;
 
   Future<void> fetchGlobalData() async {
     _isLoading = true;
     notifyListeners();
-
-    if (!await AppwriteService().isLoggedIn()) {
-      print('DEBUG: Not logged in, skipping fetchGlobalData');
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
 
     try {
       // Get current user ID
@@ -128,16 +155,38 @@ class DutchProvider extends ChangeNotifier {
         _service.getAllSettlements(),
       ]);
       _globalExpenses = results[0];
-      _mergeSettlements(allSettlements: results[1]);
+      if (_globalExpenses.isNotEmpty) {
+        _lastExpenseId = _safeId(_globalExpenses.last);
+        _hasMoreExpenses = _globalExpenses.length >= 25;
+      } else {
+        _hasMoreExpenses = false;
+      }
+
+      final List<Map<String, dynamic>> allSettlements = results[1];
+      if (allSettlements.isNotEmpty) {
+        _lastSettlementId = _safeId(allSettlements.last);
+        _hasMoreSettlements = allSettlements.length >= 25;
+      } else {
+        _hasMoreSettlements = false;
+      }
+
+      _mergeSettlements(allSettlements: allSettlements);
       _calculateGlobalBalances();
       print(
         'DEBUG fetchGlobalData: Loaded ${_globalExpenses.length} expenses, ${_globalSettlements.length} settlements',
       );
     } catch (e) {
-      print('Error fetching global dutch data: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        print('Error fetching global dutch data: $e');
+      }
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (_isInit) {
+        Future.microtask(() => notifyListeners());
+        _isInit = false;
+      } else {
+        notifyListeners();
+      }
     }
   }
 
@@ -267,7 +316,20 @@ class DutchProvider extends ChangeNotifier {
         'DEBUG: Found ${results[0].length} expenses and ${results[1].length} settlements',
       );
       _currentGroupExpenses = results[0];
+      if (_currentGroupExpenses.isNotEmpty) {
+        _lastGroupExpenseId = _safeId(_currentGroupExpenses.last);
+        _hasMoreGroupExpenses = _currentGroupExpenses.length >= 25;
+      } else {
+        _hasMoreGroupExpenses = false;
+      }
+
       _currentGroupSettlements = results[1];
+      if (_currentGroupSettlements.isNotEmpty) {
+        _lastGroupSettlementId = _safeId(_currentGroupSettlements.last);
+        _hasMoreGroupSettlements = _currentGroupSettlements.length >= 25;
+      } else {
+        _hasMoreGroupSettlements = false;
+      }
 
       // Fetch profiles for members
       Map<String, dynamic>? group;
@@ -296,13 +358,119 @@ class DutchProvider extends ChangeNotifier {
       }
 
       _calculateBalances();
-      _subscribeToRealtime();
 
       // Auto-check if any pending expenses should be marked as completed
       _checkPendingExpensesForCompletion();
     } catch (e) {
       print('Error fetching group details: $e');
       _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // --- PAGINATION METHODS ---
+
+  Future<void> loadMoreGlobalExpenses() async {
+    if (_isLoading || !_hasMoreExpenses) return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newData = await _service.getAllExpenses(lastId: _lastExpenseId);
+      if (newData.isNotEmpty) {
+        _globalExpenses.addAll(newData);
+        _lastExpenseId = _safeId(newData.last);
+        _hasMoreExpenses = newData.length >= 25;
+        _calculateGlobalBalances();
+      } else {
+        _hasMoreExpenses = false;
+      }
+    } catch (e) {
+      print('Error loading more global expenses: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreGlobalSettlements() async {
+    if (_isLoading || !_hasMoreSettlements) return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newData = await _service.getAllSettlements(
+        lastId: _lastSettlementId,
+      );
+      if (newData.isNotEmpty) {
+        _globalSettlements.addAll(newData);
+        _lastSettlementId = _safeId(newData.last);
+        _hasMoreSettlements = newData.length >= 25;
+        _mergeSettlements();
+        _calculateGlobalBalances();
+      } else {
+        _hasMoreSettlements = false;
+      }
+    } catch (e) {
+      print('Error loading more global settlements: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  bool _hasMoreGroupExpenses = true;
+  String? _lastGroupExpenseId;
+  bool _hasMoreGroupSettlements = true;
+  String? _lastGroupSettlementId;
+
+  bool get hasMoreGroupExpenses => _hasMoreGroupExpenses;
+  bool get hasMoreGroupSettlements => _hasMoreGroupSettlements;
+
+  Future<void> loadMoreGroupExpenses() async {
+    if (_currentGroupId == null || _isLoading || !_hasMoreGroupExpenses) return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newData = await _service.getGroupExpenses(
+        _currentGroupId!,
+        lastId: _lastGroupExpenseId,
+      );
+      if (newData.isNotEmpty) {
+        _currentGroupExpenses.addAll(newData);
+        _lastGroupExpenseId = _safeId(newData.last);
+        _hasMoreGroupExpenses = newData.length >= 25;
+      } else {
+        _hasMoreGroupExpenses = false;
+      }
+    } catch (e) {
+      print('Error loading more group expenses: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreGroupSettlements() async {
+    if (_currentGroupId == null || _isLoading || !_hasMoreGroupSettlements) {
+      return;
+    }
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newData = await _service.getGroupSettlements(
+        _currentGroupId!,
+        lastId: _lastGroupSettlementId,
+      );
+      if (newData.isNotEmpty) {
+        _currentGroupSettlements.addAll(newData);
+        _lastGroupSettlementId = _safeId(newData.last);
+        _hasMoreGroupSettlements = newData.length >= 25;
+      } else {
+        _hasMoreGroupSettlements = false;
+      }
+    } catch (e) {
+      print('Error loading more group settlements: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -1041,157 +1209,8 @@ class DutchProvider extends ChangeNotifier {
     }
   }
 
-  // Realtime & Polling Logic
-  RealtimeSubscription? _groupSubscription;
-  Timer? _pollingTimer;
-
-  void startPolling() {
-    _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      if (_currentGroupId != null) {
-        // Silently sync current group
-        _silentSyncGroup(_currentGroupId!);
-      } else {
-        fetchGlobalData();
-      }
-    });
-    print('DEBUG: Dutch Polling Started');
-  }
-
-  Future<void> _silentSyncGroup(String groupId) async {
-    try {
-      final results = await Future.wait([
-        _service.getGroupExpenses(groupId),
-        _service.getGroupSettlements(groupId),
-      ]);
-      _currentGroupExpenses = results[0];
-      _mergeSettlements(newSettlements: results[1]);
-      _calculateBalances();
-      notifyListeners();
-    } catch (_) {}
-  }
-
-  void stopPolling() {
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
-    print('DEBUG: Dutch Polling Stopped');
-  }
-
-  Future<void> _subscribeToRealtime() async {
-    if (_currentGroupId == null || _groupSubscription != null) return;
-
-    if (!await AppwriteService().isLoggedIn()) {
-      print('DEBUG: Not logged in, skipping Dutch Realtime subscription');
-      return;
-    }
-
-    final sub = AppwriteService().subscribeToDutchUpdates(
-      _currentGroupId!,
-      (message) {
-        final event = message.events.firstWhere(
-          (e) => e.contains('.documents.'),
-          orElse: () => '',
-        );
-        final Map<String, dynamic> payload = Map<String, dynamic>.from(
-          message.payload,
-        );
-        final collectionId = message.channels.firstWhere(
-          (c) => c.contains('collections.'),
-          orElse: () => '',
-        );
-
-        if (collectionId.contains(AppwriteConfig.dutchExpensesCollectionId)) {
-          _handleExpenseEvent(event, payload);
-        } else if (collectionId.contains(
-          AppwriteConfig.dutchSettlementsCollectionId,
-        )) {
-          _handleSettlementEvent(event, payload);
-        }
-      },
-      onError: (error) {
-        print('Dutch Realtime Error: $error');
-        // Stop retrying and switch to polling
-        _groupSubscription?.close().catchError((_) {});
-        _groupSubscription = null;
-        startPolling();
-      },
-    );
-
-    if (sub != null) {
-      _groupSubscription = sub;
-    } else {
-      print('DEBUG: Dutch Realtime unavailable, starting polling');
-      startPolling();
-    }
-  }
-
-  void _handleExpenseEvent(String event, Map<String, dynamic> payload) {
-    final expense = Map<String, dynamic>.from(payload);
-    expense['id'] = expense['\$id'];
-
-    if (event.contains('.create')) {
-      if (!_currentGroupExpenses.any((e) => e['id'] == expense['id'])) {
-        _currentGroupExpenses.insert(0, expense);
-      }
-    } else if (event.contains('.update')) {
-      final index = _currentGroupExpenses.indexWhere(
-        (e) => e['id'] == expense['id'],
-      );
-      if (index != -1) {
-        _currentGroupExpenses[index] = expense;
-      }
-    } else if (event.contains('.delete')) {
-      _currentGroupExpenses.removeWhere((e) => e['id'] == expense['id']);
-    }
-    _calculateBalances();
-    notifyListeners();
-  }
-
-  void _handleSettlementEvent(String event, Map<String, dynamic> payload) {
-    final settlement = Map<String, dynamic>.from(payload);
-    settlement['id'] = settlement['\$id'];
-
-    if (event.contains('.create')) {
-      if (!_currentGroupSettlements.any((s) => s['id'] == settlement['id'])) {
-        _currentGroupSettlements.insert(0, settlement);
-        // If it's global data, update that too for notifications
-        if (!_globalSettlements.any((s) => s['id'] == settlement['id'])) {
-          _globalSettlements.insert(0, settlement);
-        }
-      }
-    } else if (event.contains('.update')) {
-      final index = _currentGroupSettlements.indexWhere(
-        (s) => s['id']?.toString() == settlement['id']?.toString(),
-      );
-      if (index != -1) {
-        _currentGroupSettlements[index] = settlement;
-        // Check if this update completes an expense
-        if (settlement['status'] == 'completed' &&
-            settlement['expenseId'] != null) {
-          _checkAndCompleteExpense(settlement['expenseId'].toString());
-        }
-      }
-      final gIndex = _globalSettlements.indexWhere(
-        (s) => s['id']?.toString() == settlement['id']?.toString(),
-      );
-      if (gIndex != -1) {
-        _globalSettlements[gIndex] = settlement;
-      }
-    } else if (event.contains('.delete')) {
-      _currentGroupSettlements.removeWhere(
-        (s) => s['id']?.toString() == settlement['id']?.toString(),
-      );
-      _globalSettlements.removeWhere(
-        (s) => s['id']?.toString() == settlement['id']?.toString(),
-      );
-    }
-    _calculateBalances();
-    notifyListeners();
-  }
-
   @override
   void dispose() {
-    _groupSubscription?.close();
     super.dispose();
   }
 }

@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/investment.dart';
 import '../models/investment_transaction.dart';
 import '../services/appwrite_service.dart';
+import 'package:appwrite/appwrite.dart';
 
 class InvestmentProvider extends ChangeNotifier {
   final AppwriteService _appwriteService = AppwriteService();
@@ -11,9 +12,15 @@ class InvestmentProvider extends ChangeNotifier {
   List<InvestmentTransaction> _transactions = [];
   bool _isLoading = false;
 
+  bool _hasMoreInvestments = true;
+  bool _hasMoreTransactions = true;
+  String? _lastTransactionId;
+
   List<Investment> get investments => _investments;
   List<InvestmentTransaction> get transactions => _transactions;
   bool get isLoading => _isLoading;
+  bool get hasMoreInvestments => _hasMoreInvestments;
+  bool get hasMoreTransactions => _hasMoreTransactions;
 
   late Box<Investment> _investmentBox;
   late Box<InvestmentTransaction> _transactionBox;
@@ -54,14 +61,6 @@ class InvestmentProvider extends ChangeNotifier {
 
       notifyListeners();
 
-      // Check Login before network call to avoid 401 noise
-      if (!await _appwriteService.isLoggedIn()) {
-        print('DEBUG: Not logged in, skipping network fetch for investments');
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
       // 2. Fetch from Network
       final invData = await _appwriteService.getInvestments();
       final networkInv = invData.map((d) => Investment.fromJson(d)).toList();
@@ -71,26 +70,41 @@ class InvestmentProvider extends ChangeNotifier {
         _investments.sort(
           (a, b) => b.investedAmount.compareTo(a.investedAmount),
         );
+        _hasMoreInvestments = networkInv.length >= 25;
         await _investmentBox.clear();
         await _investmentBox.putAll({for (var i in _investments) i.id: i});
+      } else {
+        _hasMoreInvestments = false;
       }
 
-      final txData = await _appwriteService.getInvestmentTransactions();
-      final networkTx = txData
-          .map((d) => InvestmentTransaction.fromJson(d))
-          .toList();
+      if (invData.isNotEmpty) {
+        final txData = await _appwriteService.getInvestmentTransactions();
+        final networkTx = txData
+            .map((d) => InvestmentTransaction.fromJson(d))
+            .toList();
 
-      if (networkTx.isNotEmpty) {
-        _transactions = networkTx;
-        _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-        await _transactionBox.clear();
-        await _transactionBox.putAll({for (var t in _transactions) t.id: t});
+        if (networkTx.isNotEmpty) {
+          _transactions = networkTx;
+          _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+          _lastTransactionId = _transactions.last.id;
+          _hasMoreTransactions = networkTx.length >= 25;
+          await _transactionBox.clear();
+          await _transactionBox.putAll({for (var t in _transactions) t.id: t});
+        } else {
+          _hasMoreTransactions = false;
+        }
+      } else {
+        debugPrint(
+          'DEBUG: fetchInvestments - No investments found, skipping transaction fetch to avoid 401.',
+        );
       }
     } catch (e) {
-      print('Error fetching investments: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        print('Error fetching investments: $e');
+      }
     } finally {
       _isLoading = false;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     }
   }
 
@@ -358,5 +372,79 @@ class InvestmentProvider extends ChangeNotifier {
     _transactions = [];
     notifyListeners();
     await fetchInvestments();
+  }
+
+  Future<void> loadMoreInvestmentTransactions() async {
+    if (!_hasMoreTransactions || _isLoading) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final newData = await _appwriteService.getInvestmentTransactions(
+        lastId: _lastTransactionId,
+        limit: 25,
+      );
+
+      if (newData.isNotEmpty) {
+        final newTransactions = newData
+            .map((data) => InvestmentTransaction.fromJson(data))
+            .toList();
+
+        _transactions.addAll(newTransactions);
+        _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _lastTransactionId = _transactions.last.id;
+        _hasMoreTransactions = newData.length >= 25;
+
+        if (_transactions.length <= 100 && _isHiveInitialized) {
+          await _transactionBox.putAll({
+            for (var t in newTransactions) t.id: t,
+          });
+        }
+      } else {
+        _hasMoreTransactions = false;
+      }
+    } catch (e) {
+      print('Error loading more investment transactions: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreInvestments() async {
+    if (!_hasMoreInvestments || _isLoading) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final newData = await _appwriteService.getInvestments(
+        lastId: _investments.last.id,
+        limit: 25,
+      );
+
+      if (newData.isNotEmpty) {
+        final newInvestments = newData
+            .map((d) => Investment.fromJson(d))
+            .toList();
+        _investments.addAll(newInvestments);
+        _investments.sort(
+          (a, b) => b.investedAmount.compareTo(a.investedAmount),
+        );
+        _hasMoreInvestments = newData.length >= 25;
+
+        if (_isHiveInitialized) {
+          await _investmentBox.putAll({for (var i in newInvestments) i.id: i});
+        }
+      } else {
+        _hasMoreInvestments = false;
+      }
+    } catch (e) {
+      print('Error loading more investments: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

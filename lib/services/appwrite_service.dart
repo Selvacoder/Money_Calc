@@ -2,10 +2,11 @@ import 'package:appwrite/appwrite.dart';
 // ignore_for_file: deprecated_member_use
 import '../config/appwrite_config.dart';
 import 'dart:convert'; // Added for jsonEncode
-import 'dart:io';
-import 'package:flutter/foundation.dart'; // For kIsWeb
 
-import 'package:appwrite/models.dart';
+import 'package:appwrite/models.dart' as models;
+import 'package:flutter/foundation.dart';
+// Conditional import for web to avoid compilation errors on mobile
+import 'html_stub.dart' if (dart.library.html) 'dart:html' as html;
 
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
@@ -14,12 +15,9 @@ class AppwriteService {
     init();
   }
 
-  static bool _realtimeFailed = false; // Global flag to avoid repeated failures
-
   late Client client;
   late Account account;
   late Databases databases;
-  late Realtime realtime; // Added Realtime
 
   void init() {
     client = Client()
@@ -29,88 +27,53 @@ class AppwriteService {
 
     account = Account(client);
     databases = Databases(client);
-    realtime = Realtime(client);
+
     functions = Functions(client);
   }
 
   late Functions functions;
+  bool _skipInvestmentFetch = false;
 
   // Subscribe to Realtime Notifications
-  RealtimeSubscription? subscribeToNotifications(
-    String userId,
-    void Function(Map<String, dynamic>) onNotification, {
-    void Function(dynamic)? onError,
-  }) {
-    if (_realtimeFailed) return null;
-
-    final channel =
-        'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.notificationsCollectionId}.documents';
-
-    final subscription = realtime.subscribe([channel]);
-
-    subscription.stream.listen(
-      (response) {
-        final isCreate = response.events.any(
-          (event) => event.endsWith('.create'),
-        );
-        if (isCreate) {
-          final data = response.payload;
-          // Filter by receiverId (formerly userId)
-          if (data['receiverId'] == userId) {
-            onNotification(data);
-          }
-        }
-      },
-      onError: (error) {
-        print('Notification Realtime Error: $error');
-        if (error.toString().contains('400')) {
-          _realtimeFailed = true;
-        }
-        if (onError != null) onError(error);
-      },
-    );
-
-    return subscription;
-  }
-
-  // Subscribe to Dutch Group Updates (Expenses & Settlements)
-  RealtimeSubscription? subscribeToDutchUpdates(
-    String groupId,
-    void Function(RealtimeMessage) onUpdate, {
-    void Function(dynamic)? onError,
-  }) {
-    if (_realtimeFailed) return null;
-    final subscription = realtime.subscribe([
-      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.dutchExpensesCollectionId}.documents',
-      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.dutchSettlementsCollectionId}.documents',
-    ]);
-
-    subscription.stream.listen(
-      (response) {
-        if (response.payload['groupId'] == groupId) {
-          onUpdate(response);
-        }
-      },
-      onError: (error) {
-        print('Dutch Realtime Error: $error');
-        if (error.toString().contains('400')) {
-          _realtimeFailed = true;
-        }
-        if (onError != null) onError(error);
-      },
-    );
-
-    return subscription;
-  }
 
   // Get current user session
-  Future<bool> isLoggedIn() async {
+  Future<bool> isLoggedIn({bool forceCheck = false}) async {
     try {
+      if (kIsWeb && !forceCheck) {
+        // PREVENTIVE: check localStorage before making the network call that triggers a Red 401 log
+        // Scanning for any key starting with 'a_session_' to catch all variations
+        bool hasSession = false;
+        try {
+          for (var key in html.window.localStorage.keys) {
+            if (key.startsWith('a_session_')) {
+              hasSession = true;
+              break;
+            }
+          }
+        } catch (e) {
+          debugPrint('Error accessing localStorage: $e');
+        }
+
+        if (!hasSession) {
+          debugPrint(
+            'DEBUG: isLoggedIn - No session keys found in localStorage. Keys: ${html.window.localStorage.keys.toList()}',
+          );
+          return false;
+        }
+
+        // Give the browser a tiny moment to ensure storage is settled
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+
       // Add timeout to prevent long loading if server is unreachable
       await account.get().timeout(const Duration(seconds: 5));
       return true;
     } catch (e) {
-      // If timeout or error, assume not logged in
+      // 401 means not logged in, other errors mean network/server issues
+      // Silence 401 to avoid console noise for unauthenticated users
+      if (e is! AppwriteException || e.code != 401) {
+        debugPrint('isLoggedIn error: $e');
+      }
       return false;
     }
   }
@@ -356,17 +319,27 @@ class AppwriteService {
 
   // --- TRANSACTIONS ---
 
-  Future<List<Map<String, dynamic>>> getTransactions() async {
+  Future<List<Map<String, dynamic>>> getTransactions({
+    int limit = 25,
+    String? lastId,
+  }) async {
     try {
       final user = await account.get();
+      final List<String> queries = [
+        Query.equal('userId', [user.$id]),
+        Query.orderDesc('dateTime'),
+        Query.limit(limit),
+      ];
+
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases
           .listDocuments(
             databaseId: AppwriteConfig.databaseId,
             collectionId: AppwriteConfig.transactionsCollectionId,
-            queries: [
-              Query.equal('userId', [user.$id]),
-              Query.orderDesc('dateTime'),
-            ],
+            queries: queries,
           )
           .timeout(const Duration(seconds: 10));
 
@@ -376,7 +349,9 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching transactions: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        print('Error fetching transactions: $e');
+      }
       return [];
     }
   }
@@ -1080,7 +1055,10 @@ class AppwriteService {
   }
 
   // --- LEDGER ---
-  Future<List<Map<String, dynamic>>?> getLedgerTransactions() async {
+  Future<List<Map<String, dynamic>>?> getLedgerTransactions({
+    String? lastId,
+    int limit = 25,
+  }) async {
     try {
       final user = await account.get();
       final userId = user.$id;
@@ -1102,13 +1080,21 @@ class AppwriteService {
 
       final Map<String, Map<String, dynamic>> transactionMap = {};
 
+      List<String> baseQueries = [
+        Query.orderDesc('dateTime'),
+        Query.limit(limit),
+      ];
+      if (lastId != null) {
+        baseQueries.add(Query.cursorAfter(lastId));
+      }
+
       // 1. Where I am the sender (by ID)
       final sentById = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.ledgerCollectionId,
         queries: [
           Query.equal('senderId', [userId]),
-          Query.orderDesc('date'),
+          ...baseQueries,
         ],
       );
       for (var doc in sentById.documents) {
@@ -1123,7 +1109,7 @@ class AppwriteService {
         collectionId: AppwriteConfig.ledgerCollectionId,
         queries: [
           Query.equal('receiverId', [userId]),
-          Query.orderDesc('date'),
+          ...baseQueries,
         ],
       );
       for (var doc in receivedById.documents) {
@@ -1139,7 +1125,7 @@ class AppwriteService {
           collectionId: AppwriteConfig.ledgerCollectionId,
           queries: [
             Query.equal('senderPhone', [contact]),
-            Query.orderDesc('date'),
+            ...baseQueries,
           ],
         );
         for (var doc in sentByPhone.documents) {
@@ -1155,7 +1141,7 @@ class AppwriteService {
           collectionId: AppwriteConfig.ledgerCollectionId,
           queries: [
             Query.equal('receiverPhone', [contact]),
-            Query.orderDesc('date'),
+            ...baseQueries,
           ],
         );
         for (var doc in receivedByPhone.documents) {
@@ -1238,7 +1224,7 @@ class AppwriteService {
       // Fetching all is safest to ensure consistency, then filter.
       // Or 2 queries: sentByPerson, receivedByPerson.
 
-      List<Document> docsToUpdate = [];
+      List<models.Document> docsToUpdate = [];
 
       // Query 1: Where person is Sender
       final q1 = await databases.listDocuments(
@@ -1328,7 +1314,7 @@ class AppwriteService {
     try {
       final isPhoneIdentity = phone.isNotEmpty && !phone.startsWith('local:');
 
-      List<Document> docsToDelete = [];
+      List<models.Document> docsToDelete = [];
 
       // Query 1: Where person is Sender
       final q1 = await databases.listDocuments(
@@ -1393,13 +1379,23 @@ class AppwriteService {
   }
   // --- INVESTMENTS ---
 
-  Future<List<Map<String, dynamic>>> getInvestments() async {
+  Future<List<Map<String, dynamic>>> getInvestments({
+    int limit = 100,
+    String? lastId,
+  }) async {
     try {
-      // final user = await account.get(); // Not needed for RLS
+      final List<String> queries = [
+        Query.orderDesc('investedAmount'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.investmentsCollectionId,
-        queries: [], // Empty for RLS strict mode
+        queries: queries,
       );
 
       return result.documents.map((doc) {
@@ -1408,7 +1404,9 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching investments: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        print('Error fetching investments: $e');
+      }
       return [];
     }
   }
@@ -1486,13 +1484,25 @@ class AppwriteService {
 
   // --- INVESTMENT TRANSACTIONS ---
 
-  Future<List<Map<String, dynamic>>> getInvestmentTransactions() async {
+  Future<List<Map<String, dynamic>>> getInvestmentTransactions({
+    int limit = 25,
+    String? lastId,
+  }) async {
+    if (_skipInvestmentFetch) return [];
+
     try {
-      // final user = await account.get(); // Not needed for RLS
+      final List<String> queries = [
+        Query.orderDesc('dateTime'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.investmentTransactionsCollectionId,
-        queries: [], // Empty for RLS strict mode
+        queries: queries,
       );
 
       return result.documents.map((doc) {
@@ -1501,7 +1511,13 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching investment transactions: $e');
+      // Silence 401 as it's common for this collection if permissions aren't fully set
+      if (e is AppwriteException && e.code == 401) {
+        _skipInvestmentFetch =
+            true; // Guard against future attempts this session
+      } else {
+        debugPrint('Error fetching investment transactions: $e');
+      }
       return [];
     }
   }
@@ -1556,72 +1572,6 @@ class AppwriteService {
     }
   }
 
-  // Realtime Subscription for Ledger
-  RealtimeSubscription? subscribeToLedgerUpdates(
-    Function(RealtimeMessage) onMessage, {
-    Function(dynamic)? onError,
-  }) {
-    if (_realtimeFailed) return null;
-    print(
-      'DEBUG: Subscribing to Ledger Updates: databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents',
-    );
-    final subscription = realtime.subscribe([
-      'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents',
-    ]);
-
-    subscription.stream.listen(
-      (message) {
-        onMessage(message);
-      },
-      onError: (e) {
-        print('DEBUG: Realtime Error: $e');
-        if (e.toString().contains('400')) {
-          _realtimeFailed = true;
-        }
-        if (onError != null) onError(e);
-      },
-    );
-
-    return subscription;
-  }
-
-  // Connection Probe
-  Future<bool> checkRealtimeConnection() async {
-    try {
-      final endpoint = AppwriteConfig.endpoint;
-      final projectId = AppwriteConfig.projectId;
-
-      if (kIsWeb) {
-        return true; // Skip manual WebSocket probe on Web (Handled by SDK)
-      }
-
-      // Convert https -> wss
-      final wsEndpoint = endpoint
-          .replaceFirst('https://', 'wss://')
-          .replaceFirst('http://', 'ws://');
-
-      // Construct a valid realtime URL with a dummy or actual channel to test auth/handshake
-      // Appwrite Realtime URL format: /realtime?project={projectId}&channels[]={channel}
-      final channel =
-          'databases.${AppwriteConfig.databaseId}.collections.${AppwriteConfig.ledgerCollectionId}.documents';
-      final url = '$wsEndpoint/realtime?project=$projectId&channels[]=$channel';
-
-      print('DEBUG: Probing WebSocket Connection: $url');
-
-      // Attempt connection with a short timeout
-      final socket = await WebSocket.connect(
-        url,
-      ).timeout(const Duration(seconds: 5));
-
-      print('DEBUG: WebSocket Probe Successful');
-      socket.close();
-      return true;
-    } catch (e) {
-      print('DEBUG: WebSocket Probe Failed: $e');
-      return false;
-    }
-  }
-
   // Fetch notifications for a user
   Future<List<Map<String, dynamic>>> getNotifications(
     String userId, {
@@ -1643,7 +1593,9 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching notifications: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        print('Error fetching notifications: $e');
+      }
       return [];
     }
   }

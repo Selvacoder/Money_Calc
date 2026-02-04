@@ -3,7 +3,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 // Keep for now
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
-import '../services/appwrite_service.dart'; // Keep if used for mock/other calls
+import '../services/appwrite_service.dart';
+import 'package:appwrite/appwrite.dart';
 
 class UserProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -13,10 +14,12 @@ class UserProvider extends ChangeNotifier {
   bool _isLoading =
       false; // Changed from true to false to show splash/login immediately
   bool _isAuthenticated = false;
+  bool _isInitialCheckDone = false;
 
   UserProfile? get user => _user;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
+  bool get isInitialCheckDone => _isInitialCheckDone;
 
   List<String> _banks = [];
   List<String> get banks => _banks;
@@ -54,10 +57,11 @@ class UserProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> checkAuthStatus() async {
+  Future<void> checkAuthStatus({bool forceCheck = false}) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
+    debugPrint('DEBUG: checkAuthStatus started (forceCheck: $forceCheck)');
     await _initHive();
 
     // 1. Load from Cache
@@ -65,13 +69,15 @@ class UserProvider extends ChangeNotifier {
       _user = _userBox.get('current_user');
       if (_user != null) {
         _isAuthenticated = true;
-        notifyListeners(); // Show cached user immediately
+        // Schedule for next frame to avoid build-time errors
+        Future.microtask(() => notifyListeners());
       }
     }
 
     try {
       // 2. Check Real Auth
-      final isLoggedIn = await _authService.isLoggedIn();
+      final isLoggedIn = await _authService.isLoggedIn(forceCheck: forceCheck);
+      debugPrint('DEBUG: checkAuthStatus - isLoggedIn: $isLoggedIn');
       if (isLoggedIn) {
         final userData = await _authService.getCurrentUser();
         if (userData != null) {
@@ -101,6 +107,9 @@ class UserProvider extends ChangeNotifier {
 
           _user = newUser;
           _isAuthenticated = true;
+          debugPrint(
+            'DEBUG: checkAuthStatus - Authenticated as ${newUser.email}',
+          );
 
           // Update Cache
           await _userBox.put('current_user', newUser);
@@ -118,32 +127,45 @@ class UserProvider extends ChangeNotifier {
         await _userBox.clear();
       }
     } catch (e) {
-      print('Auth Check Error: $e');
-      // On error (offline), trust cache.
-      if (_user != null) {
-        _isAuthenticated = true;
-      } else {
+      if (e is AppwriteException && e.code == 401) {
+        // Definitely not logged in
         _isAuthenticated = false;
+        _user = null;
+        if (_isHiveInitialized) await _userBox.clear();
+      } else {
+        if (e is! AppwriteException || e.code != 401) {
+          print('Auth Check Error: $e');
+        }
+        // On other errors (offline), trust cache.
+        if (_user != null) {
+          _isAuthenticated = true;
+        } else {
+          _isAuthenticated = false;
+        }
       }
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _isInitialCheckDone = true;
+      Future.microtask(() => notifyListeners());
     }
   }
 
   Future<Map<String, dynamic>> login(String email, String password) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
 
     try {
       final result = await _authService.login(email: email, password: password);
+      debugPrint('DEBUG: Login result: $result');
       if (result['success']) {
-        await checkAuthStatus();
+        // Essential delay for Web session propagation
+        await Future.delayed(const Duration(milliseconds: 200));
+        await checkAuthStatus(forceCheck: true);
       }
       return result;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     }
   }
 
@@ -154,7 +176,7 @@ class UserProvider extends ChangeNotifier {
     required String phone,
   }) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
 
     try {
       final result = await _authService.signUp(
@@ -164,18 +186,20 @@ class UserProvider extends ChangeNotifier {
         phone: phone,
       );
       if (result['success']) {
-        await checkAuthStatus();
+        // Essential delay for Web session propagation
+        await Future.delayed(const Duration(milliseconds: 200));
+        await checkAuthStatus(forceCheck: true);
       }
       return result;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     }
   }
 
   Future<void> updateProfile(UserProfile updatedProfile) async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
     try {
       // Mocking the call or calling a method I need to create
       // await _authService.updateProfile(updatedProfile);
@@ -196,7 +220,7 @@ class UserProvider extends ChangeNotifier {
 
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
     try {
       final success = await _authService.signInWithGoogle();
       if (success) {
@@ -211,7 +235,7 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
     try {
       if (_isHiveInitialized) {
         await _userBox.clear();
@@ -219,9 +243,19 @@ class UserProvider extends ChangeNotifier {
         _banks = [];
         _primaryPaymentMethods = {};
       }
+      // Check if already logged out from Appwrite to avoid unnecessary calls/errors
+      if (!await _appwriteService.isLoggedIn()) {
+        // Silent return, no print
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
       await _authService.logout();
       _user = null;
       _isAuthenticated = false;
+    } catch (e) {
+      // Log error but proceed with local logout if Appwrite logout fails
+      print('Logout Error: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

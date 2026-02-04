@@ -29,8 +29,8 @@ class AuthService {
     return false;
   }
 
-  Future<bool> isLoggedIn() async {
-    return await _appwrite.isLoggedIn();
+  Future<bool> isLoggedIn({bool forceCheck = false}) async {
+    return await _appwrite.isLoggedIn(forceCheck: forceCheck);
   }
 
   Future<String?> getName() async {

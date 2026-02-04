@@ -93,121 +93,161 @@ class _DutchHistoryScreenState extends State<DutchHistoryScreen> {
                       style: GoogleFonts.inter(color: Colors.grey),
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: allItems.length,
-                    itemBuilder: (context, index) {
-                      final item = allItems[index];
-                      final isExpense = item['type'] == 'expense';
-                      final status = item['status'] ?? 'pending';
-                      final date =
-                          DateTime.tryParse(item['dateTime'] ?? '') ??
-                          DateTime.tryParse(item['\$createdAt'] ?? '') ??
-                          DateTime.now();
-                      final formattedDate =
-                          '${date.day}/${date.month}/${date.year}';
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification scrollInfo) {
+                      if (scrollInfo.metrics.pixels >=
+                              scrollInfo.metrics.maxScrollExtent - 200 &&
+                          !provider.isLoading) {
+                        if (widget.isGlobal) {
+                          if (provider.hasMoreExpenses) {
+                            provider.loadMoreGlobalExpenses();
+                          }
+                          if (provider.hasMoreSettlements) {
+                            provider.loadMoreGlobalSettlements();
+                          }
+                        } else {
+                          if (provider.hasMoreGroupExpenses) {
+                            provider.loadMoreGroupExpenses();
+                          }
+                          if (provider.hasMoreGroupSettlements) {
+                            provider.loadMoreGroupSettlements();
+                          }
+                        }
+                      }
+                      return true;
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount:
+                          allItems.length +
+                          ((widget.isGlobal
+                                  ? (provider.hasMoreExpenses ||
+                                        provider.hasMoreSettlements)
+                                  : (provider.hasMoreGroupExpenses ||
+                                        provider.hasMoreGroupSettlements))
+                              ? 1
+                              : 0),
+                      itemBuilder: (context, index) {
+                        if (index == allItems.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        final item = allItems[index];
+                        final isExpense = item['type'] == 'expense';
+                        final status = item['status'] ?? 'pending';
+                        final date =
+                            DateTime.tryParse(item['dateTime'] ?? '') ??
+                            DateTime.tryParse(item['\$createdAt'] ?? '') ??
+                            DateTime.now();
+                        final formattedDate =
+                            '${date.day}/${date.month}/${date.year}';
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: status == 'completed'
-                                ? Colors.green.withOpacity(0.1)
-                                : status == 'rejected'
-                                ? Colors.red.withOpacity(0.1)
-                                : Colors.orange.withOpacity(0.1),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: status == 'completed'
+                                  ? Colors.green.withOpacity(0.1)
+                                  : status == 'rejected'
+                                  ? Colors.red.withOpacity(0.1)
+                                  : Colors.orange.withOpacity(0.1),
+                            ),
                           ),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: isExpense
-                                        ? Colors.red.withOpacity(0.1)
-                                        : Colors.blue.withOpacity(0.1),
-                                    shape: BoxShape.circle,
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isExpense
+                                          ? Colors.red.withOpacity(0.1)
+                                          : Colors.blue.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      isExpense
+                                          ? Icons.receipt_long
+                                          : Icons.handshake,
+                                      color: isExpense
+                                          ? Colors.red
+                                          : Colors.blue,
+                                      size: 20,
+                                    ),
                                   ),
-                                  child: Icon(
-                                    isExpense
-                                        ? Icons.receipt_long
-                                        : Icons.handshake,
-                                    color: isExpense ? Colors.red : Colors.blue,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              isExpense
-                                                  ? item['description']
-                                                  : 'Payment to ${provider.currentGroupMemberProfiles.firstWhere((p) => p['userId'] == item['receiverId'], orElse: () => {})['name'] ?? 'Member'}',
-                                              style: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 14,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                isExpense
+                                                    ? item['description']
+                                                    : 'Payment to ${provider.currentGroupMemberProfiles.firstWhere((p) => p['userId'] == item['receiverId'], orElse: () => {})['name'] ?? 'Member'}',
+                                                style: GoogleFonts.inter(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                              overflow: TextOverflow.ellipsis,
                                             ),
+                                            const SizedBox(width: 8),
+                                            _StatusBadge(status: status),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Paid by ${provider.currentGroupMemberProfiles.firstWhere((p) => p['userId'] == item['payerId'], orElse: () => {})['name'] ?? 'Member'}',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            color: Colors.grey,
                                           ),
-                                          const SizedBox(width: 8),
-                                          _StatusBadge(status: status),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
                                       Text(
-                                        'Paid by ${provider.currentGroupMemberProfiles.firstWhere((p) => p['userId'] == item['payerId'], orElse: () => {})['name'] ?? 'Member'}',
+                                        '₹${item['amount']}',
                                         style: GoogleFonts.inter(
-                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: isExpense
+                                              ? Colors.red
+                                              : Colors.blue,
+                                        ),
+                                      ),
+                                      Text(
+                                        formattedDate,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
                                           color: Colors.grey,
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '₹${item['amount']}',
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                        color: isExpense
-                                            ? Colors.red
-                                            : Colors.blue,
-                                      ),
-                                    ),
-                                    Text(
-                                      formattedDate,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            // Action Buttons if pending & user is receiver
-                            if (status == 'pending' && !widget.isGlobal)
-                              _buildActionButtons(context, item, provider),
-                          ],
-                        ),
-                      );
-                    },
+                                ],
+                              ),
+                              // Action Buttons if pending & user is receiver
+                              if (status == 'pending' && !widget.isGlobal)
+                                _buildActionButtons(context, item, provider),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
           ),
         ],

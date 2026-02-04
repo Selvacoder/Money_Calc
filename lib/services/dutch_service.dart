@@ -144,14 +144,23 @@ class DutchService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMyGroups() async {
+  Future<List<Map<String, dynamic>>> getMyGroups({
+    int limit = 100,
+    String? lastId,
+  }) async {
     try {
-      // Fetch groups the user has access to (Appwrite filters by permissions automatically)
-      // Fetch groups the user has access to (Appwrite filters by permissions automatically)
+      final List<String> queries = [
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchGroupsCollectionId,
-        queries: [], // Empty queries avoids 'invalid query' on array
+        queries: queries,
       );
       final docs = result.documents.map((d) {
         final data = d.data;
@@ -233,12 +242,25 @@ class DutchService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getGroupExpenses(String groupId) async {
+  Future<List<Map<String, dynamic>>> getGroupExpenses(
+    String groupId, {
+    int limit = 100,
+    String? lastId,
+  }) async {
     try {
+      List<String> queries = [
+        Query.equal('groupId', groupId),
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchExpensesCollectionId,
-        queries: [Query.equal('groupId', groupId), Query.limit(100)],
+        queries: queries,
       );
       print(
         'DEBUG: Appwrite response documents count: ${result.documents.length}',
@@ -270,14 +292,23 @@ class DutchService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getAllExpenses() async {
+  Future<List<Map<String, dynamic>>> getAllExpenses({
+    int limit = 25,
+    String? lastId,
+  }) async {
     try {
-      // Fetch all expenses the user has 'read' access to.
-      // Appwrite automatically filters by permissions.
+      final List<String> queries = [
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchExpensesCollectionId,
-        queries: [Query.limit(5000), Query.orderDesc('\$createdAt')],
+        queries: queries,
       );
       final docs = result.documents.map((d) {
         final data = d.data;
@@ -300,12 +331,23 @@ class DutchService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getAllSettlements() async {
+  Future<List<Map<String, dynamic>>> getAllSettlements({
+    int limit = 25,
+    String? lastId,
+  }) async {
     try {
+      final List<String> queries = [
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchSettlementsCollectionId,
-        queries: [Query.limit(5000), Query.orderDesc('\$createdAt')],
+        queries: queries,
       );
       final docs = result.documents.map((d) {
         final data = d.data;
@@ -368,12 +410,25 @@ class DutchService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getGroupSettlements(String groupId) async {
+  Future<List<Map<String, dynamic>>> getGroupSettlements(
+    String groupId, {
+    int limit = 100,
+    String? lastId,
+  }) async {
     try {
+      List<String> queries = [
+        Query.equal('groupId', groupId),
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+      ];
+      if (lastId != null && lastId.isNotEmpty) {
+        queries.add(Query.cursorAfter(lastId));
+      }
+
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchSettlementsCollectionId,
-        queries: [Query.equal('groupId', groupId), Query.limit(100)],
+        queries: queries,
       );
       print('DEBUG: Appwrite Settlements count: ${result.documents.length}');
       final docs = result.documents.map((d) {

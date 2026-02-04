@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart' hide Category;
-import 'dart:async';
-import 'package:appwrite/appwrite.dart';
+
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/ledger_transaction.dart';
 import '../services/appwrite_service.dart';
+import 'package:appwrite/appwrite.dart';
 import '../models/transaction.dart';
 import '../models/category.dart';
 import 'transaction_provider.dart';
@@ -16,13 +16,15 @@ class LedgerProvider extends ChangeNotifier {
   List<LedgerTransaction> _outgoingRequests = [];
   List<LedgerTransaction> _notes = [];
   bool _isLoading = false;
-  Timer? _pollingTimer;
+  bool _hasMore = true;
+  String? _lastId;
 
   List<LedgerTransaction> get ledgerTransactions => _ledgerTransactions;
   List<LedgerTransaction> get incomingRequests => _incomingRequests;
   List<LedgerTransaction> get outgoingRequests => _outgoingRequests;
   List<LedgerTransaction> get notes => _notes;
   bool get isLoading => _isLoading;
+  bool get hasMore => _hasMore;
 
   late Box<LedgerTransaction> _ledgerBox;
   late Box<String> _hiddenPeopleBox;
@@ -66,27 +68,28 @@ class LedgerProvider extends ChangeNotifier {
       _processTransactions(cached);
       notifyListeners();
 
-      final data = await _appwriteService.getLedgerTransactions();
+      final data = await _appwriteService.getLedgerTransactions(limit: 25);
       if (data != null) {
         final networkTx = data
             .map((e) => LedgerTransaction.fromJson(e))
             .toList();
         _processTransactions(networkTx);
+        _hasMore = networkTx.length >= 25;
+        if (networkTx.isNotEmpty) {
+          _lastId = networkTx.last.id;
+        }
         await _ledgerBox.clear();
         await _ledgerBox.putAll({for (var t in networkTx) t.id: t});
-      }
-      final isConnected = await _appwriteService.checkRealtimeConnection();
-      if (isConnected) {
-        _subscribeToRealtime();
       } else {
-        print('Realtime probe failed. Switching to Polling Mode.');
-        startPolling();
+        _hasMore = false;
       }
     } catch (e) {
-      debugPrint('Error fetching ledger: $e');
+      if (e is! AppwriteException || e.code != 401) {
+        debugPrint('Error fetching ledger: $e');
+      }
     } finally {
       _isLoading = false;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     }
   }
 
@@ -112,6 +115,70 @@ class LedgerProvider extends ChangeNotifier {
           _outgoingRequests.add(tx);
         }
       }
+    }
+  }
+
+  Future<void> loadMoreLedgerTransactions() async {
+    if (_isLoading || !_hasMore) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final data = await _appwriteService.getLedgerTransactions(
+        lastId: _lastId,
+        limit: 25,
+      );
+
+      if (data != null && data.isNotEmpty) {
+        final newTransactions = data
+            .map((e) => LedgerTransaction.fromJson(e))
+            .toList();
+
+        // Add to existing lists based on status
+        for (var tx in newTransactions) {
+          if (tx.status == 'confirmed') {
+            if (!_ledgerTransactions.any((t) => t.id == tx.id)) {
+              _ledgerTransactions.add(tx);
+            }
+          } else if (tx.status == 'notes') {
+            if (!_notes.any((t) => t.id == tx.id)) {
+              _notes.add(tx);
+            }
+          } else if (tx.status == 'pending') {
+            if (_currentUserId != null && tx.receiverId == _currentUserId) {
+              if (!_incomingRequests.any((t) => t.id == tx.id)) {
+                _incomingRequests.add(tx);
+              }
+            } else {
+              if (!_outgoingRequests.any((t) => t.id == tx.id)) {
+                _outgoingRequests.add(tx);
+              }
+            }
+          }
+        }
+
+        // Re-sort
+        _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _notes.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _incomingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _outgoingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+        _lastId = newTransactions.last.id;
+        _hasMore = data.length >= 25;
+
+        // Optionally cache more
+        if (_ledgerTransactions.length <= 100 && _isHiveInitialized) {
+          await _ledgerBox.putAll({for (var t in newTransactions) t.id: t});
+        }
+      } else {
+        _hasMore = false;
+      }
+    } catch (e) {
+      debugPrint('Error loading more ledger: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -544,143 +611,8 @@ class LedgerProvider extends ChangeNotifier {
     return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
   }
 
-  // Realtime Logic
-  RealtimeSubscription? _ledgerSubscription;
-
-  void _subscribeToRealtime() {
-    if (_ledgerSubscription != null) return;
-
-    final sub = _appwriteService.subscribeToLedgerUpdates(
-      (message) {
-        final event = message.events.firstWhere(
-          (e) => e.contains('.documents.'),
-          orElse: () => '',
-        );
-        final payload = message.payload;
-        // if (payload == null) return;
-
-        print('DEBUG: Realtime Event: $event, Payload: $payload');
-
-        try {
-          final tx = LedgerTransaction.fromJson(payload);
-
-          if (event.endsWith('.create')) {
-            _onTransactionCreated(tx);
-          } else if (event.endsWith('.update')) {
-            _onTransactionUpdated(tx);
-          } else if (event.endsWith('.delete')) {
-            _onTransactionDeleted(tx.id);
-          }
-        } catch (e) {
-          print('Error processing realtime message: $e');
-        }
-      },
-      onError: (e) {
-        print('Realtime connection failed: $e. Switching to Polling Mode.');
-        _ledgerSubscription?.close().catchError((_) {});
-        _ledgerSubscription = null;
-        startPolling();
-      },
-    );
-
-    if (sub != null) {
-      _ledgerSubscription = sub;
-    } else {
-      print('DEBUG: Realtime subscription unavailable, starting polling');
-      startPolling();
-    }
-  }
-
-  void startPolling() {
-    if (_pollingTimer != null) return;
-    print('DEBUG: Starting Fallback Polling for Ledger (30s)...');
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      fetchLedgerTransactions(silent: true);
-    });
-  }
-
-  void stopPolling() {
-    if (_pollingTimer != null) {
-      print('DEBUG: Stopping Polling Mode');
-      _pollingTimer?.cancel();
-      _pollingTimer = null;
-    }
-  }
-
-  void _onTransactionCreated(LedgerTransaction tx) {
-    // Check if exists (avoid duplicates)
-    if (_findTransaction(tx.id) != null) return;
-    _addTransactionToLocalList(tx);
-    notifyListeners();
-  }
-
-  void _onTransactionUpdated(LedgerTransaction tx) {
-    _removeTransactionFromLocalList(tx.id);
-    _addTransactionToLocalList(tx);
-    notifyListeners();
-  }
-
-  void _onTransactionDeleted(String id) {
-    _removeTransactionFromLocalList(id);
-    if (_isHiveInitialized) {
-      _ledgerBox.delete(id);
-    }
-    notifyListeners();
-  }
-
-  LedgerTransaction? _findTransaction(String id) {
-    try {
-      return _ledgerTransactions.firstWhere((t) => t.id == id);
-    } catch (_) {
-      try {
-        return _notes.firstWhere((t) => t.id == id);
-      } catch (_) {
-        try {
-          return _outgoingRequests.firstWhere((t) => t.id == id);
-        } catch (_) {
-          try {
-            return _incomingRequests.firstWhere((t) => t.id == id);
-          } catch (_) {
-            return null;
-          }
-        }
-      }
-    }
-  }
-
-  void _removeTransactionFromLocalList(String id) {
-    _ledgerTransactions.removeWhere((t) => t.id == id);
-    _notes.removeWhere((t) => t.id == id);
-    _outgoingRequests.removeWhere((t) => t.id == id);
-    _incomingRequests.removeWhere((t) => t.id == id);
-  }
-
-  void _addTransactionToLocalList(LedgerTransaction tx) {
-    if (tx.status == 'confirmed') {
-      _ledgerTransactions.add(tx);
-      _ledgerTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-    } else if (tx.status == 'notes') {
-      _notes.add(tx);
-      _notes.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-    } else if (tx.status == 'pending') {
-      if (_currentUserId != null && tx.receiverId == _currentUserId) {
-        _incomingRequests.add(tx);
-        _incomingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-      } else {
-        _outgoingRequests.add(tx);
-        _outgoingRequests.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-      }
-    }
-
-    if (_isHiveInitialized) {
-      _ledgerBox.put(tx.id, tx);
-    }
-  }
-
   @override
   void dispose() {
-    stopPolling();
-    _ledgerSubscription?.close();
     super.dispose();
   }
 }

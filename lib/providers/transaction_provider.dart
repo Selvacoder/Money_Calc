@@ -15,8 +15,12 @@ class TransactionProvider extends ChangeNotifier {
   List<Item> _quickItems = []; // Frequent items
 
   bool _isLoading = false;
+  bool _hasMore = true;
+  String? _lastId;
 
   List<Transaction> get transactions => _transactions;
+  bool get hasMore => _hasMore;
+  String? get lastId => _lastId;
   List<Category> get categories => _categories;
   List<Item> get items =>
       _quickItems; // Return quickItems which has all items with frequency
@@ -82,14 +86,6 @@ class TransactionProvider extends ChangeNotifier {
 
       notifyListeners(); // Show cached data
 
-      // Check Login before network call
-      if (!await _appwriteService.isLoggedIn()) {
-        print('DEBUG: Not logged in, skipping network fetch for transactions');
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
       // 2. Fetch from Network
       // Transactions
       final transactionData = await _appwriteService.getTransactions();
@@ -100,10 +96,14 @@ class TransactionProvider extends ChangeNotifier {
       if (networkTransactions.isNotEmpty) {
         _transactions = networkTransactions;
         _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _lastId = _transactions.last.id;
+        _hasMore = networkTransactions.length >= 25;
 
         // Update Cache
         await _transactionBox.clear();
         await _transactionBox.putAll({for (var t in _transactions) t.id: t});
+      } else {
+        _hasMore = false;
       }
 
       // Categories
@@ -586,5 +586,47 @@ class TransactionProvider extends ChangeNotifier {
     return _categories.any(
       (c) => c.type == type && c.name.trim().toLowerCase() == lowerName,
     );
+  }
+
+  Future<void> loadMoreTransactions() async {
+    if (!_hasMore || _isLoading) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final newData = await _appwriteService.getTransactions(
+        lastId: _lastId,
+        limit: 25,
+      );
+
+      if (newData.isNotEmpty) {
+        final newTransactions = newData
+            .map((data) => Transaction.fromJson(data))
+            .toList();
+
+        // Append
+        _transactions.addAll(newTransactions);
+        _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+        _lastId = _transactions.last.id;
+        _hasMore = newData.length >= 25;
+
+        // Note: We don't necessarily clear the box here, but let's cache what we have
+        // However, persistent data should probably just be the 'top' items or we use a separate strategy.
+        // For now, let's keep the cache updated with the expanded list up to a reasonable point.
+        if (_transactions.length <= 100 && _isHiveInitialized) {
+          await _transactionBox.putAll({
+            for (var t in newTransactions) t.id: t,
+          });
+        }
+      } else {
+        _hasMore = false;
+      }
+    } catch (e) {
+      print('Error loading more transactions: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

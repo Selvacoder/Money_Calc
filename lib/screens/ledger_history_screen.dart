@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+import '../providers/ledger_provider.dart';
 import '../models/ledger_transaction.dart';
 import '../services/export_service.dart';
 
@@ -332,41 +334,80 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: groupedTransactions.length,
-                      itemBuilder: (context, index) {
-                        String date = groupedTransactions.keys.elementAt(index);
-                        List<LedgerTransaction> dayTransactions =
-                            groupedTransactions[date]!;
-
-                        return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
+                  : Consumer<LedgerProvider>(
+                      builder: (context, provider, child) {
+                        return NotificationListener<ScrollNotification>(
+                          onNotification: (ScrollNotification scrollInfo) {
+                            if (scrollInfo.metrics.pixels >=
+                                    scrollInfo.metrics.maxScrollExtent - 200 &&
+                                !provider.isLoading &&
+                                provider.hasMore &&
+                                _searchQuery.isEmpty &&
+                                _selectedType == 'All' &&
+                                _selectedDate == null) {
+                              provider.loadMoreLedgerTransactions();
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount:
+                                groupedTransactions.length +
+                                (provider.hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == groupedTransactions.length) {
+                                return Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                                    vertical: 20,
                                   ),
-                                  child: Text(
-                                    date,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade600,
-                                    ),
+                                  child: Center(
+                                    child: provider.isLoading
+                                        ? const CircularProgressIndicator()
+                                        : TextButton(
+                                            onPressed: () => provider
+                                                .loadMoreLedgerTransactions(),
+                                            child: const Text('Load More'),
+                                          ),
                                   ),
-                                ),
-                                ...dayTransactions.map(
-                                  (transaction) => _buildTransactionItem(
-                                    context,
-                                    transaction,
-                                  ),
-                                ),
-                              ],
-                            )
-                            .animate()
-                            .fadeIn(delay: (index * 50).ms)
-                            .slideY(begin: 0.1, end: 0);
+                                );
+                              }
+                              String date = groupedTransactions.keys.elementAt(
+                                index,
+                              );
+                              List<LedgerTransaction> dayTransactions =
+                                  groupedTransactions[date]!;
+
+                              return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        child: Text(
+                                          date,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
+                                      ...dayTransactions.map(
+                                        (transaction) => _buildTransactionItem(
+                                          context,
+                                          transaction,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                  .animate()
+                                  .fadeIn(delay: (index * 50).ms)
+                                  .slideY(begin: 0.1, end: 0);
+                            },
+                          ),
+                        );
                       },
                     ),
             ),

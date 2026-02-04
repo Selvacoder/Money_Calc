@@ -520,102 +520,137 @@ class _InvestmentHistoryScreenState extends State<InvestmentHistoryScreen> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: filteredHistory.length,
-                      itemBuilder: (context, index) {
-                        final tx = filteredHistory[index];
-                        final isBuy = tx.type.toLowerCase() == 'buy';
-                        final name = assetNames[tx.investmentId] ?? 'Asset';
-
-                        return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.grey.withOpacity(0.1),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.all(16),
-                                leading: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isBuy
-                                        ? Colors.green.withOpacity(0.1)
-                                        : Colors.red.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    isBuy
-                                        ? Icons.arrow_downward
-                                        : Icons.arrow_upward,
-                                    color: isBuy ? Colors.green : Colors.red,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  name,
-                                  style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${isBuy ? 'Bought' : 'Sold'} on ${DateFormat('MMM d, yyyy').format(tx.dateTime)}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        color: Colors.grey,
+                  : NotificationListener<ScrollNotification>(
+                      onNotification: (ScrollNotification scrollInfo) {
+                        if (scrollInfo.metrics.pixels >=
+                                scrollInfo.metrics.maxScrollExtent - 200 &&
+                            !investmentProvider.isLoading &&
+                            investmentProvider.hasMoreTransactions &&
+                            _searchQuery.isEmpty &&
+                            _selectedType == 'All' &&
+                            _selectedDate == null) {
+                          // Only trigger load more if no local filters are active
+                          investmentProvider.loadMoreInvestmentTransactions();
+                        }
+                        return false;
+                      },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount:
+                            filteredHistory.length +
+                            (investmentProvider.hasMoreTransactions ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == filteredHistory.length) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Center(
+                                child: investmentProvider.isLoading
+                                    ? const CircularProgressIndicator()
+                                    : TextButton(
+                                        onPressed: () => investmentProvider
+                                            .loadMoreInvestmentTransactions(),
+                                        child: const Text('Load More'),
                                       ),
+                              ),
+                            );
+                          }
+                          final tx = filteredHistory[index];
+                          final isBuy = tx.type.toLowerCase() == 'buy';
+                          final name = assetNames[tx.investmentId] ?? 'Asset';
+
+                          return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).cardColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.grey.withOpacity(0.1),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.02),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
                                     ),
-                                    if (tx.quantity != null && tx.quantity! > 0)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 2),
-                                        child: Text(
-                                          'Qty: ${tx.quantity} @ ${tx.pricePerUnit != null ? currencySymbol + tx.pricePerUnit!.toStringAsFixed(2) : ""}',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color: Colors.blueGrey,
-                                            fontWeight: FontWeight.w500,
-                                          ),
+                                  ],
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.all(16),
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isBuy
+                                          ? Colors.green.withOpacity(0.1)
+                                          : Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      isBuy
+                                          ? Icons.arrow_downward
+                                          : Icons.arrow_upward,
+                                      color: isBuy ? Colors.green : Colors.red,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    name,
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${isBuy ? 'Bought' : 'Sold'} on ${DateFormat('MMM d, yyyy').format(tx.dateTime)}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: Colors.grey,
                                         ),
                                       ),
-                                  ],
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${isBuy ? '+' : ''}$currencySymbol${tx.amount.toStringAsFixed(2)}',
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: isBuy
-                                            ? Colors.green
-                                            : Colors.red,
+                                      if (tx.quantity != null &&
+                                          tx.quantity! > 0)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 2,
+                                          ),
+                                          child: Text(
+                                            'Qty: ${tx.quantity} @ ${tx.pricePerUnit != null ? currencySymbol + tx.pricePerUnit!.toStringAsFixed(2) : ""}',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              color: Colors.blueGrey,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${isBuy ? '+' : ''}$currencySymbol${tx.amount.toStringAsFixed(2)}',
+                                        style: GoogleFonts.inter(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: isBuy
+                                              ? Colors.green
+                                              : Colors.red,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            )
-                            .animate()
-                            .fadeIn(delay: (index * 50).ms)
-                            .slideY(begin: 0.1, end: 0);
-                      },
+                              )
+                              .animate()
+                              .fadeIn(delay: (index * 50).ms)
+                              .slideY(begin: 0.1, end: 0);
+                        },
+                      ),
                     ),
             ),
           ],

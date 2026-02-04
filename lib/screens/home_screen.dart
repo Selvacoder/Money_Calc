@@ -77,11 +77,29 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      context.read<TransactionProvider>().fetchData();
-      context.read<LedgerProvider>().fetchLedgerTransactions();
-      context.read<InvestmentProvider>().fetchInvestments();
-      context.read<DutchProvider>().fetchGlobalData();
+    Future.microtask(() async {
+      final userProvider = context.read<UserProvider>();
+
+      if (userProvider.isInitialCheckDone &&
+          userProvider.isAuthenticated &&
+          mounted) {
+        // Safe delay to ensure app state is fully synced after navigation
+        await Future.delayed(const Duration(milliseconds: 600));
+
+        if (mounted) {
+          try {
+            debugPrint(
+              'DEBUG: HomeScreen - Triggering initial dashboard fetch',
+            );
+            context.read<TransactionProvider>().fetchData();
+            context.read<LedgerProvider>().fetchLedgerTransactions();
+            context.read<InvestmentProvider>().fetchInvestments();
+            context.read<DutchProvider>().fetchGlobalData();
+          } catch (e) {
+            debugPrint('Error during initial dashboard fetch: $e');
+          }
+        }
+      }
     });
   }
 

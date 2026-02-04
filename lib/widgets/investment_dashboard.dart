@@ -25,71 +25,93 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
           onRefresh: () async {
             await investmentProvider.fetchInvestments();
           },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Portfolio Summary Card
-                _buildPortfolioCard(
-                  investmentProvider,
-                  currencySymbol,
-                  colorScheme,
-                ),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Your Assets',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (ScrollNotification scrollInfo) {
+              if (scrollInfo.metrics.pixels >=
+                      scrollInfo.metrics.maxScrollExtent - 200 &&
+                  !investmentProvider.isLoading &&
+                  investmentProvider.hasMoreInvestments) {
+                investmentProvider.loadMoreInvestments();
+              }
+              return true;
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Portfolio Summary Card
+                  _buildPortfolioCard(
+                    investmentProvider,
+                    currencySymbol,
+                    colorScheme,
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
-                if (investmentProvider.isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else if (investmentProvider.investments.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.show_chart,
-                            size: 64,
-                            color: Colors.grey.withOpacity(0.3),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Start Investing',
-                            style: GoogleFonts.inter(
-                              color: Colors.grey,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
+                  Text(
+                    'Your Assets',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                  )
-                else
-                  ListView.separated(
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    itemCount: investmentProvider.investments.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final investment = investmentProvider.investments[index];
-                      return _buildInvestmentItem(
-                        context,
-                        investment,
-                        currencySymbol,
-                      );
-                    },
                   ),
-              ],
+                  const SizedBox(height: 16),
+
+                  if (investmentProvider.isLoading &&
+                      investmentProvider.investments.isEmpty)
+                    const Center(child: CircularProgressIndicator())
+                  else if (investmentProvider.investments.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40.0),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.show_chart,
+                              size: 64,
+                              color: Colors.grey.withOpacity(0.3),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Start Investing',
+                              style: GoogleFonts.inter(
+                                color: Colors.grey,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: [
+                        ListView.separated(
+                          physics: const NeverScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                          itemCount: investmentProvider.investments.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final investment =
+                                investmentProvider.investments[index];
+                            return _buildInvestmentItem(
+                              context,
+                              investment,
+                              currencySymbol,
+                            );
+                          },
+                        ),
+                        if (investmentProvider.hasMoreInvestments)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),

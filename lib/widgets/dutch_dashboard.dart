@@ -40,10 +40,18 @@ class _DutchDashboardState extends State<DutchDashboard> {
         await provider.fetchGroups();
         await provider.fetchGlobalData();
       },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height - 200,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification scrollInfo) {
+          if (scrollInfo.metrics.pixels >=
+                  scrollInfo.metrics.maxScrollExtent - 200 &&
+              !isLoading &&
+              provider.hasMoreGroups) {
+            provider.loadMoreGroups();
+          }
+          return true;
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -145,7 +153,8 @@ class _DutchDashboardState extends State<DutchDashboard> {
                   ),
 
                 if (!isLoading && groups.isEmpty && provider.error == null)
-                  Expanded(
+                  SizedBox(
+                    height: 200,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -179,21 +188,30 @@ class _DutchDashboardState extends State<DutchDashboard> {
                   ),
 
                 if (groups.isNotEmpty)
-                  Expanded(
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.85,
-                          ),
-                      itemCount: groups.length,
-                      itemBuilder: (context, index) {
-                        final group = groups[index];
-                        return _buildGroupCard(group);
-                      },
-                    ),
+                  Column(
+                    children: [
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.85,
+                            ),
+                        itemCount: groups.length,
+                        itemBuilder: (context, index) {
+                          final group = groups[index];
+                          return _buildGroupCard(group);
+                        },
+                      ),
+                      if (provider.hasMoreGroups)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                    ],
                   ),
               ],
             ),

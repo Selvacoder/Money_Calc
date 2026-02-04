@@ -32,27 +32,33 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter both email and password';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please enter both email and password';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
     if (!_isValidEmail(email)) {
-      setState(() {
-        _errorMessage = 'Please enter a valid email address';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please enter a valid email address';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -66,24 +72,30 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = result['message'] ?? 'Invalid credentials';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = result['message'] ?? 'Invalid credentials';
+          _errorMessage = 'An error occurred: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'An error occurred: $e';
-        _isLoading = false;
-      });
     }
   }
 
   Future<void> _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -94,16 +106,20 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Google sign-in failed';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Google sign-in failed';
+          _errorMessage = 'Google sign-in error: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Google sign-in error: $e';
-        _isLoading = false;
-      });
     }
   }
 

@@ -41,10 +41,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -59,43 +61,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
         phone.isEmpty || // Check phone
         password.isEmpty ||
         confirmPassword.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please fill in all fields';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please fill in all fields';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
     if (!_isValidEmail(email)) {
-      setState(() {
-        _errorMessage = 'Please enter a valid email address';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please enter a valid email address';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
     // Basic Phone Validation
     if (phone.length < 10) {
-      setState(() {
-        _errorMessage = 'Please enter a valid phone number';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please enter a valid phone number';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
     if (password.length < 6) {
-      setState(() {
-        _errorMessage = 'Password must be at least 6 characters';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Password must be at least 6 characters';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
     if (password != confirmPassword) {
-      setState(() {
-        _errorMessage = 'Passwords do not match';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Passwords do not match';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -114,17 +126,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage =
+                result['message'] ?? 'Sign up failed. Please try again.';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage =
-              result['message'] ?? 'Sign up failed. Please try again.';
+          _errorMessage = 'An error occurred: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'An error occurred: $e';
-        _isLoading = false;
-      });
     }
   }
 

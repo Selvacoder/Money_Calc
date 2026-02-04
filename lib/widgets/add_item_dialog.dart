@@ -349,7 +349,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
   Widget _buildModeToggle(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -395,7 +395,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
           child: Text(
             text,
             style: GoogleFonts.inter(
-              color: isActive ? Colors.white : Colors.grey.shade600,
+              color: isActive
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -423,11 +425,13 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 shape: BoxShape.circle,
                 color: isSelected
                     ? Theme.of(context).colorScheme.primary
-                    : Colors.grey.withOpacity(0.1),
+                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
               ),
               child: Icon(
                 _getIconData(iconName),
-                color: isSelected ? Colors.white : Colors.grey,
+                color: isSelected
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
               ),
             ),
           );
@@ -441,7 +445,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withOpacity(0.1),
+        ),
       ),
       child: Row(
         children: [
@@ -487,7 +493,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
           child: Text(
             text,
             style: TextStyle(
-              color: isActive ? color : Colors.grey,
+              color: isActive
+                  ? color
+                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -502,7 +510,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withOpacity(0.1),
+        ),
       ),
       child: Row(
         children: [

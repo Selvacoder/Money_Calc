@@ -428,6 +428,9 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
     VoidCallback onTap, {
     bool isSubSelect = false,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -436,18 +439,16 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
           horizontal: isSubSelect ? 12 : 16,
           vertical: isSubSelect ? 6 : 8,
         ),
-        margin: EdgeInsets.only(right: 8, top: isSubSelect ? 0 : 0), // Spacing
+        margin: EdgeInsets.only(right: 8, top: isSubSelect ? 0 : 0),
         decoration: BoxDecoration(
           color: isSelected
-              ? Theme.of(context).colorScheme.primary
+              ? theme.colorScheme.primary
               : (isSubSelect
-                    ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                    ? theme.colorScheme.primary.withOpacity(0.1)
                     : Colors.transparent),
           borderRadius: BorderRadius.circular(20),
           border: isSubSelect && !isSelected
-              ? Border.all(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                )
+              ? Border.all(color: theme.colorScheme.primary.withOpacity(0.2))
               : null,
         ),
         child: Text(
@@ -456,8 +457,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
             color: isSelected
                 ? Colors.white
                 : (isSubSelect
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.grey),
+                      ? theme.colorScheme.primary
+                      : (isDark ? Colors.grey[400] : Colors.grey)),
             fontWeight: FontWeight.w600,
             fontSize: isSubSelect ? 11 : 12,
           ),
@@ -584,8 +585,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color:
-                          item.isVariable && theme.brightness == Brightness.dark
+                      color: theme.brightness == Brightness.dark
                           ? Colors.white
                           : Colors.black87,
                     ),

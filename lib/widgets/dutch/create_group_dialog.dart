@@ -229,7 +229,9 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor.withOpacity(0.1),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -259,7 +261,11 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).dividerColor.withOpacity(0.2),
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: CountryCodePicker(

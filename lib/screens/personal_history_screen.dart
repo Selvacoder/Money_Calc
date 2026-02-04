@@ -414,14 +414,20 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(
+                                  color: Theme.of(
+                                    context,
+                                  ).dividerColor.withOpacity(0.1),
+                                ),
                               ),
                               child: Icon(
                                 Icons.download,
                                 size: 16,
-                                color: Colors.grey.shade600,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                             ),
                           ),
@@ -437,12 +443,14 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                               decoration: BoxDecoration(
                                 color: _selectedDate != null
                                     ? Theme.of(context).colorScheme.primary
-                                    : Colors.white,
+                                    : Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _selectedDate != null
                                       ? Theme.of(context).colorScheme.primary
-                                      : Colors.grey.shade300,
+                                      : Theme.of(
+                                          context,
+                                        ).dividerColor.withOpacity(0.1),
                                 ),
                               ),
                               child: Row(
@@ -452,7 +460,10 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                                     size: 16,
                                     color: _selectedDate != null
                                         ? Colors.white
-                                        : Colors.grey.shade600,
+                                        : Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withOpacity(0.6),
                                   ),
                                   if (_selectedDate != null) ...[
                                     const SizedBox(width: 8),
@@ -495,9 +506,11 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor.withOpacity(0.1),
+                      ),
                     ),
                     child: TextField(
                       onChanged: (value) {
@@ -630,12 +643,12 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Colors.white,
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
-                : Colors.grey.shade300,
+                : Theme.of(context).dividerColor.withOpacity(0.1),
           ),
         ),
         child: Row(
@@ -792,8 +805,8 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: isExpense
-                      ? const Color(0xFFFFE5E5)
-                      : const Color(0xFFE5F5E9),
+                      ? Colors.red.withOpacity(0.1)
+                      : Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

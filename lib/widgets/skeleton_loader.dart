@@ -15,20 +15,24 @@ class SkeletonLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
           height: height,
           width: width,
           decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceVariant.withOpacity(0.3),
+            color: isDark
+                ? Colors.grey[800]!.withOpacity(0.5)
+                : Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
             borderRadius: BorderRadius.circular(borderRadius),
           ),
         )
         .animate(onPlay: (controller) => controller.repeat())
         .shimmer(
           duration: 1200.ms,
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+          color: isDark
+              ? Colors.grey[700]!.withOpacity(0.3)
+              : Theme.of(context).colorScheme.surface.withOpacity(0.5),
         );
   }
 }

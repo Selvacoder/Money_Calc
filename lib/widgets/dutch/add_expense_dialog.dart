@@ -174,15 +174,21 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                   Center(
                     child: Column(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.people_outline,
                           size: 48,
-                          color: Colors.grey,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.3),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'Waiting for group members...',
-                          style: GoogleFonts.inter(color: Colors.grey),
+                          style: GoogleFonts.inter(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const CircularProgressIndicator(),

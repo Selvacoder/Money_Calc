@@ -88,8 +88,11 @@ class MyApp extends StatelessWidget {
               colorScheme: ColorScheme.fromSeed(
                 seedColor: themeProvider.seedColor,
                 brightness: Brightness.dark,
-                surface: const Color(0xFF1E1E1E), // Match screenshot card color
-                background: const Color(0xFF121212), // Match screenshot bg
+                surface: const Color(0xFF1E1E1E),
+                background: const Color(0xFF121212),
+                error: const Color(0xFFFF6B6B),
+                errorContainer: const Color(0xFF422222),
+                onErrorContainer: const Color(0xFFFFD9D9),
               ),
               useMaterial3: true,
               scaffoldBackgroundColor: const Color(0xFF121212),

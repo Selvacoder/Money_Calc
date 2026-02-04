@@ -126,19 +126,28 @@ class _DutchDashboardState extends State<DutchDashboard> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                      color: Theme.of(context).colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withOpacity(0.2),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, color: Colors.red.shade700),
+                        Icon(
+                          Icons.error_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             provider.error!,
                             style: GoogleFonts.inter(
-                              color: Colors.red.shade900,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onErrorContainer,
                             ),
                           ),
                         ),
@@ -264,7 +273,9 @@ class _DutchDashboardState extends State<DutchDashboard> {
             Text(
               'Settled up', // TODO: Group specific balance
               style: GoogleFonts.inter(
-                color: Colors.green, // Keep green for positive status
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.greenAccent
+                    : Colors.green.shade700,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),

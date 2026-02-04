@@ -153,7 +153,11 @@ class TransactionDetailsDialog extends StatelessWidget {
             color: Colors.grey.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 20, color: Colors.grey.shade700),
+          child: Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          ),
         ),
         const SizedBox(width: 16),
         Column(
@@ -163,7 +167,7 @@ class TransactionDetailsDialog extends StatelessWidget {
               label,
               style: GoogleFonts.inter(
                 fontSize: 12,
-                color: Colors.grey.shade500,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
               ),
             ),
             Text(

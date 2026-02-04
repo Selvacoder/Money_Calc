@@ -50,7 +50,7 @@ class _DutchHistoryScreenState extends State<DutchHistoryScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          'History',
+          'Go Dutch History',
           style: GoogleFonts.inter(fontWeight: FontWeight.bold),
         ),
       ),

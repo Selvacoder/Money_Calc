@@ -355,7 +355,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
           Expanded(
             child: _buildToggleBtn(
               context,
-              'Variable', // Rename One Time -> Variable
+              'Flexi',
               _isVariable,
               () => setState(() => _isVariable = true),
             ),

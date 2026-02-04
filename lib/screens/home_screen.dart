@@ -186,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildToggleBtn('Personal', 0),
                   _buildToggleBtn('Ledger', 1),
                   _buildToggleBtn('Investment', 2),
-                  _buildToggleBtn('Dutch', 3), // NEW
+                  _buildToggleBtn('Go Dutch', 3), // NEW
                 ],
               ),
             ),

@@ -277,7 +277,7 @@ class DutchService {
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchExpensesCollectionId,
-        queries: [Query.limit(100), Query.orderDesc('\$createdAt')],
+        queries: [Query.limit(5000), Query.orderDesc('\$createdAt')],
       );
       final docs = result.documents.map((d) {
         final data = d.data;
@@ -305,7 +305,7 @@ class DutchService {
       final result = await databases.listDocuments(
         databaseId: AppwriteConfig.databaseId,
         collectionId: AppwriteConfig.dutchSettlementsCollectionId,
-        queries: [Query.limit(100), Query.orderDesc('\$createdAt')],
+        queries: [Query.limit(5000), Query.orderDesc('\$createdAt')],
       );
       final docs = result.documents.map((d) {
         final data = d.data;

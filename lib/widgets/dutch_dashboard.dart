@@ -13,11 +13,18 @@ class DutchDashboard extends StatefulWidget {
 }
 
 class _DutchDashboardState extends State<DutchDashboard> {
+  int _currentPage = 0; // 0=Overall, 1=Yearly, 2=Monthly, 3=Weekly, 4=Daily
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
-      context.read<DutchProvider>().fetchGroups();
+      final provider = context.read<DutchProvider>();
+      print('DEBUG Dashboard: Fetching groups and global data...');
+      provider.fetchGroups();
+      provider.fetchGlobalData().then((_) {
+        print('DEBUG Dashboard: Global data fetched');
+      });
     });
   }
 
@@ -27,169 +34,171 @@ class _DutchDashboardState extends State<DutchDashboard> {
     final groups = provider.groups;
     final isLoading = provider.isLoading;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header / Net Balance Placeholder
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+    return RefreshIndicator(
+      onRefresh: () async {
+        final provider = context.read<DutchProvider>();
+        await provider.fetchGroups();
+        await provider.fetchGlobalData();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height - 200,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Total Net Balance',
-                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '₹0', // TODO: Calculate global net balance
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You are all settled up!',
-                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Your Groups',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              IconButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => const CreateGroupDialog(),
-                  );
-                },
-                icon: Icon(
-                  Icons.add_circle,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          if (isLoading && groups.isEmpty)
-            const Center(child: CircularProgressIndicator()),
-
-          if (provider.error != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      provider.error!,
-                      style: GoogleFonts.inter(color: Colors.red.shade900),
+                // Header / Net Balance Placeholder
+                // Balance Card with time period filtering
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _currentPage = (_currentPage + 1) % 5;
+                    });
+                  },
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 400),
+                    switchInCurve: Curves.easeInOut,
+                    switchOutCurve: Curves.easeInOut,
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: ScaleTransition(
+                              scale: Tween<double>(
+                                begin: 0.9,
+                                end: 1.0,
+                              ).animate(animation),
+                              child: child,
+                            ),
+                          );
+                        },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_currentPage),
+                      child: _buildCurrentShareCard(provider, context),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 20),
-                    onPressed: () {
-                      context.read<DutchProvider>().fetchGroups();
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-          if (!isLoading && groups.isEmpty && provider.error == null)
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                const SizedBox(height: 24),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(
-                      Icons.group_outlined,
-                      size: 64,
-                      color: Colors.grey.shade300,
-                    ),
-                    const SizedBox(height: 16),
                     Text(
-                      'No groups yet',
+                      'Your Groups',
                       style: GoogleFonts.inter(
-                        color: Colors.grey,
-                        fontSize: 16,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
+                    IconButton(
                       onPressed: () {
                         showDialog(
                           context: context,
                           builder: (context) => const CreateGroupDialog(),
                         );
                       },
-                      child: const Text('Create a Group'),
+                      icon: Icon(
+                        Icons.add_circle,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ),
 
-          if (groups.isNotEmpty)
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.85,
-                ),
-                itemCount: groups.length,
-                itemBuilder: (context, index) {
-                  final group = groups[index];
-                  return _buildGroupCard(group);
-                },
-              ),
+                const SizedBox(height: 16),
+
+                if (isLoading && groups.isEmpty)
+                  const Center(child: CircularProgressIndicator()),
+
+                if (provider.error != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red.shade700),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            provider.error!,
+                            style: GoogleFonts.inter(
+                              color: Colors.red.shade900,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 20),
+                          onPressed: () {
+                            context.read<DutchProvider>().fetchGroups();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (!isLoading && groups.isEmpty && provider.error == null)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.group_outlined,
+                            size: 64,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No groups yet',
+                            style: GoogleFonts.inter(
+                              color: Colors.grey,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => const CreateGroupDialog(),
+                              );
+                            },
+                            child: const Text('Create a Group'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                if (groups.isNotEmpty)
+                  Expanded(
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.85,
+                          ),
+                      itemCount: groups.length,
+                      itemBuilder: (context, index) {
+                        final group = groups[index];
+                        return _buildGroupCard(group);
+                      },
+                    ),
+                  ),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -244,6 +253,105 @@ class _DutchDashboardState extends State<DutchDashboard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentShareCard(DutchProvider provider, BuildContext context) {
+    String title;
+    double share;
+    DateTime? startDate;
+    final now = DateTime.now();
+
+    print(
+      'DEBUG _buildCurrentShareCard: currentPage=$_currentPage, currentUserId=${provider.currentUserId}',
+    );
+
+    switch (_currentPage) {
+      case 0: // Overall
+        title = 'Overall Share';
+        share = provider.getGlobalUserShare();
+        print('DEBUG Overall Share called, result=$share');
+        break;
+      case 1: // Yearly
+        title = 'Yearly Share';
+        startDate = DateTime(now.year, 1, 1);
+        share = provider.getGlobalUserShare(startDate: startDate);
+        break;
+      case 2: // Monthly
+        title = 'Monthly Share';
+        startDate = DateTime(now.year, now.month, 1);
+        share = provider.getGlobalUserShare(startDate: startDate);
+        break;
+      case 3: // Weekly
+        title = 'Weekly Share';
+        startDate = now.subtract(const Duration(days: 7));
+        share = provider.getGlobalUserShare(startDate: startDate);
+        break;
+      case 4: // Daily
+      default:
+        title = 'Daily Share';
+        startDate = DateTime(now.year, now.month, now.day);
+        share = provider.getGlobalUserShare(startDate: startDate);
+        break;
+    }
+
+    return Container(
+      key: ValueKey<int>(_currentPage),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '₹${share.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Page indicators
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (index) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentPage == index
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.3),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }

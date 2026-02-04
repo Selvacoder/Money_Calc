@@ -18,7 +18,7 @@ class DutchReportsScreen extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          'Reports',
+          'Go Dutch Reports',
           style: GoogleFonts.inter(fontWeight: FontWeight.bold),
         ),
       ),

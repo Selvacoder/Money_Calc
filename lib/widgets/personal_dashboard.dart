@@ -158,7 +158,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                       () => setState(() => _entryMode = 'monthly'),
                     ),
                     _buildToggleOption(
-                      'Variable',
+                      'Flexi',
                       _entryMode == 'variable',
                       () => setState(() => _entryMode = 'variable'),
                     ),

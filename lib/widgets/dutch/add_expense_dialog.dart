@@ -33,7 +33,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   @override
   void initState() {
     super.initState();
-    // Default payer is current user (if found) or first member
+    // Default payer is current user (expense creator)
+    // Find current user by checking context.read
+    // Note: We can't access Provider in initState, so we'll set it in didChangeDependencies
     _selectedPayerId = widget.members.isNotEmpty
         ? widget.members.first['userId']
         : '';
@@ -41,6 +43,21 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     // Default everyone is involved in equal split
     for (var m in widget.members) {
       _involvedMembers[m['userId']] = true;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Set current user as default payer if not already set
+    if (widget.members.isNotEmpty &&
+        (_selectedPayerId.isEmpty ||
+            _selectedPayerId == widget.members.first['userId'])) {
+      final provider = context.read<DutchProvider>();
+      final currentUserId = provider.currentUserId ?? '';
+      if (currentUserId.isNotEmpty) {
+        _selectedPayerId = currentUserId;
+      }
     }
   }
 

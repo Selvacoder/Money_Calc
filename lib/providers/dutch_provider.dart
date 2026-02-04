@@ -117,6 +117,12 @@ class DutchProvider extends ChangeNotifier {
     }
 
     try {
+      // Get current user ID
+      final account = AppwriteService().account;
+      final user = await account.get();
+      _currentUserId = user.$id;
+      print('DEBUG fetchGlobalData: Set currentUserId=$_currentUserId');
+
       final results = await Future.wait([
         _service.getAllExpenses(),
         _service.getAllSettlements(),
@@ -124,6 +130,9 @@ class DutchProvider extends ChangeNotifier {
       _globalExpenses = results[0];
       _mergeSettlements(allSettlements: results[1]);
       _calculateGlobalBalances();
+      print(
+        'DEBUG fetchGlobalData: Loaded ${_globalExpenses.length} expenses, ${_globalSettlements.length} settlements',
+      );
     } catch (e) {
       print('Error fetching global dutch data: $e');
     } finally {
@@ -288,12 +297,27 @@ class DutchProvider extends ChangeNotifier {
 
       _calculateBalances();
       _subscribeToRealtime();
+
+      // Auto-check if any pending expenses should be marked as completed
+      _checkPendingExpensesForCompletion();
     } catch (e) {
       print('Error fetching group details: $e');
       _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  void _checkPendingExpensesForCompletion() {
+    // Check all pending expenses to see if they should be auto-completed
+    for (var expense in _currentGroupExpenses) {
+      if (expense['status'] == 'pending') {
+        final expenseId = _safeId(expense['id']);
+        if (expenseId.isNotEmpty) {
+          _checkAndCompleteExpense(expenseId);
+        }
+      }
     }
   }
 
@@ -304,6 +328,107 @@ class DutchProvider extends ChangeNotifier {
       _currentGroupSettlements,
       _groupBalances,
     );
+  }
+
+  /// Calculate the current user's actual share (money out of pocket)
+  /// This shows: Total amount paid in expenses - Total settlements received
+  double getUserShare() {
+    if (_currentUserId == null) return 0.0;
+
+    double totalPaid = 0.0;
+    double settlementsReceived = 0.0;
+
+    // Calculate total amount the user paid for expenses
+    for (var expense in _currentGroupExpenses) {
+      if (expense['status'] != 'completed' && expense['status'] != 'pending') {
+        continue;
+      }
+      final payerId = expense['payerId'];
+      if (payerId == _currentUserId) {
+        totalPaid += (expense['amount'] as num).toDouble();
+      }
+    }
+
+    // Calculate total settlements received (completed only)
+    for (var settlement in _currentGroupSettlements) {
+      if (settlement['status'] != 'completed') continue;
+      final receiverId = settlement['receiverId'];
+      if (receiverId == _currentUserId) {
+        settlementsReceived += (settlement['amount'] as num).toDouble();
+      }
+    }
+
+    return totalPaid - settlementsReceived;
+  }
+
+  /// Calculate the user's share across ALL groups with optional date filtering
+  /// This shows: Total amount paid in all expenses - Total settlements received + Settlements paid
+  /// If startDate is provided, only includes expenses/settlements after that date
+  double getGlobalUserShare({DateTime? startDate}) {
+    if (_currentUserId == null) return 0.0;
+
+    double totalPaid = 0.0;
+    double settlementsReceived = 0.0;
+    double settlementsPaid = 0.0;
+
+    // Calculate total amount the user paid for expenses across all groups
+    for (var expense in _globalExpenses) {
+      if (expense['status'] != 'completed' && expense['status'] != 'pending') {
+        continue;
+      }
+
+      // Apply date filter if specified
+      if (startDate != null) {
+        // Use $createdAt field from Appwrite
+        final createdAtStr = expense['\$createdAt'] as String?;
+        if (createdAtStr != null) {
+          final expenseDate = DateTime.tryParse(createdAtStr);
+          if (expenseDate == null || expenseDate.isBefore(startDate)) {
+            continue;
+          }
+        }
+      }
+
+      final payerId = expense['payerId'];
+      if (payerId == _currentUserId) {
+        totalPaid += (expense['amount'] as num).toDouble();
+      }
+    }
+
+    // Calculate settlements (completed only) across all groups
+    for (var settlement in _globalSettlements) {
+      if (settlement['status'] != 'completed') continue;
+
+      // Apply date filter if specified
+      if (startDate != null) {
+        // Use $createdAt field from Appwrite
+        final createdAtStr = settlement['\$createdAt'] as String?;
+        if (createdAtStr != null) {
+          final settlementDate = DateTime.tryParse(createdAtStr);
+          if (settlementDate == null || settlementDate.isBefore(startDate)) {
+            continue;
+          }
+        }
+      }
+
+      final receiverId = settlement['receiverId'];
+      final payerId = settlement['payerId'];
+
+      // Money received (reduces our out-of-pocket)
+      if (receiverId == _currentUserId) {
+        settlementsReceived += (settlement['amount'] as num).toDouble();
+      }
+
+      // Money paid out (increases our out-of-pocket)
+      if (payerId == _currentUserId) {
+        settlementsPaid += (settlement['amount'] as num).toDouble();
+      }
+    }
+
+    print(
+      'DEBUG getGlobalUserShare: totalPaid=$totalPaid, received=$settlementsReceived, paid=$settlementsPaid, expenses=${_globalExpenses.length}, settlements=${_globalSettlements.length}',
+    );
+    return totalPaid - settlementsReceived + settlementsPaid;
   }
 
   Future<void> addExpense({
@@ -474,6 +599,10 @@ class DutchProvider extends ChangeNotifier {
 
         _mergeSettlements(newSettlements: settlements);
         _calculateBalances();
+
+        // Check if any pending expenses should be completed now
+        // (in case settlements were approved before this refresh)
+        _checkPendingExpensesForCompletion();
       }
     } catch (e) {
       _error = e.toString();
@@ -678,9 +807,65 @@ class DutchProvider extends ChangeNotifier {
             ? _currentGroupSettlements[gIndex]
             : (globalIndex != -1 ? _globalSettlements[globalIndex] : null);
 
-        final expenseId = settlement?['expenseId'];
-        if (expenseId != null) {
-          _checkAndCompleteExpense(expenseId.toString());
+        var expenseId = _safeId(settlement?['expenseId']);
+
+        // FALLBACK: If expenseId is missing, try to find the expense by matching settlement details
+        if (expenseId.isEmpty && settlement != null) {
+          print(
+            'DEBUG: Settlement missing expenseId, searching for matching expense',
+          );
+          final sPayer = _safeId(settlement['payerId']);
+          final sReceiver = _safeId(settlement['receiverId']);
+          final sAmount = (settlement['amount'] as num?)?.toDouble() ?? 0.0;
+
+          // Find expense where this person owes the receiver
+          for (var exp in _currentGroupExpenses) {
+            final expPayerId = _safeId(exp['payerId']);
+            if (expPayerId != sReceiver)
+              continue; // Settlement receiver must be expense payer
+
+            final splitType = exp['splitType'];
+            final splitDataRaw = exp['splitData'];
+
+            try {
+              if (splitType == 'equal') {
+                final List ids = jsonDecode(splitDataRaw);
+                if (!ids.contains(sPayer)) continue;
+                final amount = (exp['amount'] as num).toDouble();
+                final perPerson = amount / ids.length;
+                if (perPerson.toStringAsFixed(2) ==
+                    sAmount.toStringAsFixed(2)) {
+                  expenseId = _safeId(exp['id']);
+                  print(
+                    'DEBUG: Found matching expense via equal split: $expenseId',
+                  );
+                  break;
+                }
+              } else if (splitType == 'exact') {
+                final Map data = jsonDecode(splitDataRaw);
+                final share = data[sPayer];
+                if (share != null &&
+                    (share as num).toDouble().toStringAsFixed(2) ==
+                        sAmount.toStringAsFixed(2)) {
+                  expenseId = _safeId(exp['id']);
+                  print(
+                    'DEBUG: Found matching expense via exact split: $expenseId',
+                  );
+                  break;
+                }
+              }
+            } catch (e) {
+              print('DEBUG: Error parsing expense split data: $e');
+            }
+          }
+        }
+
+        if (expenseId.isNotEmpty) {
+          _checkAndCompleteExpense(expenseId);
+        } else {
+          print(
+            'DEBUG: Could not determine expenseId for settlement ${settlement?['id']}',
+          );
         }
       }
     } catch (e) {
@@ -722,16 +907,70 @@ class DutchProvider extends ChangeNotifier {
       }
 
       // Check if EVERY expected payer has a 'completed' settlement for this expense
+      // Parse splitData to get each person's share for amount-based fallback
+      Map<String, double> shareAmounts = {};
+      if (splitType == 'equal') {
+        final List ids = jsonDecode(splitDataRaw);
+        final amount = (expense['amount'] as num).toDouble();
+        final perPerson = amount / ids.length;
+        for (var id in ids) {
+          shareAmounts[id.toString()] = perPerson;
+        }
+      } else if (splitType == 'exact') {
+        final Map data = jsonDecode(splitDataRaw);
+        data.forEach((id, val) {
+          shareAmounts[id.toString()] = (val as num).toDouble();
+        });
+      }
+
       bool allPaid = true;
+      print('DEBUG: Checking expense $expenseId for auto-completion');
+      print('DEBUG: Expected payers: $expectedPayers');
+      print('DEBUG: Share amounts: $shareAmounts');
+      print(
+        'DEBUG: Current settlements count: ${_currentGroupSettlements.length}',
+      );
+
       for (var epId in expectedPayers) {
-        final settled = _currentGroupSettlements.any(
-          (s) =>
-              _safeId(s['expenseId']) == _safeId(expenseId) &&
-              _safeId(s['payerId']) == _safeId(epId) &&
-              _safeId(s['receiverId']) == _safeId(payerId) &&
-              s['status'] == 'completed',
-        );
+        final expectedAmount = shareAmounts[epId] ?? 0.0;
+
+        final settled = _currentGroupSettlements.any((s) {
+          if (s['status'] != 'completed') return false;
+
+          final sPayer = _safeId(s['payerId']);
+          final sReceiver = _safeId(s['receiverId']);
+          final sExpId = _safeId(s['expenseId']);
+
+          // Check if people match
+          if (sPayer != _safeId(epId) || sReceiver != _safeId(payerId)) {
+            return false;
+          }
+
+          // Strict expenseId match
+          if (sExpId.isNotEmpty && sExpId == _safeId(expenseId)) {
+            print('DEBUG: Found settlement for $epId via expenseId match');
+            return true;
+          }
+
+          // Amount-based fallback if expenseId is missing
+          if (sExpId.isEmpty && expectedAmount > 0) {
+            final sAmount = (s['amount'] as num).toDouble().toStringAsFixed(2);
+            final targetAmount = expectedAmount.toStringAsFixed(2);
+            if (sAmount == targetAmount) {
+              print(
+                'DEBUG: Found settlement for $epId via amount match ($targetAmount)',
+              );
+              return true;
+            }
+          }
+
+          return false;
+        });
+
         if (!settled) {
+          print(
+            'DEBUG: Payer $epId has NOT settled (expected: $expectedAmount)',
+          );
           allPaid = false;
           break;
         }
@@ -745,10 +984,32 @@ class DutchProvider extends ChangeNotifier {
           expenseId,
           'completed',
         );
+        print('DEBUG: Update expense status result: $success');
         if (success) {
+          // Update current group expenses
           _currentGroupExpenses[expenseIndex]['status'] = 'completed';
+
+          // Also update global expenses list
+          final globalIndex = _globalExpenses.indexWhere(
+            (e) => _safeId(e['id']) == _safeId(expenseId),
+          );
+          if (globalIndex != -1) {
+            _globalExpenses[globalIndex]['status'] = 'completed';
+          }
+
+          print(
+            'DEBUG: Successfully marked expense $expenseId as completed in database and local state',
+          );
           notifyListeners();
+        } else {
+          print(
+            'ERROR: Failed to update expense status in database for $expenseId',
+          );
         }
+      } else {
+        print(
+          'DEBUG: Not all participants have paid yet for expense $expenseId',
+        );
       }
     } catch (e) {
       print('Error auto-completing expense: $e');

@@ -1,3 +1,4 @@
+import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 
 class AuthService {
@@ -21,7 +22,14 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    return await _appwrite.login(email: email, password: password);
+    try {
+      return await _appwrite.login(email: email, password: password);
+    } catch (e) {
+      if (e is AppwriteException) {
+        return {'success': false, 'message': e.message ?? 'Login failed'};
+      }
+      return {'success': false, 'message': 'Login failed: $e'};
+    }
   }
 
   Future<bool> signInWithGoogle() async {

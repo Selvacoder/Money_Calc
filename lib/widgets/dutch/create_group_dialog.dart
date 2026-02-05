@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/dutch_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/appwrite_service.dart';
+import '../../utils/formatters.dart';
 
 class CreateGroupDialog extends StatefulWidget {
   const CreateGroupDialog({super.key});
@@ -26,6 +28,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   final List<Map<String, String>> _membersToAdd = [];
   bool _isVerifyingMember = false;
   String? _memberError;
+  bool _showInvite = false; // Added state
   String _selectedCountryCode = '+91';
 
   @override
@@ -40,6 +43,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
     setState(() {
       _isVerifyingMember = true;
       _memberError = null;
+      _showInvite = false; // Reset invite
     });
 
     try {
@@ -72,7 +76,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
           _memberPhoneController.clear();
         });
       } else {
-        setState(() => _memberError = "User not found ($phone)");
+        setState(() {
+          _memberError = "User not found ($phone)";
+          _showInvite = true; // Show invite
+        });
       }
     } catch (e) {
       setState(() => _memberError = "Error finding user: $e");
@@ -111,8 +118,13 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       // Use the BuildContext safely
       final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+      final rawName = _nameController.text.trim();
+      final name = rawName.isNotEmpty
+          ? rawName[0].toUpperCase() + rawName.substring(1)
+          : rawName;
+
       final success = await dutchProvider.createGroup(
-        name: _nameController.text.trim(),
+        name: name,
         type: _selectedType,
         members: memberIds,
         createdBy: currentUser.userId,
@@ -172,6 +184,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 // Group Name
                 TextFormField(
                   controller: _nameController,
+                  textCapitalization: TextCapitalization.sentences,
+                  inputFormatters: [CapitalizeFirstLetterTextFormatter()],
                   decoration: InputDecoration(
                     labelText: 'Group Name',
                     hintText: 'e.g. Goa Trip 2024',
@@ -332,44 +346,68 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     ),
                   ),
 
+                if (_showInvite)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          if (_memberPhoneController.text.isNotEmpty) {
+                            final phone =
+                                '$_selectedCountryCode${_memberPhoneController.text}';
+                            final url = Uri.parse(
+                              'https://wa.me/$phone?text=Hey! Join me on Tap It to track our shared expenses easily. Download it here: [Link]',
+                            );
+                            if (await canLaunchUrl(url)) {
+                              await launchUrl(
+                                url,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.share, size: 16),
+                        label: const Text('Invite via WhatsApp'),
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF25D366),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 const SizedBox(height: 32),
 
                 // Actions
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
+                // Actions
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : _createGroup,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : _createGroup,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Create Group'),
-                      ),
-                    ),
-                  ],
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Create Group'),
+                  ),
                 ),
               ],
             ),

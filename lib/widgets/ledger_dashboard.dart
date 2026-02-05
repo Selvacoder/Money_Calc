@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:url_launcher/url_launcher.dart'; // Added import
 import '../utils/formatters.dart';
 
 import '../models/ledger_transaction.dart';
@@ -157,21 +158,56 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                             color: Colors.orange.withOpacity(0.3),
                           ),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Colors.orange,
-                              size: 16,
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.info_outline,
+                                  color: Colors.orange,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'This user is not on Tap It. We recommend tracking this in the Notes section.',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'This user is not on MoneyCalc. We recommend tracking this in the Notes section.',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: Colors.orange.shade800,
-                                  fontWeight: FontWeight.w500,
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: TextButton.icon(
+                                onPressed: () async {
+                                  if (phoneController.text.isNotEmpty) {
+                                    final phone =
+                                        '$selectedCountryCode${phoneController.text}';
+                                    final url = Uri.parse(
+                                      'https://wa.me/$phone?text=Hey! Join me on Tap It to track our expenses easily. Download it here: [Link]',
+                                    );
+                                    if (await canLaunchUrl(url)) {
+                                      await launchUrl(
+                                        url,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.share, size: 16),
+                                label: const Text('Invite via WhatsApp'),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
                                 ),
                               ),
                             ),

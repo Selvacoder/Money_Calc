@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || password.isEmpty) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please enter both email and password';
+          _errorMessage = 'Please enter both email and password.';
           _isLoading = false;
         });
       }
@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_isValidEmail(email)) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please enter a valid email address';
+          _errorMessage = 'Please enter a valid email address.';
           _isLoading = false;
         });
       }
@@ -67,14 +67,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final result = await userProvider.login(email, password);
 
-      if (result['success'] == true) {
-        if (mounted) {
+      if (mounted) {
+        if (result['success'] == true) {
           Navigator.of(context).pushReplacementNamed('/home');
-        }
-      } else {
-        if (mounted) {
+        } else {
+          final msg = result['message']?.toString() ?? 'Invalid credentials';
           setState(() {
-            _errorMessage = result['message'] ?? 'Invalid credentials';
+            _errorMessage = msg;
             _isLoading = false;
           });
         }
@@ -172,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // App Name
                   Text(
-                    'MoneyCalc',
+                    'Tap It',
                     style: GoogleFonts.inter(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
@@ -298,7 +297,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                          onSubmitted: (_) => _handleLogin(),
+                          onSubmitted: (_) {
+                            if (!_isLoading) _handleLogin();
+                          },
                         ),
 
                         // Forgot Password

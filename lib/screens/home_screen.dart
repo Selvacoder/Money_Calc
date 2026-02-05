@@ -127,20 +127,20 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6), // Reduced padding
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
+                color: theme.colorScheme.primary, // Restored background color
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.calculate_outlined,
-                color: Colors.white,
-                size: 24,
+              child: Image.asset(
+                'assets/icon/app_logo.png',
+                width: 28, // Increased logo size
+                height: 28,
               ),
             ),
             const SizedBox(width: 12),
             Text(
-              'MoneyCalc',
+              'Tap It',
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 22,

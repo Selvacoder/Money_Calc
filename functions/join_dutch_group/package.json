@@ -1,0 +1,10 @@
+{
+    "name": "join-dutch-group",
+    "version": "1.0.0",
+    "description": "Appwrite function to securely join a dutch group",
+    "main": "main.js",
+    "dependencies": {
+        "node-appwrite": "^11.0.0"
+    },
+    "devDependencies": {}
+}

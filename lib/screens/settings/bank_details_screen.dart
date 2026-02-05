@@ -12,10 +12,12 @@ class BankDetailsScreen extends StatefulWidget {
 
 class _BankDetailsScreenState extends State<BankDetailsScreen> {
   final _bankController = TextEditingController();
+  final _customMethodController = TextEditingController();
 
   @override
   void dispose() {
     _bankController.dispose();
+    _customMethodController.dispose();
     super.dispose();
   }
 
@@ -54,11 +56,61 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
     );
   }
 
+  void _showAddCustomMethodDialog() {
+    _customMethodController.clear();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Payment Method'),
+        content: TextField(
+          controller: _customMethodController,
+          decoration: const InputDecoration(
+            labelText: 'Method Name',
+            hintText: 'e.g., Wallet, Sodexo, Forex Card',
+          ),
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = _customMethodController.text.trim();
+              if (name.isNotEmpty) {
+                // Prevent duplicates with standard methods
+                if ([
+                  'Cash',
+                  'UPI',
+                  'Debit Card',
+                  'Credit Card',
+                  'Bank Account',
+                ].contains(name)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('This is already a standard method.'),
+                    ),
+                  );
+                  return;
+                }
+                context.read<UserProvider>().addCustomPaymentMethod(name);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
     final banks = userProvider.banks;
     final primaryMethods = userProvider.primaryPaymentMethods;
+    final customMethods = userProvider.customPaymentMethods;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -274,6 +326,105 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
                 );
               },
             ),
+            const SizedBox(height: 16),
+            _buildPrimarySelector(
+              context: context,
+              title: 'Bank Account',
+              icon: Icons.account_balance,
+              value: primaryMethods['Bank Account'],
+              options: banks,
+              onChanged: (val) {
+                context.read<UserProvider>().setPrimaryPaymentMethod(
+                  'Bank Account',
+                  val,
+                );
+              },
+            ),
+
+            if (customMethods.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text(
+                'Custom Payment Methods',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...customMethods.map((method) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Dismissible(
+                    key: Key(method),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (direction) async {
+                      return await showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Remove Method'),
+                          content: Text('Remove custom method "$method"?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Remove'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    onDismissed: (_) {
+                      context.read<UserProvider>().removeCustomPaymentMethod(
+                        method,
+                      );
+                    },
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: Colors.red,
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    child: _buildPrimarySelector(
+                      context: context,
+                      title: method,
+                      icon: Icons.payment,
+                      value: primaryMethods[method],
+                      options: banks,
+                      onChanged: (val) {
+                        context.read<UserProvider>().setPrimaryPaymentMethod(
+                          method,
+                          val,
+                        );
+                      },
+                    ),
+                  ),
+                );
+              }),
+            ],
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showAddCustomMethodDialog,
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Add Custom Payment Method'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: BorderSide(color: theme.colorScheme.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 40),
           ],
         ),
       ),

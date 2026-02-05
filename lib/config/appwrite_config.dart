@@ -24,4 +24,5 @@ class AppwriteConfig {
   static const String shareTransactionFunctionId = '697b2e5a00268c4ab313';
   static const String createExpenseFunctionId = '697dbd05002101132988';
   static const String createSettlementFunctionId = '697dbdf800045dbe9e6a';
+  static const String joinGroupFunctionId = '698434a1000203f0d76c';
 }

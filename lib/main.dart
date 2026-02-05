@@ -63,7 +63,7 @@ class MyApp extends StatelessWidget {
       child: Consumer2<UserProvider, ThemeProvider>(
         builder: (context, userProvider, themeProvider, _) {
           return MaterialApp(
-            title: 'Money Calc',
+            title: 'Tap It',
             debugShowCheckedModeBanner: false,
             themeMode: themeProvider.themeMode,
             theme: ThemeData(

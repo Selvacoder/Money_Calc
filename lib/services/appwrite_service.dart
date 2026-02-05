@@ -119,6 +119,7 @@ class AppwriteService {
           phone: phone, // Pass provided phone
           banks: [],
           primaryPaymentMethods: {},
+          customPaymentMethods: [],
         );
       } catch (e) {
         // If profile creation fails, we should maybe cleanup the account
@@ -151,7 +152,13 @@ class AppwriteService {
       if (e.code == 401) {
         return {'success': false, 'message': 'Invalid email or password'};
       }
-      return {'success': false, 'message': e.message ?? 'Login failed'};
+      String msg = e.message ?? 'Login failed';
+      if (msg.contains('password') && msg.contains('between 8 and 256')) {
+        msg = 'Incorrect email or password.';
+      } else if (msg.contains('Invalid `email` param')) {
+        msg = 'Please enter a valid email address.';
+      }
+      return {'success': false, 'message': msg};
     } catch (e) {
       return {'success': false, 'message': 'An error occurred: $e'};
     }
@@ -193,6 +200,7 @@ class AppwriteService {
 
         // Parse Banks and Primary Methods
         List<String> banks = [];
+        List<String> customPaymentMethods = [];
         Map<String, String> primaryPaymentMethods = {};
         if (profileDocs.documents.isNotEmpty) {
           final data = profileDocs.documents.first.data;
@@ -213,6 +221,17 @@ class AppwriteService {
               print('Error parsing primary payment methods: $e');
             }
           }
+
+          if (data['customPaymentMethods'] != null) {
+            try {
+              final cpmData = data['customPaymentMethods'];
+              if (cpmData is String && cpmData.isNotEmpty) {
+                customPaymentMethods = List<String>.from(jsonDecode(cpmData));
+              }
+            } catch (e) {
+              print('Error parsing custom payment methods: $e');
+            }
+          }
         }
 
         return {
@@ -223,6 +242,7 @@ class AppwriteService {
           'joinDate': user.registration,
           'banks': banks,
           'primaryPaymentMethods': primaryPaymentMethods,
+          'customPaymentMethods': customPaymentMethods,
         };
       } catch (e) {
         print('Error fetching profile doc: $e');
@@ -288,6 +308,7 @@ class AppwriteService {
     required String userId,
     required List<String> banks,
     required Map<String, String> primaryPaymentMethods,
+    List<String>? customPaymentMethods,
   }) async {
     try {
       final profileDocs = await databases.listDocuments(
@@ -306,6 +327,8 @@ class AppwriteService {
           data: {
             'banks': banks,
             'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
+            if (customPaymentMethods != null)
+              'customPaymentMethods': jsonEncode(customPaymentMethods),
           },
         );
         return true;
@@ -693,6 +716,95 @@ class AppwriteService {
 
   // ... (Other methods)
 
+  // Join Group via Invite Code
+  Future<bool> joinGroup(String inviteCode, String userId) async {
+    try {
+      print('DEBUG: Attempting to join group with code: "$inviteCode"');
+
+      // Use Cloud Function for secure join
+      if (AppwriteConfig.joinGroupFunctionId.isNotEmpty) {
+        final execution = await functions.createExecution(
+          functionId: AppwriteConfig.joinGroupFunctionId,
+          body: jsonEncode({
+            'databaseId': AppwriteConfig.databaseId,
+            'collectionId': AppwriteConfig.dutchGroupsCollectionId,
+            'inviteCode': inviteCode,
+            'userId': userId,
+          }),
+          xasync: false,
+        );
+
+        print('DEBUG: Function Execution Status: ${execution.status}');
+        print('DEBUG: Function Response: ${execution.responseBody}');
+
+        if (execution.status.toString().contains('completed')) {
+          final response = jsonDecode(execution.responseBody);
+          if (response['success'] == true) {
+            return true;
+          } else {
+            throw response['message'] ?? 'Failed to join group';
+          }
+        } else {
+          try {
+            final response = jsonDecode(execution.responseBody);
+            throw response['message'] ?? 'Function failed: ${execution.status}';
+          } catch (_) {
+            throw 'Function failed with status: ${execution.status}';
+          }
+        }
+      } else {
+        throw 'Join Function not configured. Please deploy function and update ID.';
+      }
+    } catch (e) {
+      print('Error joining group: $e');
+      if (e is AppwriteException) {
+        throw e.message ?? 'Failed to join group';
+      }
+      rethrow;
+    }
+  }
+
+  // Update Group
+  Future<bool> updateGroup({
+    required String groupId,
+    required String name,
+    required String type,
+  }) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.dutchGroupsCollectionId,
+        documentId: groupId,
+        data: {'name': name, 'type': type},
+      );
+      return true;
+    } catch (e) {
+      print('Error updating group: $e');
+      if (e is AppwriteException) {
+        throw e.message ?? 'Failed to update group';
+      }
+      rethrow;
+    }
+  }
+
+  // Delete Group
+  Future<bool> deleteGroup(String groupId) async {
+    try {
+      await databases.deleteDocument(
+        databaseId: AppwriteConfig.databaseId,
+        collectionId: AppwriteConfig.dutchGroupsCollectionId,
+        documentId: groupId,
+      );
+      return true;
+    } catch (e) {
+      print('Error deleting group: $e');
+      if (e is AppwriteException) {
+        throw e.message ?? 'Failed to delete group';
+      }
+      rethrow;
+    }
+  }
+
   // Usage Counters
   Future<void> incrementCategoryUsage(String categoryId) async {
     try {
@@ -1006,6 +1118,7 @@ class AppwriteService {
     String? phone, // Added phone
     List<String> banks = const [],
     Map<String, String> primaryPaymentMethods = const {},
+    List<String> customPaymentMethods = const [],
   }) async {
     try {
       await databases.createDocument(
@@ -1016,9 +1129,10 @@ class AppwriteService {
           'userId': userId,
           'name': name,
           'email': email,
-          'phone': phone ?? '', // Save phone
+          'phone': phone ?? '',
           'banks': banks,
           'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
+          'customPaymentMethods': jsonEncode(customPaymentMethods),
         },
         permissions: [
           Permission.read(

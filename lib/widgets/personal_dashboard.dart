@@ -1110,7 +1110,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
   Future<String?> _selectPaymentMethod() {
     return showDialog<String>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true, // Changed to true
       builder: (context) {
         return Consumer<UserProvider>(
           builder: (context, userProvider, child) {
@@ -1175,56 +1175,55 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               }
             }
 
+            final customMethods = userProvider.customPaymentMethods;
+
+            final allMethods = [
+              {'name': 'Cash', 'icon': Icons.money},
+              {'name': 'UPI', 'icon': Icons.qr_code},
+              {'name': 'Debit Card', 'icon': Icons.credit_card},
+              {'name': 'Credit Card', 'icon': Icons.credit_score},
+              {'name': 'Bank Account', 'icon': Icons.account_balance},
+              ...customMethods.map((m) => {'name': m, 'icon': Icons.payment}),
+            ];
+
             return AlertDialog(
               title: Text(
                 'Select Payment Method',
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildPaymentOption(
-                    context,
-                    'Cash',
-                    Icons.money,
-                    userProvider,
+              content: SizedBox(
+                width: double.maxFinite,
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const BouncingScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio:
+                        1.0, // Square aspect ratio for more height
                   ),
-                  const SizedBox(height: 12),
-                  _buildPaymentOption(
-                    context,
-                    'UPI',
-                    Icons.qr_code,
-                    userProvider,
-                    primaryBank: primaryMethods['UPI'],
-                    onLongPress: () => handleLongPress('UPI'),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPaymentOption(
-                    context,
-                    'Debit Card',
-                    Icons.credit_card,
-                    userProvider,
-                    primaryBank: primaryMethods['Debit Card'],
-                    onLongPress: () => handleLongPress('Debit Card'),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPaymentOption(
-                    context,
-                    'Credit Card',
-                    Icons.credit_score,
-                    userProvider,
-                    primaryBank: primaryMethods['Credit Card'],
-                    onLongPress: () => handleLongPress('Credit Card'),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, null),
-                  child: const Text('Cancel'),
+                  itemCount: allMethods.length,
+                  itemBuilder: (context, index) {
+                    final item = allMethods[index];
+                    final name = item['name'] as String;
+                    final icon = item['icon'] as IconData;
+
+                    return _buildPaymentOption(
+                      context,
+                      name,
+                      icon,
+                      userProvider,
+                      primaryBank: primaryMethods[name],
+                      onLongPress: () {
+                        if (name != 'Cash') {
+                          handleLongPress(name);
+                        }
+                      },
+                    );
+                  },
                 ),
-              ],
+              ),
             );
           },
         );
@@ -1277,6 +1276,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               ],
             ),
           );
+        } else if (method != 'Cash' &&
+            primaryBank == null &&
+            userProvider.banks.isNotEmpty) {
+          // If no primary is set but banks exist, prompt for selection
+          onLongPress?.call();
         } else {
           String result = method;
           if (primaryBank != null) {
@@ -1288,60 +1292,58 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(
+          vertical: 8,
+          horizontal: 8,
+        ), // Reduced padding
+        constraints: const BoxConstraints(minHeight: 100),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.withOpacity(0.2)),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    method,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
+            Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: 28,
+            ), // Reduced icon size
+            const SizedBox(height: 6),
+            Text(
+              method,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                fontSize: 13, // Reduced font size
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            // Always reserve space for the bank pill
+            Visibility(
+              visible: primaryBank != null,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  primaryBank ?? 'Placeholder',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                  // Always reserve space for subtitle to match height
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Visibility(
-                      visible: primaryBank != null,
-                      maintainSize: true,
-                      maintainAnimation: true,
-                      maintainState: true,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          primaryBank != null
-                              ? 'Primary as $primaryBank'
-                              : 'Primary as Placeholder',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ],

@@ -56,55 +56,78 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final confirmPassword = _confirmPasswordController.text;
 
     // Validation
+    // 1. Check Empty Fields
     if (name.isEmpty ||
         email.isEmpty ||
-        phone.isEmpty || // Check phone
+        phone.isEmpty ||
         password.isEmpty ||
         confirmPassword.isEmpty) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please fill in all fields';
+          _errorMessage = 'Please fill in all fields.';
           _isLoading = false;
         });
       }
       return;
     }
 
+    // 2. Email Validation
     if (!_isValidEmail(email)) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please enter a valid email address';
+          _errorMessage = 'Please enter a valid email address.';
           _isLoading = false;
         });
       }
       return;
     }
 
-    // Basic Phone Validation
-    if (phone.length < 10) {
+    // 3. Phone Validation (10 digits for India/General)
+    // You might want to strip non-digits first if user types spaces
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.length < 10) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please enter a valid phone number';
+          _errorMessage = 'Phone number must be at least 10 digits.';
           _isLoading = false;
         });
       }
       return;
     }
 
-    if (password.length < 6) {
+    // 4. Strict Password Validation
+    // 8-255 chars, at least 1 Uppercase, at least 1 Special Char
+    // Regex: ^(?=.*[A-Z])(?=.*[!@#\$&*~]).{8,255}$
+    final passwordRegex = RegExp(
+      r'^(?=.*[A-Z])(?=.*[!@#\$&*~`%^()_+\-=\[\]{};:|,<.>?\/]).{8,255}$',
+    );
+
+    if (password.length < 8) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Password must be at least 6 characters';
+          _errorMessage = 'Password must be at least 8 characters long.';
           _isLoading = false;
         });
       }
       return;
     }
 
+    if (!passwordRegex.hasMatch(password)) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'Password must contain at least 1 uppercase letter and 1 special character.';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    // 5. Confirm Password
     if (password != confirmPassword) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Passwords do not match';
+          _errorMessage = 'Passwords do not match.';
           _isLoading = false;
         });
       }

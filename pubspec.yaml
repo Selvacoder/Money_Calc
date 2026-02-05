@@ -76,6 +76,18 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.8
   hive_generator: ^2.0.1
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/logo.png"
+  min_sdk_android: 21 # min sdk version for android
+  web:
+    generate: true
+    image_path: "assets/icon/logo.png"
+    background_color: "#hex_code"
+    theme_color: "#hex_code"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -92,6 +104,7 @@ flutter:
   assets:
     - assets/
     - assets/sounds/
+    - assets/icon/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

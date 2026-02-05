@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/investment_provider.dart';
 import '../providers/currency_provider.dart';
+import '../utils/formatters.dart';
 
 class InvestmentDashboard extends StatefulWidget {
   const InvestmentDashboard({super.key});
@@ -448,6 +449,8 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
                     const SizedBox(height: 24),
                     TextField(
                       controller: nameController,
+                      textCapitalization: TextCapitalization.sentences,
+                      inputFormatters: [CapitalizeFirstLetterTextFormatter()],
                       decoration: InputDecoration(
                         labelText: 'Asset Name (e.g. Apple, Gold)',
                         border: OutlineInputBorder(
@@ -518,8 +521,14 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
                             // If user wants to track purely, we pass totalInvested as 'amount'
                             // but provider takes (amount, quantity). 'amount' there is usually investedAmount.
 
+                            final rawName = nameController.text.trim();
+                            final name = rawName.isNotEmpty
+                                ? rawName[0].toUpperCase() +
+                                      rawName.substring(1)
+                                : rawName;
+
                             context.read<InvestmentProvider>().addInvestment(
-                              nameController.text,
+                              name,
                               selectedType,
                               totalInvested,
                               quantity,

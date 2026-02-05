@@ -17,6 +17,81 @@ class DutchProvider extends ChangeNotifier {
   String? _lastGroupId;
   bool get hasMoreGroups => _hasMoreGroups;
 
+  // Join Group
+  Future<bool> joinGroup(String inviteCode) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      if (_currentUserId == null) {
+        final user = await AppwriteService().account.get();
+        _currentUserId = user.$id;
+      }
+
+      await AppwriteService().joinGroup(inviteCode, _currentUserId!);
+      await fetchGroups(); // Refresh list to show new group
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Update Group
+  Future<bool> updateGroup(String groupId, String name, String type) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await AppwriteService().updateGroup(
+        groupId: groupId,
+        name: name,
+        type: type,
+      );
+
+      // Update local list
+      final index = _groups.indexWhere((g) => g['id'] == groupId);
+      if (index != -1) {
+        _groups[index]['name'] = name;
+        _groups[index]['type'] = type;
+        // Keep other fields same
+      }
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Delete Group
+  Future<bool> deleteGroup(String groupId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await AppwriteService().deleteGroup(groupId);
+
+      // Update local list
+      _groups.removeWhere((g) => g['id'] == groupId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Current Group State
   String? _currentGroupId;
   String? _currentUserId;

@@ -421,7 +421,13 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
               width: 200,
               height: 200,
               child: CustomPaint(
-                painter: LedgerPieChartPainter(received: received, sent: sent),
+                painter: LedgerPieChartPainter(
+                  received: received,
+                  sent: sent,
+                  emptyColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.shade800
+                      : Colors.grey.shade200,
+                ),
               ),
             ),
           ),
@@ -470,7 +476,9 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey.shade600,
+                color: isSelected
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -498,7 +506,7 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
               label,
               style: GoogleFonts.inter(
                 fontSize: 12,
-                color: Colors.grey.shade600,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             Text(
@@ -506,7 +514,7 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E1E1E),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ],
@@ -579,7 +587,10 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
           const SizedBox(height: 16),
           Text(
             title,
-            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -587,7 +598,7 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
             style: GoogleFonts.inter(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF1E1E1E),
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],
@@ -759,7 +770,10 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
           const SizedBox(height: 8),
           Text(
             entry.key,
-            style: GoogleFonts.inter(fontSize: 10, color: Colors.grey.shade600),
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -770,8 +784,13 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
 class LedgerPieChartPainter extends CustomPainter {
   final double received;
   final double sent;
+  final Color emptyColor;
 
-  LedgerPieChartPainter({required this.received, required this.sent});
+  LedgerPieChartPainter({
+    required this.received,
+    required this.sent,
+    required this.emptyColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -786,7 +805,7 @@ class LedgerPieChartPainter extends CustomPainter {
 
     double total = received + sent;
     if (total == 0) {
-      paint.color = Colors.grey.shade200;
+      paint.color = emptyColor;
       canvas.drawCircle(center, radius - strokeWidth / 2, paint);
       return;
     }

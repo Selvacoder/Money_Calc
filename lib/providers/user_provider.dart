@@ -27,6 +27,9 @@ class UserProvider extends ChangeNotifier {
   Map<String, String> _primaryPaymentMethods = {};
   Map<String, String> get primaryPaymentMethods => _primaryPaymentMethods;
 
+  List<String> _customPaymentMethods = [];
+  List<String> get customPaymentMethods => _customPaymentMethods;
+
   late Box<UserProfile> _userBox;
   late Box _settingsBox; // New box for banks and primary methods
   bool _isHiveInitialized = false;
@@ -54,6 +57,9 @@ class UserProvider extends ChangeNotifier {
     _banks = List<String>.from(_settingsBox.get('banks', defaultValue: []));
     _primaryPaymentMethods = Map<String, String>.from(
       _settingsBox.get('primary_payment_methods', defaultValue: {}),
+    );
+    _customPaymentMethods = List<String>.from(
+      _settingsBox.get('custom_payment_methods', defaultValue: []),
     );
   }
 
@@ -104,6 +110,15 @@ class UserProvider extends ChangeNotifier {
               _primaryPaymentMethods,
             );
           }
+          if (userData['customPaymentMethods'] != null) {
+            _customPaymentMethods = List<String>.from(
+              userData['customPaymentMethods'],
+            );
+            await _settingsBox.put(
+              'custom_payment_methods',
+              _customPaymentMethods,
+            );
+          }
 
           _user = newUser;
           _isAuthenticated = true;
@@ -151,8 +166,8 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> login(String email, String password) async {
-    _isLoading = true;
-    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
+    // _isLoading = true; // Removed to prevent global rebuild
+    // Future.microtask(() => notifyListeners());
 
     try {
       final result = await _authService.login(email: email, password: password);
@@ -163,9 +178,34 @@ class UserProvider extends ChangeNotifier {
         await checkAuthStatus(forceCheck: true);
       }
       return result;
+    } catch (e) {
+      String msg = 'Login failed. Please try again.';
+      debugPrint('DEBUG: Login Error: $e');
+      if (e is AppwriteException) {
+        switch (e.type) {
+          case 'user_invalid_credentials':
+          case 'user_invalid_token':
+            msg = 'Incorrect email or password.';
+            break;
+          case 'user_blocked':
+            msg = 'Your account has been blocked. Please contact support.';
+            break;
+          case 'user_not_found':
+            msg = 'No account found with this email.';
+            break;
+          case 'rate_limit_exceeded':
+            msg = 'Too many login attempts. Please try again later.';
+            break;
+          default:
+            if (e.message != null && e.message!.isNotEmpty) {
+              msg = e.message!;
+            }
+        }
+      }
+      return {'success': false, 'message': msg};
     } finally {
-      _isLoading = false;
-      Future.microtask(() => notifyListeners());
+      // _isLoading = false; // Removed
+      // Future.microtask(() => notifyListeners());
     }
   }
 
@@ -175,8 +215,8 @@ class UserProvider extends ChangeNotifier {
     required String password,
     required String phone,
   }) async {
-    _isLoading = true;
-    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
+    // _isLoading = true;
+    // Future.microtask(() => notifyListeners());
 
     try {
       final result = await _authService.signUp(
@@ -191,9 +231,32 @@ class UserProvider extends ChangeNotifier {
         await checkAuthStatus(forceCheck: true);
       }
       return result;
+    } catch (e) {
+      String msg = 'Sign up failed. Please try again.';
+      debugPrint('DEBUG: Signup Error: $e');
+      if (e is AppwriteException) {
+        switch (e.type) {
+          case 'user_already_exists':
+            msg =
+                'An account with this email already exists. Please login instead.';
+            break;
+          case 'password_recently_used': // Rare for signup but good to have
+            msg = 'This password has been used recently.';
+            break;
+          case 'password_personal_data':
+            msg =
+                'Password should not contain personal data (like name/email).';
+            break;
+          default:
+            if (e.message != null && e.message!.isNotEmpty) {
+              msg = e.message!;
+            }
+        }
+      }
+      return {'success': false, 'message': msg};
     } finally {
-      _isLoading = false;
-      Future.microtask(() => notifyListeners());
+      // _isLoading = false;
+      // Future.microtask(() => notifyListeners());
     }
   }
 
@@ -219,8 +282,8 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<bool> signInWithGoogle() async {
-    _isLoading = true;
-    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
+    // _isLoading = true;
+    // Future.microtask(() => notifyListeners());
     try {
       final success = await _authService.signInWithGoogle();
       if (success) {
@@ -228,8 +291,8 @@ class UserProvider extends ChangeNotifier {
       }
       return success;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      // _isLoading = false;
+      // notifyListeners();
     }
   }
 
@@ -242,6 +305,7 @@ class UserProvider extends ChangeNotifier {
         await _settingsBox.clear();
         _banks = [];
         _primaryPaymentMethods = {};
+        _customPaymentMethods = [];
       }
       // Check if already logged out from Appwrite to avoid unnecessary calls/errors
       if (!await _appwriteService.isLoggedIn()) {
@@ -310,12 +374,57 @@ class UserProvider extends ChangeNotifier {
     await _syncPreferences();
   }
 
+  Future<void> addCustomPaymentMethod(String methodName) async {
+    if (!_customPaymentMethods.contains(methodName)) {
+      _customPaymentMethods.add(methodName);
+      await _settingsBox.put('custom_payment_methods', _customPaymentMethods);
+      notifyListeners();
+      await _syncPreferences();
+    }
+  }
+
+  Future<void> removeCustomPaymentMethod(String methodName) async {
+    if (_customPaymentMethods.contains(methodName)) {
+      _customPaymentMethods.remove(methodName);
+      await _settingsBox.put('custom_payment_methods', _customPaymentMethods);
+
+      // Also remove from primary methods if selected
+      final keysToRemove = _primaryPaymentMethods.entries
+          .where(
+            (entry) => entry.key == methodName,
+          ) // Primary key IS the method name
+          .map((e) => e.key)
+          .toList();
+
+      for (var key in keysToRemove) {
+        _primaryPaymentMethods.remove(key);
+      }
+
+      // Also if any custom method was used as a value... (unlikely but safe check?)
+      // Actually primaryPaymentMethods key is the METHOD name (UPI, Debit Card, etc OR CustomName)
+      // and Value is the BANK name.
+      // So if "MyCustomMethod" is removed, we should remove the key "MyCustomMethod" from primary methods.
+      // logic above does exactly that: where entry.key == methodName.
+
+      if (keysToRemove.isNotEmpty) {
+        await _settingsBox.put(
+          'primary_payment_methods',
+          _primaryPaymentMethods,
+        );
+      }
+
+      notifyListeners();
+      await _syncPreferences();
+    }
+  }
+
   Future<void> _syncPreferences() async {
     if (_user != null) {
       await _appwriteService.updateUserPreferences(
         userId: _user!.userId,
         banks: _banks,
         primaryPaymentMethods: _primaryPaymentMethods,
+        customPaymentMethods: _customPaymentMethods,
       );
     }
   }

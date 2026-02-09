@@ -118,6 +118,86 @@ class DutchProvider extends ChangeNotifier {
       _currentGroupSettlements;
   Map<String, double> get groupBalances => _groupBalances;
 
+  /// Returns a map of detailed statistics for each member in the current group.
+  /// Result: { userId: { 'consumed': double, 'paid': double, 'netPaid': double, 'balance': double } }
+  Map<String, Map<String, double>> getMemberStats() {
+    final Map<String, Map<String, double>> stats = {};
+
+    // Initialize for all group members
+    for (var profile in _currentGroupMemberProfiles) {
+      final uid = _safeId(profile['userId']);
+      if (uid.isEmpty) continue;
+      stats[uid] = {
+        'consumed': 0.0,
+        'paid': 0.0,
+        'netPaid': 0.0,
+        'balance': _groupBalances[uid] ?? 0.0,
+      };
+    }
+
+    // Process expenses to calculate consumed share and total paid
+    for (var expense in _currentGroupExpenses) {
+      if (expense['status'] != 'completed' && expense['status'] != 'pending') {
+        continue;
+      }
+
+      final payerId = _safeId(expense['payerId']);
+      final amount = (expense['amount'] as num).toDouble();
+      final splitType = expense['splitType'] ?? 'equal';
+      final splitDataRaw = expense['splitData'];
+
+      // Add to payer's total paid
+      if (stats.containsKey(payerId)) {
+        stats[payerId]!['paid'] = (stats[payerId]!['paid'] ?? 0) + amount;
+        stats[payerId]!['netPaid'] = (stats[payerId]!['netPaid'] ?? 0) + amount;
+      }
+
+      // Add to beneficiaries' consumed share
+      try {
+        if (splitType == 'equal') {
+          final List beneficiaries = jsonDecode(splitDataRaw);
+          final perPerson = amount / beneficiaries.length;
+          for (var uidNode in beneficiaries) {
+            final uid = _safeId(uidNode);
+            if (stats.containsKey(uid)) {
+              stats[uid]!['consumed'] =
+                  (stats[uid]!['consumed'] ?? 0) + perPerson;
+            }
+          }
+        } else if (splitType == 'exact') {
+          final Map beneficiaries = jsonDecode(splitDataRaw);
+          beneficiaries.forEach((uidNode, val) {
+            final uid = _safeId(uidNode);
+            if (stats.containsKey(uid)) {
+              stats[uid]!['consumed'] =
+                  (stats[uid]!['consumed'] ?? 0) + (val as num).toDouble();
+            }
+          });
+        }
+      } catch (e) {
+        print('Error parsing splitData in getMemberStats: $e');
+      }
+    }
+
+    // Process settlements to adjust netPaid
+    for (var settlement in _currentGroupSettlements) {
+      if (settlement['status'] != 'completed') continue;
+
+      final pId = _safeId(settlement['payerId']);
+      final rId = _safeId(settlement['receiverId']);
+      final amount = (settlement['amount'] as num).toDouble();
+
+      if (stats.containsKey(pId)) {
+        stats[pId]!['netPaid'] = (stats[pId]!['netPaid'] ?? 0) + amount;
+      }
+      if (stats.containsKey(rId)) {
+        stats[rId]!['netPaid'] = (stats[rId]!['netPaid'] ?? 0) - amount;
+      }
+    }
+
+    return stats;
+  }
+
   // Global Settlements for Notifications
   List<Map<String, dynamic>> get incomingSettlementRequests {
     if (_currentUserId == null) return [];
@@ -588,7 +668,7 @@ class DutchProvider extends ChangeNotifier {
       if (expense['status'] != 'completed' && expense['status'] != 'pending') {
         continue;
       }
-      final payerId = expense['payerId'];
+      final payerId = _safeId(expense['payerId']);
       if (payerId == _currentUserId) {
         totalPaid += (expense['amount'] as num).toDouble();
       }
@@ -597,9 +677,15 @@ class DutchProvider extends ChangeNotifier {
     // Calculate total settlements received (completed only)
     for (var settlement in _currentGroupSettlements) {
       if (settlement['status'] != 'completed') continue;
-      final receiverId = settlement['receiverId'];
+      final receiverId = _safeId(settlement['receiverId']);
+      final payerId = _safeId(settlement['payerId']);
+
       if (receiverId == _currentUserId) {
         settlementsReceived += (settlement['amount'] as num).toDouble();
+      }
+      // Also account for settlements the user PAID (increases out-of-pocket)
+      if (payerId == _currentUserId) {
+        totalPaid += (settlement['amount'] as num).toDouble();
       }
     }
 
@@ -656,8 +742,8 @@ class DutchProvider extends ChangeNotifier {
         }
       }
 
-      final receiverId = settlement['receiverId'];
-      final payerId = settlement['payerId'];
+      final receiverId = _safeId(settlement['receiverId']);
+      final payerId = _safeId(settlement['payerId']);
 
       // Money received (reduces our out-of-pocket)
       if (receiverId == _currentUserId) {

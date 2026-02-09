@@ -26,7 +26,6 @@ class LedgerDashboard extends StatefulWidget {
 
 class _LedgerDashboardState extends State<LedgerDashboard> {
   bool _showAllPeople = false;
-  bool _isNotesMode = false;
 
   // Copied Dialog Logic
   void _showAddDialog({
@@ -34,7 +33,6 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String? initialPhone,
     double? initialAmount,
     bool isReceived = false,
-    String? customStatus,
   }) {
     final nameController = TextEditingController(text: initialName);
     final phoneController = TextEditingController(text: initialPhone);
@@ -46,6 +44,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
     bool? isRegistered;
     bool checkingRegistration = false;
+    bool trackWithUser = true; // Default to true if user exists
 
     showDialog(
       context: context,
@@ -61,162 +60,162 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _isNotesMode
-                        ? (isReceived ? 'Get Item' : 'Give Item')
-                        : (isReceived ? 'Borrow Money' : 'Lend Money'),
+                    isReceived ? 'Borrow Money' : 'Lend Money',
                     style: GoogleFonts.inter(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 24),
-                  if (!_isNotesMode) ...[
-                    Row(
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: CountryCodePicker(
-                            onChanged: (code) =>
-                                selectedCountryCode = code.dialCode ?? '+91',
-                            initialSelection: 'IN',
-                            showCountryOnly: false,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: phoneController,
-                            keyboardType: TextInputType.phone,
-                            onChanged: (value) async {
-                              final phone = value.replaceAll(RegExp(r'\D'), '');
-                              if (phone.length >= 10) {
-                                setDialogState(
-                                  () => checkingRegistration = true,
-                                );
-                                final fullPhone = '$selectedCountryCode$phone';
-                                try {
-                                  final user = await AppwriteService()
-                                      .getUserByPhone(fullPhone);
-
-                                  setDialogState(() {
-                                    isRegistered = user != null;
-                                    checkingRegistration = false;
-                                    // Auto-fill Name if found!
-                                    if (user != null && user['name'] != null) {
-                                      nameController.text = user['name'];
-                                    }
-                                  });
-                                } catch (e) {
-                                  setDialogState(
-                                    () => checkingRegistration = false,
-                                  );
-                                }
-                              } else {
-                                if (isRegistered != null) {
-                                  setDialogState(() => isRegistered = null);
-                                }
-                              }
-                            },
-                            decoration: InputDecoration(
-                              labelText: 'Phone',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              suffixIcon: checkingRegistration
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: Padding(
-                                        padding: EdgeInsets.all(12.0),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    )
-                                  : isRegistered == true
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: Colors.green,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (isRegistered == false) ...[
-                      const SizedBox(height: 8),
+                  Row(
+                    children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.orange.withOpacity(0.3),
-                          ),
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.info_outline,
-                                  color: Colors.orange,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'This user is not on Tap It. We recommend tracking this in the Notes section.',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: Colors.orange.shade800,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextButton.icon(
-                                onPressed: () async {
-                                  if (phoneController.text.isNotEmpty) {
-                                    final phone =
-                                        '$selectedCountryCode${phoneController.text}';
-                                    final url = Uri.parse(
-                                      'https://wa.me/$phone?text=Hey! Join me on Tap It to track our expenses easily. Download it here: [Link]',
-                                    );
-                                    if (await canLaunchUrl(url)) {
-                                      await launchUrl(
-                                        url,
-                                        mode: LaunchMode.externalApplication,
-                                      );
-                                    }
+                        child: CountryCodePicker(
+                          onChanged: (code) =>
+                              selectedCountryCode = code.dialCode ?? '+91',
+                          initialSelection: 'IN',
+                          showCountryOnly: false,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          onChanged: (value) async {
+                            final phone = value.replaceAll(RegExp(r'\D'), '');
+                            if (phone.length >= 10) {
+                              setDialogState(() => checkingRegistration = true);
+                              final fullPhone = '$selectedCountryCode$phone';
+                              try {
+                                final user = await AppwriteService()
+                                    .getUserByPhone(fullPhone);
+
+                                setDialogState(() {
+                                  isRegistered = user != null;
+                                  checkingRegistration = false;
+                                  // Auto-fill Name if found!
+                                  if (user != null && user['name'] != null) {
+                                    nameController.text = user['name'];
                                   }
-                                },
-                                icon: const Icon(Icons.share, size: 16),
-                                label: const Text('Invite via WhatsApp'),
-                                style: TextButton.styleFrom(
-                                  backgroundColor: const Color(0xFF25D366),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                ),
-                              ),
+                                  // Reset track toggles based on user existence
+                                  if (isRegistered == true) {
+                                    trackWithUser = true;
+                                  } else {
+                                    trackWithUser = false;
+                                  }
+                                });
+                              } catch (e) {
+                                setDialogState(
+                                  () => checkingRegistration = false,
+                                );
+                              }
+                            } else {
+                              if (isRegistered != null) {
+                                setDialogState(() => isRegistered = null);
+                              }
+                            }
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Phone',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ],
+                            suffixIcon: checkingRegistration
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : isRegistered == true
+                                ? const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
+                  ),
+                  if (isRegistered == false) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: Colors.orange,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'User not on Tap It. Saving as a Note.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade800,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                if (phoneController.text.isNotEmpty) {
+                                  final phone =
+                                      '$selectedCountryCode${phoneController.text}';
+                                  final url = Uri.parse(
+                                    'https://wa.me/$phone?text=Hey! Join me on Tap It to track our expenses easily. Download it here: [Link]',
+                                  );
+                                  if (await canLaunchUrl(url)) {
+                                    await launchUrl(
+                                      url,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.share, size: 16),
+                              label: const Text('Invite via WhatsApp'),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFF25D366),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
+                  const SizedBox(height: 16),
                   Autocomplete<Map<String, dynamic>>(
                     optionsBuilder: (TextEditingValue textEditingValue) async {
                       if (textEditingValue.text.isEmpty) {
@@ -233,48 +232,33 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         phoneController.text = selection['phone'];
                       }
                     },
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      // Ensure controller stays in sync if manually updated (e.g. by auto-fill)
-                      // But here, 'controller' is local to Autocomplete.
-                      // We need to sync our external 'nameController' to this internal 'controller'.
-                      // Actually, we are passing 'nameController' text to 'controller' initially?
-                      // No, Autocomplete manages its own controller usually unless passed...
-                      // Wait, fieldViewBuilder gives us a controller.
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                          if (controller.text != nameController.text) {
+                            controller.text = nameController.text;
+                          }
 
-                      // Problem: We want to update the Name field when Phone updates.
-                      // But Autocomplete's text is managed by the controller provided in builder.
-                      // So we need to listen to nameController changes? Or just set the text?
-
-                      // Fix: We can't easily "push" text into the Autocomplete's internal controller from outside
-                      // unless we hack it or rebuild.
-                      // EASIER: In the fieldViewBuilder, check if nameController has text and set it?
-                      // Or better: Just use a standard TextField if checking phone first,
-                      // and Autocomplete is secondary.
-
-                      // Let's attach the nameController listener to update the builder's controller
-                      if (controller.text != nameController.text) {
-                        controller.text = nameController.text;
-                      }
-
-                      controller.addListener(
-                        () => nameController.text = controller.text,
-                      );
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        textCapitalization: TextCapitalization.sentences,
-                        inputFormatters: [CapitalizeFirstLetterTextFormatter()],
-                        decoration: InputDecoration(
-                          labelText: _isNotesMode
-                              ? 'Person Name'
-                              : (isReceived ? 'Lender Name' : 'Borrower Name'),
-                          prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      );
-                    },
+                          controller.addListener(
+                            () => nameController.text = controller.text,
+                          );
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            textCapitalization: TextCapitalization.sentences,
+                            inputFormatters: [
+                              CapitalizeFirstLetterTextFormatter(),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: (isReceived
+                                  ? 'Lender Name'
+                                  : 'Borrower Name'),
+                              prefixIcon: const Icon(Icons.person),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -289,29 +273,57 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                       ),
                     ),
                   ),
+                  if (isRegistered == true) ...[
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      title: Text(
+                        'Track the transactions',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(
+                        trackWithUser
+                            ? 'Sends a request'
+                            : 'Save as private note',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      value: trackWithUser,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          trackWithUser = val;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
-                        print(
-                          'DEBUG: Add Btn Pressed. Name: ${nameController.text}, Amount: ${amountController.text}, Phone: ${phoneController.text}',
-                        );
                         if (nameController.text.isNotEmpty &&
                             amountController.text.isNotEmpty) {
-                          // Capture messenger before dialog closes
                           final messenger = ScaffoldMessenger.of(context);
-                          Navigator.pop(context); // Close dialog first
+                          Navigator.pop(context);
 
                           final phoneStr = phoneController.text.isEmpty
                               ? null
                               : '$selectedCountryCode${phoneController.text}';
-                          print('DEBUG: passing phoneStr: $phoneStr');
 
                           final userProvider = context.read<UserProvider>();
                           final currentUser = userProvider.user;
 
                           final ledgerProvider = context.read<LedgerProvider>();
+
+                          // Determine status based on tracking toggle
+                          String? customStatus;
+                          if (isRegistered == true && trackWithUser) {
+                            customStatus = null;
+                          } else {
+                            customStatus = 'notes';
+                          }
 
                           final error = await ledgerProvider
                               .addLedgerTransaction(
@@ -323,29 +335,16 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                                 currentUserId: currentUser?.userId ?? '',
                                 currentUserName: currentUser?.name ?? '',
                                 currentUserPhone: currentUser?.phone ?? '',
-                                customStatus: _isNotesMode ? 'notes' : null,
+                                customStatus: customStatus,
                               );
-                          print('DEBUG: Provider returned error: $error');
-
-                          if (mounted) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Debug: Phone=$phoneStr, Reg=$isRegistered, Err=$error',
-                                ),
-                                duration: const Duration(seconds: 5),
-                              ),
-                            );
-                          }
 
                           if (error == null &&
-                              !_isNotesMode &&
-                              isRegistered == false &&
+                              customStatus == 'notes' &&
                               mounted) {
                             messenger.showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'User not on MoneyCalc. Added to Notes.',
+                                  'Added to Notes.',
                                   style: GoogleFonts.inter(color: Colors.white),
                                 ),
                                 backgroundColor: Colors.orange.shade700,
@@ -358,7 +357,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                               context: context,
                               builder: (ctx) => AlertDialog(
                                 title: const Text('Error Adding'),
-                                content: Text(error ?? 'Unknown error'),
+                                content: Text(error),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx),
@@ -375,11 +374,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                       ),
-                      child: Text(
-                        _isNotesMode
-                            ? 'Add Note'
-                            : (isReceived ? 'Add Record' : 'Lend Money'),
-                      ),
+                      child: Text((isReceived ? 'Add Record' : 'Lend Money')),
                     ),
                   ),
                 ],
@@ -398,13 +393,13 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     final currencySymbol = context.watch<CurrencyProvider>().currencySymbol;
 
     // Data Source Switch
-    final activeTransactions = _isNotesMode
-        ? ledgerProvider.notes
-        : [
-            ...ledgerProvider.ledgerTransactions,
-            ...ledgerProvider.outgoingRequests,
-            ...ledgerProvider.incomingRequests,
-          ]; // Merge pending with confirmed for visibility
+    // Unified Data Source
+    final activeTransactions = [
+      ...ledgerProvider.ledgerTransactions,
+      ...ledgerProvider.outgoingRequests,
+      ...ledgerProvider.incomingRequests,
+      ...ledgerProvider.notes,
+    ];
 
     final user = userProvider.user;
     final myIdentities = [
@@ -470,31 +465,23 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               currencySymbol,
             ),
             const SizedBox(height: 24),
-            _buildToggleSwitch(),
-            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
                   child: _buildActionButton(
                     Icons.upload,
-                    _isNotesMode ? 'Give' : 'Lend',
+                    'Lend',
                     const Color(0xFFFF6B6B),
-                    () => _showAddDialog(
-                      isReceived: false,
-                      customStatus: _isNotesMode ? 'notes' : null,
-                    ),
+                    () => _showAddDialog(isReceived: false),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildActionButton(
                     Icons.download,
-                    _isNotesMode ? 'Get' : 'Receive',
+                    'Borrow',
                     const Color(0xFF51CF66),
-                    () => _showAddDialog(
-                      isReceived: true,
-                      customStatus: _isNotesMode ? 'notes' : null,
-                    ),
+                    () => _showAddDialog(isReceived: true),
                   ),
                 ),
               ],
@@ -504,40 +491,39 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _isNotesMode ? 'Recent Notes' : 'People',
+                  'People',
                   style: GoogleFonts.inter(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                if (!_isNotesMode)
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'hidden') {
-                        _showHiddenPeopleDialog();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'hidden',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.visibility_off,
-                              size: 20,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(width: 8),
-                            Text('Hidden People'),
-                          ],
-                        ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'hidden') {
+                      _showHiddenPeopleDialog();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'hidden',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_off,
+                            size: 20,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Hidden People'),
+                        ],
                       ),
-                    ],
-                    child: const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.more_horiz),
                     ),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Icon(Icons.more_horiz),
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -688,68 +674,6 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     );
   }
 
-  Widget _buildToggleSwitch() {
-    final theme = Theme.of(context);
-    return Center(
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildToggleItem(
-              'Tracker',
-              !_isNotesMode,
-              Icons.analytics_outlined,
-            ),
-            _buildToggleItem('Notes', _isNotesMode, Icons.notes_outlined),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleItem(String label, bool isActive, IconData icon) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: () => setState(() => _isNotesMode = label == 'Notes'),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: isActive ? Colors.white : Colors.grey),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: isActive ? Colors.white : Colors.grey,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // Helpers
   Widget _buildPeopleGrid(
     List<LedgerTransaction> transactions,
@@ -778,9 +702,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            childAspectRatio: 0.8,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+            childAspectRatio:
+                0.75, // Increased height ratio to prevent overflow
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
           ),
           itemCount: _showAllPeople
               ? balances.length
@@ -1098,24 +1023,32 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     String? currentUserId, {
     VoidCallback? onLongPress,
   }) {
+    // Determine status (Notes vs Tracking)
+    // Filter transactions for this person
+    final personTransactions = _getPersonTransactions(
+      tx,
+      name,
+      phone,
+      myIdentities,
+      currentUserId,
+    );
+
+    // Determine status (Notes vs Tracking)
+    bool isNotes = true;
+    if (personTransactions.isEmpty) {
+      isNotes = true;
+    } else {
+      for (var t in personTransactions) {
+        if (t.status != 'notes') {
+          isNotes = false;
+          break;
+        }
+      }
+    }
+
     return GestureDetector(
       onLongPress: onLongPress,
       onTap: () {
-        final provider = context.read<LedgerProvider>();
-        final personTransactions = _getPersonTransactions(
-          _isNotesMode
-              ? provider.notes
-              : [
-                  ...provider.ledgerTransactions,
-                  ...provider.incomingRequests,
-                  ...provider.outgoingRequests,
-                ],
-          name,
-          phone,
-          myIdentities,
-          currentUserId,
-        );
-
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1126,8 +1059,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               transactions: personTransactions,
               currencySymbol: currencySymbol,
               myIdentities: myIdentities,
-              currentUserId: provider.currentUserId ?? '',
-              isNotesMode: _isNotesMode,
+              currentUserId: currentUserId ?? '',
               onAddTransaction:
                   (
                     pName,
@@ -1152,7 +1084,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                       currentUserPhone:
                           currentUserPhone ?? currentUser?.phone ?? '',
                       currentUserEmail: currentUserEmail ?? currentUser?.email,
-                      customStatus: _isNotesMode ? 'notes' : null,
+                      customStatus: null,
                     );
                   },
               onRemind: () {
@@ -1169,25 +1101,91 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
         );
       },
       child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.withOpacity(0.1)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(child: Text(name.isNotEmpty ? name[0] : '?')),
-            const SizedBox(height: 8),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 22, // Reduced from 26
+                  backgroundColor: Theme.of(
+                    context,
+                  ).primaryColor.withOpacity(0.1),
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontSize: 18, // Reduced from 22
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -1,
+                  right: -1,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: isNotes ? Colors.orange : Colors.blue,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: Icon(
+                      isNotes ? Icons.edit_note : Icons.sync,
+                      size: 8, // Reduced from 10
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8), // Reduced from 12
             Text(
               name,
-              style: const TextStyle(color: Colors.white),
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              '$currencySymbol${bal.abs()}',
-              style: TextStyle(
-                color: bal >= 0 ? Colors.green : Colors.red,
+              style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
+                fontSize: 13, // Reduced from 15
+                color: Colors.black87,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2), // Reduced from 4
+            Text(
+              bal >= 0 ? 'Owes you' : 'You owe',
+              style: GoogleFonts.inter(
+                color: Colors.grey.shade600,
+                fontSize: 10, // Reduced from 11
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 1), // Reduced from 2
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$currencySymbol${bal.abs().toStringAsFixed(0)}',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15, // Reduced from 17
+                  color: bal >= 0
+                      ? const Color(0xFF51CF66)
+                      : const Color(0xFFFF6B6B),
+                ),
               ),
             ),
           ],

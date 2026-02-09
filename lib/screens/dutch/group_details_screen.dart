@@ -117,7 +117,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Your share',
+                                'Total Paid',
                                 style: GoogleFonts.inter(
                                   color: Colors.white70,
                                   fontSize: 13,
@@ -435,134 +435,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
                 const SizedBox(height: 24),
 
-                // Recent History Section (moved below Expenses)
+                // Member Balances Section
                 if (provider.currentUserId != null &&
                     provider.groupBalances.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Pending payment Section - Only show if there are balances
-                        if (provider.groupBalances.entries
-                            .where((e) => e.value.abs() > 0.01)
-                            .isNotEmpty)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Pending payment',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              ...provider.groupBalances.entries
-                                  .where((e) => e.key != provider.currentUserId)
-                                  .map((entry) {
-                                    final otherUserId = entry.key;
-                                    final balance = entry.value;
-                                    if (balance.abs() < 0.01) {
-                                      return const SizedBox.shrink();
-                                    }
-
-                                    final userProfile = provider
-                                        .currentGroupMemberProfiles
-                                        .firstWhere(
-                                          (p) => p['userId'] == otherUserId,
-                                          orElse: () => {},
-                                        );
-                                    final userName =
-                                        userProfile['name'] ?? 'Member';
-
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).cardColor,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: Colors.grey.withOpacity(0.1),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          CircleAvatar(
-                                            radius: 16,
-                                            child: Text(
-                                              userName[0].toUpperCase(),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              userName,
-                                              style: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                balance > 0
-                                                    ? 'gets back'
-                                                    : 'owes',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 10,
-                                                  color: Colors.grey,
-                                                ),
-                                              ),
-                                              Text(
-                                                '₹${balance.abs().toStringAsFixed(0)}',
-                                                style: GoogleFonts.inter(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: balance > 0
-                                                      ? Colors.green
-                                                      : Colors.red,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(width: 12),
-                                          if (balance > 0)
-                                            IconButton(
-                                              onPressed: () =>
-                                                  _showSettleUpDialog(
-                                                    context,
-                                                    otherUserId,
-                                                    userName,
-                                                    balance,
-                                                  ),
-                                              icon: const Icon(
-                                                Icons.payment,
-                                                size: 20,
-                                                color: Colors.deepPurple,
-                                              ),
-                                              tooltip: 'Settle Up',
-                                            ),
-                                        ],
-                                      ),
-                                    );
-                                  })
-                                  .toList(),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
+                  _buildBalancesSection(context, provider),
 
                 const SizedBox(height: 100),
               ],
@@ -584,6 +460,222 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
         label: const Text('Add Expense'),
         icon: const Icon(Icons.add),
         backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildBalancesSection(BuildContext context, DutchProvider provider) {
+    final memberStats = provider.getMemberStats();
+    final memberIds = memberStats.keys.toList();
+
+    if (memberIds.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Member List',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              Text(
+                'Balance Details',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.withOpacity(0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: memberIds.length,
+              separatorBuilder: (context, index) =>
+                  Divider(height: 1, color: Colors.grey.withOpacity(0.1)),
+              itemBuilder: (context, index) {
+                final userId = memberIds[index];
+                final stats = memberStats[userId]!;
+                final consumed = stats['consumed'] ?? 0.0;
+                final netPaid = stats['netPaid'] ?? 0.0;
+                final balance = stats['balance'] ?? 0.0;
+
+                final userProfile = provider.currentGroupMemberProfiles
+                    .firstWhere((p) => p['userId'] == userId, orElse: () => {});
+                final userName = userProfile['name'] ?? 'Member';
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                  child: Row(
+                    children: [
+                      // Member List Column
+                      Expanded(
+                        flex: 4,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: Theme.of(
+                                context,
+                              ).primaryColor.withOpacity(0.1),
+                              child: Text(
+                                userName.isNotEmpty
+                                    ? userName[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                userName,
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Balance Details Column
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Paid: ',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                Text(
+                                  '₹${netPaid.toStringAsFixed(0)}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Share: ',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                                Text(
+                                  '₹${consumed.toStringAsFixed(0)}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  balance >= 0 ? 'Gets back: ' : 'Owes: ',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  '₹${balance.abs().toStringAsFixed(0)}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: balance >= 0
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Action Column (Settle Up if needed)
+                      if (balance > 0.01 && userId != provider.currentUserId)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: GestureDetector(
+                            onTap: () => _showSettleUpDialog(
+                              context,
+                              userId,
+                              userName,
+                              balance,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.payment,
+                                size: 14,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

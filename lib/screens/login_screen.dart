@@ -250,8 +250,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF5B5FED),
+                              borderSide: BorderSide(
+                                color: primaryColor,
                                 width: 2,
                               ),
                             ),
@@ -291,8 +291,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF5B5FED),
+                              borderSide: BorderSide(
+                                color: primaryColor,
                                 width: 2,
                               ),
                             ),
@@ -312,7 +312,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Text(
                               'Forgot Password?',
                               style: GoogleFonts.inter(
-                                color: const Color(0xFF5B5FED),
+                                color: primaryColor,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -354,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ElevatedButton(
                           onPressed: _isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF5B5FED),
+                            backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -413,9 +413,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         // Google Sign In Button
                         OutlinedButton.icon(
                           onPressed: _isLoading ? null : _handleGoogleSignIn,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.login,
-                            color: Color(0xFF5B5FED),
+                            color: primaryColor,
                             size: 24,
                           ),
                           label: Text(
@@ -458,7 +458,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Text(
                                 'Sign Up',
                                 style: GoogleFonts.inter(
-                                  color: const Color(0xFF5B5FED),
+                                  color: primaryColor,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),

@@ -47,19 +47,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: Text(
           'Notifications',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E1E1E)),
+          icon: Icon(
+            Icons.arrow_back,
+            color: Theme.of(context).colorScheme.onBackground,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -155,14 +158,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF5B5FED).withOpacity(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         _reminderTime.format(context),
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF5B5FED),
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ),
@@ -183,7 +188,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF5B5FED),
+          color: Theme.of(context).colorScheme.primary,
           letterSpacing: 1.0,
         ),
       ),
@@ -214,14 +219,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           title,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         subtitle: Text(
           subtitle,
           style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
         ),
-        activeColor: const Color(0xFF5B5FED),
+        activeColor: Theme.of(context).colorScheme.primary,
         value: value,
         onChanged: onChanged,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

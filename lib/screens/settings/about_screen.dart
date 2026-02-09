@@ -9,19 +9,22 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: Text(
           'About',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E1E1E)),
+          icon: Icon(
+            Icons.arrow_back,
+            color: Theme.of(context).colorScheme.onBackground,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -33,13 +36,13 @@ class AboutScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF5B5FED).withOpacity(0.1),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.calculate,
                 size: 64,
-                color: Color(0xFF5B5FED),
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -48,7 +51,7 @@ class AboutScreen extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E1E1E),
+                color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
             const SizedBox(height: 8),
@@ -62,14 +65,21 @@ class AboutScreen extends StatelessWidget {
 
             const SizedBox(height: 48),
 
-            _buildSectionHeader('Information'),
-            _buildInfoTile('What\'s New', Icons.new_releases_outlined, () {}),
+            _buildSectionHeader(context, 'Information'),
             _buildInfoTile(
+              context,
+              'What\'s New',
+              Icons.new_releases_outlined,
+              () {},
+            ),
+            _buildInfoTile(
+              context,
               'Terms of Service',
               Icons.description_outlined,
               () => _launchUrl('https://example.com/terms'),
             ),
             _buildInfoTile(
+              context,
               'Privacy Policy',
               Icons.policy_outlined,
               () => _launchUrl('https://example.com/privacy'),
@@ -90,7 +100,7 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(BuildContext context, String title) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(bottom: 12, left: 4),
@@ -99,14 +109,19 @@ class AboutScreen extends StatelessWidget {
         style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF5B5FED),
+          color: Theme.of(context).colorScheme.primary,
           letterSpacing: 1.0,
         ),
       ),
     );
   }
 
-  Widget _buildInfoTile(String title, IconData icon, VoidCallback onTap) {
+  Widget _buildInfoTile(
+    BuildContext context,
+    String title,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -127,7 +142,7 @@ class AboutScreen extends StatelessWidget {
           title,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400),

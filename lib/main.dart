@@ -86,9 +86,18 @@ class MyApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             themeMode: themeProvider.themeMode,
             theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: themeProvider.seedColor,
-                brightness: Brightness.light,
+              colorScheme: ColorScheme.light(
+                primary: themeProvider.seedColor,
+                onPrimary: Colors.white,
+                primaryContainer: themeProvider.seedColor.withOpacity(0.1),
+                onPrimaryContainer: themeProvider.seedColor,
+                secondary: themeProvider.seedColor,
+                onSecondary: Colors.white,
+                surface: Colors.white,
+                onSurface: const Color(0xFF1E1E1E),
+                background: const Color(0xFFF8F9FA),
+                onBackground: const Color(0xFF1E1E1E),
+                error: const Color(0xFFFF6B6B),
               ),
               useMaterial3: true,
               scaffoldBackgroundColor: Colors.white,
@@ -104,11 +113,17 @@ class MyApp extends StatelessWidget {
               ),
             ),
             darkTheme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: themeProvider.seedColor,
-                brightness: Brightness.dark,
+              colorScheme: ColorScheme.dark(
+                primary: themeProvider.seedColor,
+                onPrimary: Colors.white,
+                primaryContainer: themeProvider.seedColor.withOpacity(0.2),
+                onPrimaryContainer: themeProvider.seedColor.withOpacity(0.8),
+                secondary: themeProvider.seedColor,
+                onSecondary: Colors.white,
                 surface: const Color(0xFF1E1E1E),
+                onSurface: Colors.white,
                 background: const Color(0xFF121212),
+                onBackground: Colors.white,
                 error: const Color(0xFFFF6B6B),
                 errorContainer: const Color(0xFF422222),
                 onErrorContainer: const Color(0xFFFFD9D9),

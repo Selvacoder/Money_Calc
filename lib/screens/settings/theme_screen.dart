@@ -42,12 +42,33 @@ class _ThemeScreenState extends State<ThemeScreen> {
           : Brightness.light;
     }
 
-    // Create a temporary theme for the preview
+    // Create a temporary theme for the preview using exact colors
     final previewTheme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: _selectedSeedColor,
-        brightness: previewBrightness,
-      ),
+      colorScheme: previewBrightness == Brightness.dark
+          ? ColorScheme.dark(
+              primary: _selectedSeedColor,
+              onPrimary: Colors.white,
+              primaryContainer: _selectedSeedColor.withOpacity(0.2),
+              onPrimaryContainer: _selectedSeedColor.withOpacity(0.8),
+              secondary: _selectedSeedColor,
+              onSecondary: Colors.white,
+              surface: const Color(0xFF1E1E1E),
+              onSurface: Colors.white,
+              background: const Color(0xFF121212),
+              onBackground: Colors.white,
+            )
+          : ColorScheme.light(
+              primary: _selectedSeedColor,
+              onPrimary: Colors.white,
+              primaryContainer: _selectedSeedColor.withOpacity(0.1),
+              onPrimaryContainer: _selectedSeedColor,
+              secondary: _selectedSeedColor,
+              onSecondary: Colors.white,
+              surface: Colors.white,
+              onSurface: const Color(0xFF1E1E1E),
+              background: const Color(0xFFF8F9FA),
+              onBackground: const Color(0xFF1E1E1E),
+            ),
       useMaterial3: true,
       textTheme: GoogleFonts.interTextTheme(
         previewBrightness == Brightness.dark
@@ -107,6 +128,7 @@ class _ThemeScreenState extends State<ThemeScreen> {
             runSpacing: 16,
             alignment: WrapAlignment.center,
             children: [
+              _buildColorOption(const Color(0xFF3F51B5), 'Indigo'),
               _buildColorOption(const Color(0xFF5B5FED), 'Purple'),
               _buildColorOption(const Color(0xFF2196F3), 'Blue'),
               _buildColorOption(const Color(0xFF4CAF50), 'Green'),

@@ -9,19 +9,22 @@ class HelpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: Text(
           'Help & Support',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E1E1E)),
+          icon: Icon(
+            Icons.arrow_back,
+            color: Theme.of(context).colorScheme.onBackground,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -30,18 +33,22 @@ class HelpScreen extends StatelessWidget {
         child: Column(
           children: [
             _buildFAQItem(
+              context,
               'How do I add a transaction?',
               'Tap the "Add" button on the home screen, enter the details, and select a category.',
             ),
             _buildFAQItem(
+              context,
               'Can I export my data?',
               'Yes, go to Settings > Privacy & Security > Export Data to download a CSV file.',
             ),
             _buildFAQItem(
+              context,
               'How do I delete a category?',
               'Long press on the category in the home screen to see the delete option.',
             ),
             _buildFAQItem(
+              context,
               'Is my data secure?',
               'Yes, your data is stored securely using Appwrite backend services.',
             ),
@@ -51,11 +58,13 @@ class HelpScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF5B5FED),
+                color: Theme.of(context).colorScheme.primary,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF5B5FED).withOpacity(0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -108,7 +117,7 @@ class HelpScreen extends StatelessWidget {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF5B5FED),
+                      foregroundColor: Theme.of(context).colorScheme.primary,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 32,
                         vertical: 16,
@@ -128,7 +137,7 @@ class HelpScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFAQItem(String question, String answer) {
+  Widget _buildFAQItem(BuildContext context, String question, String answer) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -147,7 +156,7 @@ class HelpScreen extends StatelessWidget {
           question,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         children: [

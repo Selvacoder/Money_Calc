@@ -132,19 +132,22 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: Text(
           'Privacy & Security',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E1E1E)),
+          icon: Icon(
+            Icons.arrow_back,
+            color: Theme.of(context).colorScheme.onBackground,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -225,7 +228,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          color: color ?? const Color(0xFF5B5FED),
+          color: color ?? Theme.of(context).colorScheme.primary,
           letterSpacing: 1.0,
         ),
       ),
@@ -257,7 +260,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           title,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1E1E1E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         subtitle: Text(
@@ -267,12 +270,12 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         secondary: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF5B5FED).withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: const Color(0xFF5B5FED)),
+          child: Icon(icon, color: Theme.of(context).colorScheme.primary),
         ),
-        activeColor: const Color(0xFF5B5FED),
+        activeColor: Theme.of(context).colorScheme.primary,
         value: value,
         onChanged: onChanged,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -287,7 +290,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     required VoidCallback onTap,
     bool isDanger = false,
   }) {
-    final color = isDanger ? Colors.red : const Color(0xFF5B5FED);
+    final color = isDanger ? Colors.red : Theme.of(context).colorScheme.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -319,7 +322,9 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           title,
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            color: isDanger ? Colors.red : const Color(0xFF1E1E1E),
+            color: isDanger
+                ? Colors.red
+                : Theme.of(context).colorScheme.onSurface,
           ),
         ),
         subtitle: Text(

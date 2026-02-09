@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
-  Color _seedColor = const Color(0xFF5B5FED);
+  Color _seedColor = const Color(0xFF3F51B5);
 
   ThemeMode get themeMode => _themeMode;
   Color get seedColor => _seedColor;
@@ -21,7 +21,13 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final modeString = prefs.getString('theme_mode') ?? 'system';
-    final colorValue = prefs.getInt('seed_color') ?? 0xFF5B5FED;
+    int colorValue = prefs.getInt('seed_color') ?? 0xFF3F51B5;
+
+    // Migrate old defaults to new default Material Indigo
+    if (colorValue == 0xFF5B5FED || colorValue == 0xFF4300FF) {
+      colorValue = 0xFF3F51B5;
+      await prefs.setInt('seed_color', 0xFF3F51B5);
+    }
 
     switch (modeString) {
       case 'light':

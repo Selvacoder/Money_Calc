@@ -536,7 +536,7 @@ class _LedgerGraphScreenState extends State<LedgerGraphScreen> {
                 'Transactions',
                 count.toString(),
                 Icons.receipt_long,
-                const Color(0xFF5B5FED),
+                Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(width: 12),

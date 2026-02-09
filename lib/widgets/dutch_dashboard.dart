@@ -274,7 +274,7 @@ class _DutchDashboardState extends State<DutchDashboard> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                Icons.beach_access, // TODO: Dynamic Icon
+                _getIconData(group['icon']),
                 color: Theme.of(context).colorScheme.onPrimaryContainer,
               ),
             ),
@@ -678,5 +678,33 @@ class _DutchDashboardState extends State<DutchDashboard> {
         ],
       ),
     );
+  }
+
+  IconData _getIconData(String? name) {
+    if (name == null) return Icons.group;
+    switch (name) {
+      case 'flight_takeoff':
+        return Icons.flight_takeoff;
+      case 'home':
+        return Icons.home;
+      case 'favorite':
+        return Icons.favorite;
+      case 'celebration':
+        return Icons.celebration;
+      case 'restaurant':
+        return Icons.restaurant;
+      case 'shopping_bag':
+        return Icons.shopping_bag;
+      case 'bolt':
+        return Icons.bolt;
+      case 'movie':
+        return Icons.movie;
+      case 'sports_esports':
+        return Icons.sports_esports;
+      case 'pets':
+        return Icons.pets;
+      default:
+        return Icons.group;
+    }
   }
 }

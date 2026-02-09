@@ -45,7 +45,8 @@ module.exports = async function (context) {
             members,
             createdBy,
             currency,
-            inviteCode
+            inviteCode,
+            icon
         } = payload;
 
         if (!databaseId || !collectionId || !name || !members) {
@@ -71,7 +72,8 @@ module.exports = async function (context) {
                 members, // Array of User IDs
                 createdBy,
                 currency,
-                inviteCode
+                inviteCode,
+                icon
             },
             permissions
         );

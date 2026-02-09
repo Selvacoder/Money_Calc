@@ -337,6 +337,7 @@ class DutchProvider extends ChangeNotifier {
     required String type,
     required List<String> members,
     required String createdBy,
+    required String icon,
     String currency = '₹',
   }) async {
     _isLoading = true;
@@ -350,6 +351,7 @@ class DutchProvider extends ChangeNotifier {
         members: members,
         createdBy: createdBy,
         currency: currency,
+        icon: icon,
       );
       if (newGroup != null) {
         _groups.insert(0, newGroup);

@@ -117,6 +117,63 @@ class TransactionDetailsDialog extends StatelessWidget {
 
             const SizedBox(height: 32),
 
+            // Delete Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Show confirmation/delete
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete'),
+                      content: Text(
+                        'Are you sure you want to delete "${transaction.title}"?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            context
+                                .read<TransactionProvider>()
+                                .deleteTransaction(transaction.id);
+                            Navigator.pop(ctx); // Close confirmation
+                            Navigator.pop(context); // Close details dialog
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Transaction deleted'),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.delete_outline, color: Colors.white),
+                label: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // Close Button
             SizedBox(
               width: double.infinity,

@@ -24,6 +24,20 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   String _selectedType = 'trip';
   final List<String> _types = ['trip', 'home', 'couple', 'other'];
 
+  String _selectedIcon = 'flight_takeoff';
+  final List<String> _icons = [
+    'flight_takeoff',
+    'home',
+    'favorite',
+    'celebration',
+    'restaurant',
+    'shopping_bag',
+    'bolt',
+    'movie',
+    'sports_esports',
+    'pets',
+  ];
+
   // List of members to add: {id, name, phone}
   final List<Map<String, String>> _membersToAdd = [];
   bool _isVerifyingMember = false;
@@ -129,6 +143,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
         members: memberIds,
         createdBy: currentUser.userId,
         currency: currencyProvider.currencySymbol,
+        icon: _selectedIcon,
       );
 
       if (success) {
@@ -196,6 +211,51 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     fillColor: Theme.of(context).colorScheme.surface,
                   ),
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 16),
+
+                // Icon Selector
+                Text(
+                  'Icon',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 60,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _icons.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final iconName = _icons[index];
+                      final isSelected = _selectedIcon == iconName;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedIcon = iconName),
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _getIconData(iconName),
+                            color: isSelected
+                                ? Colors.white
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -415,5 +475,32 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
         ),
       ),
     );
+  }
+
+  IconData _getIconData(String name) {
+    switch (name) {
+      case 'flight_takeoff':
+        return Icons.flight_takeoff;
+      case 'home':
+        return Icons.home;
+      case 'favorite':
+        return Icons.favorite;
+      case 'celebration':
+        return Icons.celebration;
+      case 'restaurant':
+        return Icons.restaurant;
+      case 'shopping_bag':
+        return Icons.shopping_bag;
+      case 'bolt':
+        return Icons.bolt;
+      case 'movie':
+        return Icons.movie;
+      case 'sports_esports':
+        return Icons.sports_esports;
+      case 'pets':
+        return Icons.pets;
+      default:
+        return Icons.group;
+    }
   }
 }

@@ -23,12 +23,12 @@ class ItemAdapter extends TypeAdapter<Item> {
       amount: fields[3] as double,
       isExpense: fields[4] as bool,
       categoryId: fields[5] as String,
-      usageCount: fields[6] as int,
+      usageCount: (fields[6] as int?) ?? 0,
       frequency: fields[7] as String?,
       icon: fields[8] as String?,
       dueDay: fields[9] as int?,
       isVariable: fields[10] as bool?,
-      order: fields[11] as int,
+      order: (fields[11] as int?) ?? 9999,
     );
   }
 

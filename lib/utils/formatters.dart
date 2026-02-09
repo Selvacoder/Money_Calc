@@ -17,3 +17,10 @@ class CapitalizeFirstLetterTextFormatter extends TextInputFormatter {
     return newValue.copyWith(text: newText, selection: newValue.selection);
   }
 }
+
+extension StringExtension on String {
+  String capitalize() {
+    if (isEmpty) return this;
+    return "${this[0].toUpperCase()}${substring(1)}";
+  }
+}

@@ -22,7 +22,7 @@ class Item {
   @HiveField(5)
   final String categoryId;
 
-  @HiveField(6)
+  @HiveField(6, defaultValue: 0)
   final int usageCount;
 
   @HiveField(7)
@@ -37,7 +37,7 @@ class Item {
   @HiveField(10)
   final bool? isVariable;
 
-  @HiveField(11)
+  @HiveField(11, defaultValue: 9999)
   final int order;
 
   String get name => title; // Alias match

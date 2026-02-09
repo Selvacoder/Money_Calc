@@ -20,6 +20,7 @@ class DutchService {
     required List<String> members, // User IDs
     required String createdBy,
     required String currency,
+    required String icon,
   }) async {
     try {
       // Use Cloud Function to create group with strict permissions (Secure)
@@ -33,6 +34,7 @@ class DutchService {
           'members': members,
           'createdBy': createdBy,
           'currency': currency == '₹' ? 'INR' : currency,
+          'icon': icon,
           'inviteCode': customAlphabet(
             '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ',
             6,
@@ -85,6 +87,7 @@ class DutchService {
           members: members,
           createdBy: createdBy,
           currency: currency,
+          icon: icon,
         );
       }
       rethrow;
@@ -97,6 +100,7 @@ class DutchService {
     required List<String> members,
     required String createdBy,
     required String currency,
+    required String icon,
   }) async {
     try {
       final doc = await databases.createDocument(
@@ -109,6 +113,7 @@ class DutchService {
           'members': members,
           'createdBy': createdBy,
           'currency': currency == '₹' ? 'INR' : currency,
+          'icon': icon,
           'inviteCode': customAlphabet(
             '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ',
             6,

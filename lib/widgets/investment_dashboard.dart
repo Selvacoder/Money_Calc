@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/investment_provider.dart';
 import '../providers/currency_provider.dart';
 import '../utils/formatters.dart';
+import 'package:intl/intl.dart';
 
 class InvestmentDashboard extends StatefulWidget {
   const InvestmentDashboard({super.key});
@@ -314,6 +315,14 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
     final profit = investment.currentAmount - investment.investedAmount;
     final isProfit = profit >= 0;
 
+    final provider = context.read<InvestmentProvider>();
+    final firstDate = provider.getFirstTransactionDate(investment.id);
+    // Use lastUpdated as fallback if no transactions (e.g. manually added without tx log, though we fixed that)
+    final lastDate =
+        provider.getLastTransactionDate(investment.id) ??
+        investment.lastUpdated;
+    final dateFormat = DateFormat.yMMMd();
+
     return GestureDetector(
       onTap: () => _showAssetOptions(context, investment),
       child: Container(
@@ -323,82 +332,115 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.grey.withOpacity(0.1)),
         ),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: iconColor),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    investment.name,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    investment.type,
-                    style: GoogleFonts.inter(color: Colors.grey, fontSize: 12),
-                  ),
-                  if (investment.quantity > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Qty: ${investment.quantity.toStringAsFixed(investment.quantity % 1 == 0 ? 0 : 2)}',
-                            style: GoogleFonts.inter(
-                              color: Colors.blueGrey,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Avg: $currencySymbol${(investment.investedAmount / investment.quantity).toStringAsFixed(2)}',
-                            style: GoogleFonts.inter(
-                              color: Colors.blueGrey,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '$currencySymbol${investment.currentAmount.toStringAsFixed(2)}',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Row(
+            // Dates Row
+            if (firstDate != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(
-                      isProfit ? Icons.arrow_upward : Icons.arrow_downward,
-                      size: 12,
-                      color: isProfit ? Colors.green : Colors.red,
-                    ),
                     Text(
-                      '${profit.abs().toStringAsFixed(2)}',
+                      'Start: ${dateFormat.format(firstDate)}',
                       style: GoogleFonts.inter(
-                        color: isProfit ? Colors.green : Colors.red,
-                        fontSize: 12,
+                        color: Colors.grey,
+                        fontSize: 10,
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                    Text(
+                      'Last: ${dateFormat.format(lastDate)}',
+                      style: GoogleFonts.inter(
+                        color: Colors.grey,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        investment.name,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        investment.type,
+                        style: GoogleFonts.inter(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (investment.quantity > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Qty: ${investment.quantity.toStringAsFixed(investment.quantity % 1 == 0 ? 0 : 2)}',
+                                style: GoogleFonts.inter(
+                                  color: Colors.blueGrey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Avg: $currencySymbol${(investment.investedAmount / investment.quantity).toStringAsFixed(2)}',
+                                style: GoogleFonts.inter(
+                                  color: Colors.blueGrey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$currencySymbol${investment.currentAmount.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Icon(
+                          isProfit ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 12,
+                          color: isProfit ? Colors.green : Colors.red,
+                        ),
+                        Text(
+                          '${profit.abs().toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            color: isProfit ? Colors.green : Colors.red,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

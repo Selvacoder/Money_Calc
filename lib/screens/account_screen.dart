@@ -191,7 +191,7 @@ class AccountScreen extends StatelessWidget {
                   _buildSettingItem(
                     context,
                     icon: Icons.account_balance,
-                    title: 'Bank Details',
+                    title: 'Account Details',
                     subtitle: 'Manage banks & primary accounts',
                     onTap: () => Navigator.push(
                       context,

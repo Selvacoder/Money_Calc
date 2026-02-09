@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hive_flutter/hive_flutter.dart';
@@ -25,23 +26,41 @@ import 'providers/dutch_provider.dart';
 import 'providers/notification_provider.dart';
 
 import 'services/notification_service.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://696ec91c09bac14676bc4caafac3bf67@o4510837343911936.ingest.de.sentry.io/4510837354070096';
+      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
+      // We recommend adjusting this value in production.
+      options.tracesSampleRate = 1.0;
 
-  await Hive.initFlutter();
+      // Enable debug logs only in debug mode
+      options.debug = kDebugMode;
+      options.enableLogs = kDebugMode;
 
-  // Cache cleared line removed for persistence
+      // The sampling rate for profiling is relative to tracesSampleRate
+      // Setting to 1.0 will profile 100% of sampled transactions:
+      options.profilesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  Hive.registerAdapter(TransactionAdapter());
-  Hive.registerAdapter(CategoryAdapter());
-  Hive.registerAdapter(ItemAdapter());
-  Hive.registerAdapter(LedgerTransactionAdapter());
-  Hive.registerAdapter(InvestmentAdapter());
-  Hive.registerAdapter(InvestmentTransactionAdapter());
-  Hive.registerAdapter(UserProfileAdapter());
+      await Hive.initFlutter();
 
-  runApp(const MyApp());
+      Hive.registerAdapter(TransactionAdapter());
+      Hive.registerAdapter(CategoryAdapter());
+      Hive.registerAdapter(ItemAdapter());
+      Hive.registerAdapter(LedgerTransactionAdapter());
+      Hive.registerAdapter(InvestmentAdapter());
+      Hive.registerAdapter(InvestmentTransactionAdapter());
+      Hive.registerAdapter(UserProfileAdapter());
+
+      runApp(SentryWidget(child: const MyApp()));
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -140,15 +159,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // Check Auth
     await context.read<UserProvider>().checkAuthStatus();
 
-    // Init Notifications
-    await NotificationService().init();
-    await NotificationService().requestPermissions();
+    // Init Notifications (Don't block UI)
+    try {
+      await NotificationService().init();
+      await NotificationService().requestPermissions();
+    } catch (e) {
+      debugPrint('Error initializing notifications: $e');
+    }
 
     // Setup Notification Provider
     if (mounted) {
       final user = context.read<UserProvider>().user;
       if (user != null) {
-        context.read<NotificationProvider>().init(user.userId);
+        // Run in background to avoid blocking
+        Future.microtask(
+          () => context.read<NotificationProvider>().init(user.userId),
+        );
       }
     }
   }

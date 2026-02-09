@@ -18,8 +18,10 @@ class CategoryDialog extends StatefulWidget {
 class _CategoryDialogState extends State<CategoryDialog> {
   late TextEditingController _nameController;
   late String _selectedType;
+
   late String _selectedIcon;
   bool _hasTransactions = false;
+  String? _suggestionMessage;
 
   @override
   void initState() {
@@ -36,10 +38,58 @@ class _CategoryDialogState extends State<CategoryDialog> {
           .read<TransactionProvider>()
           .hasTransactionsForCategory(widget.category!.id);
     }
+
+    // Listen to name changes
+    _nameController.addListener(_checkSuggestions);
+  }
+
+  void _checkSuggestions() {
+    final name = _nameController.text.toLowerCase();
+    String? message;
+
+    // Helper check
+    bool matches(String text, List<String> keywords) {
+      return keywords.any((k) => text.contains(k));
+    }
+
+    final ledgerKeywords = [
+      'loan',
+      'lend',
+      'borrow',
+      'repay',
+      'debt',
+      'owe',
+      'ledger',
+    ];
+    final investmentKeywords = [
+      'stock',
+      'mutual fund',
+      'sip',
+      'equity',
+      'crypto',
+      'bitcoin',
+      'invest',
+    ];
+    final dutchKeywords = ['split', 'share', 'dutch', 'group', 'trip'];
+
+    if (matches(name, ledgerKeywords)) {
+      message = 'Tracking loans? The Ledger feature is perfect for this.';
+    } else if (matches(name, investmentKeywords)) {
+      message = 'For investments, check out the dedicated Investment section.';
+    } else if (matches(name, dutchKeywords)) {
+      message = 'Group expenses are best managed in the "Go Dutch" section.';
+    }
+
+    if (message != _suggestionMessage) {
+      setState(() {
+        _suggestionMessage = message;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _nameController.removeListener(_checkSuggestions);
     _nameController.dispose();
     super.dispose();
   }
@@ -94,6 +144,14 @@ class _CategoryDialogState extends State<CategoryDialog> {
                 ),
               ),
             const SizedBox(height: 16),
+
+            const SizedBox(height: 16),
+
+            // Suggestion Banner
+            if (_suggestionMessage != null) ...[
+              _buildSuggestionBanner(context),
+              const SizedBox(height: 16),
+            ],
 
             // Category Name
             TextField(
@@ -351,5 +409,46 @@ class _CategoryDialogState extends State<CategoryDialog> {
       default:
         return Icons.category;
     }
+  }
+
+  Widget _buildSuggestionBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            color: Theme.of(context).colorScheme.primary,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _suggestionMessage!,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _suggestionMessage = null; // Dismiss
+              });
+            },
+            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
   }
 }

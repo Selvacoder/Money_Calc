@@ -36,6 +36,35 @@ class InvestmentProvider extends ChangeNotifier {
 
   double get totalProfitLoss => totalCurrentValue - totalInvestedValue;
 
+  DateTime? get firstInvestmentDate {
+    if (_transactions.isEmpty) return null;
+    // Transactions are sorted descending (newest first), so last is oldest
+    return _transactions.last.dateTime;
+  }
+
+  DateTime? get lastInvestmentDate {
+    if (_transactions.isEmpty) return null;
+    return _transactions.first.dateTime;
+  }
+
+  DateTime? getFirstTransactionDate(String investmentId) {
+    final txs = _transactions
+        .where((t) => t.investmentId == investmentId)
+        .toList();
+    if (txs.isEmpty) return null;
+    // Transactions are sorted descending, so last is oldest
+    return txs.last.dateTime;
+  }
+
+  DateTime? getLastTransactionDate(String investmentId) {
+    final txs = _transactions
+        .where((t) => t.investmentId == investmentId)
+        .toList();
+    if (txs.isEmpty) return null;
+    // Transactions are sorted descending, so first is newest
+    return txs.first.dateTime;
+  }
+
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
     _investmentBox = await Hive.openBox<Investment>('investments');
@@ -184,11 +213,7 @@ class InvestmentProvider extends ChangeNotifier {
           notifyListeners();
         }
 
-        // Optional: Create initial transaction log for this new asset
-        // So history shows "Initial Buy"
-        /* 
-        // Commented out to potentially fix duplicate quantity issue (1 becoming 2)
-        // If the backend or logic was double counting this, removing this stops the second add.
+        // Create initial transaction log for this new asset
         final pricePerUnit = quantity > 0 ? amount / quantity : 0.0;
         await addTransaction(
           realInv.id, // Use real ID
@@ -196,9 +221,8 @@ class InvestmentProvider extends ChangeNotifier {
           amount,
           quantity,
           pricePerUnit,
-          updateParent: false, // Fix: Don't update parent as it's already set
+          updateParent: false, // Don't update parent as it's already set
         );
-        */
       }
     } catch (e) {
       print('Error adding investment: $e');

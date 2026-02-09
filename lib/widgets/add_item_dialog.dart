@@ -38,7 +38,12 @@ class _AddItemDialogState extends State<AddItemDialog> {
   String _selectedIcon = 'star';
   int? _dueDay;
   bool _isVariable = false;
+
   bool _isSaving = false;
+
+  // Suggestion State
+  String? _suggestionMessage;
+  String? _suggestionTarget; // 'ledger', 'investment', 'dutch'
 
   final List<String> iconOptions = [
     'star',
@@ -49,6 +54,36 @@ class _AddItemDialogState extends State<AddItemDialog> {
     'medical_services',
     'school',
     'fitness_center',
+    'smoking_rooms',
+    'liquor',
+    'shopping_basket',
+    'eco',
+    'local_gas_station',
+    'movie',
+    'pets',
+    'phone_android',
+    'wifi',
+    'electric_bolt',
+    'coffee',
+    'fastfood',
+    'checkroom',
+    'water_drop',
+    'flight',
+    'local_taxi',
+    'medication',
+    'local_laundry_service',
+    'content_cut',
+    'card_giftcard',
+    'sports_esports',
+    'child_care',
+    'car_repair',
+    'local_parking',
+    'menu_book',
+    'subscriptions',
+    'music_note',
+    'cleaning_services',
+    'spa',
+    'celebration',
   ];
 
   @override
@@ -97,13 +132,82 @@ class _AddItemDialogState extends State<AddItemDialog> {
     }
 
     _dueDay = item?.dueDay;
+
+    // Listen to title changes for suggestions
+    _titleController.addListener(_checkSuggestions);
   }
 
   @override
   void dispose() {
+    _titleController.removeListener(_checkSuggestions);
     _titleController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+  void _checkSuggestions() {
+    final title = _titleController.text.toLowerCase();
+    String? categoryName = '';
+
+    // Get selected category name
+    if (_selectedCategoryId != null) {
+      final provider = context.read<TransactionProvider>();
+      final category = provider.categories
+          .where((c) => c.id == _selectedCategoryId)
+          .firstOrNull;
+      categoryName = category?.name.toLowerCase() ?? '';
+    }
+
+    String? message;
+    String? target;
+
+    // Helper check
+    bool matches(String text, List<String> keywords) {
+      return keywords.any((k) => text.contains(k));
+    }
+
+    final ledgerKeywords = [
+      'loan',
+      'lend',
+      'borrow',
+      'repay',
+      'debt',
+      'owe',
+      'ledger',
+    ];
+    final investmentKeywords = [
+      'stock',
+      'mutual fund',
+      'sip',
+      'equity',
+      'crypto',
+      'bitcoin',
+      'invest',
+    ];
+    final dutchKeywords = ['split', 'share', 'dutch', 'group', 'trip'];
+
+    // Check Title & Category
+    if (matches(title, ledgerKeywords) ||
+        matches(categoryName!, ledgerKeywords)) {
+      message = 'Tracking a loan? Use the Ledger feature for better tracking.';
+      target = 'ledger';
+    } else if (matches(title, investmentKeywords) ||
+        matches(categoryName, investmentKeywords)) {
+      message =
+          'Investments have their own dedicated section with AI analysis.';
+      target = 'investment';
+    } else if (matches(title, dutchKeywords) ||
+        matches(categoryName, dutchKeywords)) {
+      message = 'Splitting bills? Try "Go Dutch" to manage group expenses.';
+      target = 'dutch';
+    }
+
+    if (message != _suggestionMessage) {
+      setState(() {
+        _suggestionMessage = message;
+        _suggestionTarget = target;
+      });
+    }
   }
 
   @override
@@ -146,8 +250,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
       effectiveCategoryId = others?.id ?? categories.first.id;
       // We don't setState here to avoid rebuild loop, but we use this value for the Dropdown
       // But if user picks something else, _selectedCategoryId updates.
-      // We should ideally update _selectedCategoryId in the future, possibly in a post-frame callback if we want persistence,
-      // but for rendering the dropdown default, using a local var is safest.
     }
 
     return Dialog(
@@ -162,6 +264,12 @@ class _AddItemDialogState extends State<AddItemDialog> {
               if (widget.editingItem == null) ...[
                 _buildModeToggle(context),
                 const SizedBox(height: 24),
+              ],
+
+              // Suggestion Banner
+              if (_suggestionMessage != null) ...[
+                _buildSuggestionBanner(context),
+                const SizedBox(height: 16),
               ],
 
               Text(
@@ -222,6 +330,8 @@ class _AddItemDialogState extends State<AddItemDialog> {
                           orElse: () => categories.first,
                         );
                         _isExpense = cat.type == 'expense';
+                        // Check suggestions on category change
+                        _checkSuggestions(); // Trigger logic
                       }
                     });
                   }
@@ -560,6 +670,66 @@ class _AddItemDialogState extends State<AddItemDialog> {
         return Icons.savings;
       case 'attach_money':
         return Icons.attach_money;
+      case 'smoking_rooms':
+        return Icons.smoking_rooms;
+      case 'liquor':
+        return Icons.liquor;
+      case 'shopping_basket':
+        return Icons.shopping_basket;
+      case 'eco':
+        return Icons.eco;
+      case 'local_gas_station':
+        return Icons.local_gas_station;
+      case 'movie':
+        return Icons.movie;
+      case 'pets':
+        return Icons.pets;
+      case 'phone_android':
+        return Icons.phone_android;
+      case 'wifi':
+        return Icons.wifi;
+      case 'electric_bolt':
+        return Icons.electric_bolt;
+      case 'coffee':
+        return Icons.coffee;
+      case 'fastfood':
+        return Icons.fastfood;
+      case 'checkroom':
+        return Icons.checkroom;
+      case 'water_drop':
+        return Icons.water_drop;
+      case 'flight':
+        return Icons.flight;
+      case 'local_taxi':
+        return Icons.local_taxi;
+      case 'medication':
+        return Icons.medication;
+      case 'local_laundry_service':
+        return Icons.local_laundry_service;
+      case 'content_cut':
+        return Icons.content_cut;
+      case 'card_giftcard':
+        return Icons.card_giftcard;
+      case 'sports_esports':
+        return Icons.sports_esports;
+      case 'child_care':
+        return Icons.child_care;
+      case 'car_repair':
+        return Icons.car_repair;
+      case 'local_parking':
+        return Icons.local_parking;
+      case 'menu_book':
+        return Icons.menu_book;
+      case 'subscriptions':
+        return Icons.subscriptions;
+      case 'music_note':
+        return Icons.music_note;
+      case 'cleaning_services':
+        return Icons.cleaning_services;
+      case 'spa':
+        return Icons.spa;
+      case 'celebration':
+        return Icons.celebration;
       default:
         return Icons.category;
     }
@@ -676,6 +846,47 @@ class _AddItemDialogState extends State<AddItemDialog> {
       title: 'Due: ${_titleController.text}',
       body: 'A friendly reminder to pay this bill.',
       dayOfMonth: _dueDay!,
+    );
+  }
+
+  Widget _buildSuggestionBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            color: Theme.of(context).colorScheme.primary,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _suggestionMessage!,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _suggestionMessage = null; // Dismiss
+              });
+            },
+            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 }

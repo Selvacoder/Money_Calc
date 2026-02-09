@@ -71,9 +71,9 @@ class TransactionProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    await _initHive();
-
     try {
+      await _initHive();
+
       // 1. Load from Cache immediately
       _transactions = _transactionBox.values.toList();
       _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
@@ -81,8 +81,6 @@ class TransactionProvider extends ChangeNotifier {
       _categories = _categoryBox.values.toList();
       _quickItems = _itemBox.values.where((i) => i.frequency != null).toList();
       _quickItems.sort((a, b) => a.order.compareTo(b.order));
-      // Actually handling 'items' (category specific) vs 'quickItems' (global favorites) in one box needs care.
-      // For now, let's assume _itemBox stores all synced items.
 
       notifyListeners(); // Show cached data
 

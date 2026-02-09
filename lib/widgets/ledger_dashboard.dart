@@ -311,8 +311,6 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                           final userProvider = context.read<UserProvider>();
                           final currentUser = userProvider.user;
 
-                          // Note: Reading provider after pop might be risky if context is invalidated,
-                          // but usually works if provider is higher up. Better to capture provider too.
                           final ledgerProvider = context.read<LedgerProvider>();
 
                           final error = await ledgerProvider
@@ -327,8 +325,6 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                                 currentUserPhone: currentUser?.phone ?? '',
                                 customStatus: _isNotesMode ? 'notes' : null,
                               );
-                          print('DEBUG: Provider returned error: $error');
-
                           print('DEBUG: Provider returned error: $error');
 
                           if (mounted) {
@@ -362,7 +358,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                               context: context,
                               builder: (ctx) => AlertDialog(
                                 title: const Text('Error Adding'),
-                                content: Text(error),
+                                content: Text(error ?? 'Unknown error'),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx),
@@ -551,6 +547,140 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               currencySymbol,
               currentUserId,
             ),
+            const SizedBox(height: 32),
+
+            // Recent Transactions Section
+            Builder(
+              builder: (context) {
+                final recentTx = activeTransactions.where((tx) {
+                  return tx.dateTime.isAfter(
+                    DateTime.now().subtract(const Duration(hours: 24)),
+                  );
+                }).toList();
+
+                // Sort by DateTime descending
+                // Sort by DateTime descending
+                recentTx.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Recent Transactions',
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (recentTx.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.history,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No recent transactions',
+                                style: GoogleFonts.inter(color: Colors.grey),
+                              ),
+                              Text(
+                                '(Last 24 hours)',
+                                style: GoogleFonts.inter(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      ...recentTx.map((tx) {
+                        final isMeSender =
+                            (currentUserId != null &&
+                                tx.senderId == currentUserId) ||
+                            myIdentities.any(
+                              (id) => _arePhonesEqual(tx.senderPhone, id),
+                            );
+
+                        final isExpense =
+                            isMeSender; // I sent/lent = Expense/Out
+                        final otherName = isMeSender
+                            ? tx.receiverName
+                            : tx.senderName;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: isExpense
+                                    ? Colors.red.withOpacity(0.1)
+                                    : Colors.green.withOpacity(0.1),
+                                child: Icon(
+                                  isExpense
+                                      ? Icons.arrow_downward
+                                      : Icons.arrow_upward,
+                                  color: isExpense ? Colors.red : Colors.green,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      otherName,
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_formatTime(tx.dateTime)} • ${tx.status.capitalize()}',
+                                      style: GoogleFonts.inter(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '${isExpense ? '-' : '+'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: isExpense ? Colors.red : Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                );
+              },
+            ),
+
             const SizedBox(height: 80),
           ],
         ),
@@ -798,6 +928,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
   String _normalizePhone(String phone) {
     String digits = phone.replaceAll(RegExp(r'\D'), '');
     return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+  }
+
+  String _formatTime(DateTime dateTime) {
+    return TimeOfDay.fromDateTime(dateTime).format(context);
   }
 
   Widget _buildBalanceCard(

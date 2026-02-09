@@ -68,19 +68,19 @@ class UserProvider extends ChangeNotifier {
     Future.microtask(() => notifyListeners());
 
     debugPrint('DEBUG: checkAuthStatus started (forceCheck: $forceCheck)');
-    await _initHive();
-
-    // 1. Load from Cache
-    if (_userBox.isNotEmpty) {
-      _user = _userBox.get('current_user');
-      if (_user != null) {
-        _isAuthenticated = true;
-        // Schedule for next frame to avoid build-time errors
-        Future.microtask(() => notifyListeners());
-      }
-    }
-
     try {
+      await _initHive();
+
+      // 1. Load from Cache
+      if (_userBox.isNotEmpty) {
+        _user = _userBox.get('current_user');
+        if (_user != null) {
+          _isAuthenticated = true;
+          // Schedule for next frame to avoid build-time errors
+          Future.microtask(() => notifyListeners());
+        }
+      }
+
       // 2. Check Real Auth
       final isLoggedIn = await _authService.isLoggedIn(forceCheck: forceCheck);
       debugPrint('DEBUG: checkAuthStatus - isLoggedIn: $isLoggedIn');
@@ -407,6 +407,47 @@ class UserProvider extends ChangeNotifier {
       // logic above does exactly that: where entry.key == methodName.
 
       if (keysToRemove.isNotEmpty) {
+        await _settingsBox.put(
+          'primary_payment_methods',
+          _primaryPaymentMethods,
+        );
+      }
+
+      notifyListeners();
+      await _syncPreferences();
+    }
+  }
+
+  bool isPaymentMethodEnabled(String method) {
+    if (_primaryPaymentMethods.containsKey('${method}_enabled')) {
+      return _primaryPaymentMethods['${method}_enabled'] == 'true';
+    }
+    return true; // Default to enabled
+  }
+
+  Future<void> togglePaymentMethod(String method, bool enabled) async {
+    _primaryPaymentMethods['${method}_enabled'] = enabled.toString();
+    await _settingsBox.put('primary_payment_methods', _primaryPaymentMethods);
+    notifyListeners();
+    await _syncPreferences();
+  }
+
+  Future<void> renameCustomPaymentMethod(String oldName, String newName) async {
+    if (oldName == newName) return;
+    if (_customPaymentMethods.contains(newName)) {
+      throw 'Method name already exists';
+    }
+
+    final index = _customPaymentMethods.indexOf(oldName);
+    if (index != -1) {
+      _customPaymentMethods[index] = newName;
+      await _settingsBox.put('custom_payment_methods', _customPaymentMethods);
+
+      // Update primary methods key if it exists
+      if (_primaryPaymentMethods.containsKey(oldName)) {
+        final bank = _primaryPaymentMethods[oldName];
+        _primaryPaymentMethods.remove(oldName);
+        _primaryPaymentMethods[newName] = bank!;
         await _settingsBox.put(
           'primary_payment_methods',
           _primaryPaymentMethods,

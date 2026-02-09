@@ -12,6 +12,7 @@ import '../providers/user_provider.dart';
 import '../screens/settings/bank_details_screen.dart';
 import 'add_item_dialog.dart';
 import 'transaction_details_dialog.dart';
+import 'package:intl/intl.dart';
 
 class PersonalDashboard extends StatefulWidget {
   const PersonalDashboard({super.key});
@@ -248,7 +249,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Transactions History',
+                    'Recent Transactions',
                     style: GoogleFonts.inter(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -261,6 +262,13 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
               // Recent Transactions - Last 24 Hours with Show More/Less
               () {
+                // Filter for last 24 hours
+                final recentTransactions = provider.transactions.where((tx) {
+                  return tx.dateTime.isAfter(
+                    DateTime.now().subtract(const Duration(hours: 24)),
+                  );
+                }).toList();
+
                 if (provider.isLoading && provider.transactions.isEmpty) {
                   return Shimmer.fromColors(
                     baseColor: theme.brightness == Brightness.dark
@@ -285,19 +293,22 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   );
                 }
 
-                if (provider.transactions.isEmpty) {
+                if (recentTransactions.isEmpty) {
                   return Center(
                     child: Column(
                       children: [
-                        const Icon(
-                          Icons.receipt_long_outlined,
-                          size: 48,
-                          color: Colors.grey,
-                        ),
+                        const Icon(Icons.history, size: 48, color: Colors.grey),
                         const SizedBox(height: 8),
                         Text(
-                          'No transactions found',
+                          'No recent transactions',
                           style: GoogleFonts.inter(color: Colors.grey),
+                        ),
+                        Text(
+                          '(Last 24 hours)',
+                          style: GoogleFonts.inter(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -306,111 +317,49 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
                 return Column(
                   children: [
-                    ...provider.transactions.map((tx) {
-                      return Dismissible(
-                        key: Key(tx.id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          color: Colors.red,
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (direction) {
-                          context.read<TransactionProvider>().deleteTransaction(
-                            tx.id,
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Deleted ${tx.title}')),
+                    ...recentTransactions.map((tx) {
+                      return ListTile(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => TransactionDetailsDialog(
+                              transaction: tx,
+                              currencySymbol: currencySymbol,
+                            ),
                           );
                         },
-                        child: ListTile(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => TransactionDetailsDialog(
-                                transaction: tx,
-                                currencySymbol: currencySymbol,
-                              ),
-                            );
-                          },
-                          leading: CircleAvatar(
-                            backgroundColor: tx.isExpense
-                                ? Colors.red.withOpacity(0.1)
-                                : Colors.green.withOpacity(0.1),
-                            child: Icon(
-                              tx.isExpense
-                                  ? Icons.arrow_downward
-                                  : Icons.arrow_upward,
-                              color: tx.isExpense ? Colors.red : Colors.green,
-                            ),
+                        leading: CircleAvatar(
+                          backgroundColor: tx.isExpense
+                              ? Colors.red.withOpacity(0.1)
+                              : Colors.green.withOpacity(0.1),
+                          child: Icon(
+                            tx.isExpense
+                                ? Icons.arrow_downward
+                                : Icons.arrow_upward,
+                            color: tx.isExpense ? Colors.red : Colors.green,
                           ),
-                          title: Text(
-                            tx.title,
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w500,
-                            ),
+                        ),
+                        title: Text(
+                          tx.title,
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          DateFormat('h:mm a').format(tx.dateTime),
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.grey,
                           ),
-                          subtitle: Text(
-                            tx.dateTime.toString().split(' ')[0],
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${tx.isExpense ? '-' : '+'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.bold,
-                                  color: tx.isExpense
-                                      ? Colors.red
-                                      : Colors.green,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red,
-                                  size: 20,
-                                ),
-                                onPressed: () => _deleteTransaction(tx),
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
+                        ),
+                        trailing: Text(
+                          '${tx.isExpense ? '-' : '+'}$currencySymbol${tx.amount.toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            color: tx.isExpense ? Colors.red : Colors.green,
                           ),
                         ),
                       );
                     }),
-                    if (provider.hasMore)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: provider.isLoading
-                              ? const CircularProgressIndicator()
-                              : TextButton(
-                                  onPressed: () =>
-                                      provider.loadMoreTransactions(),
-                                  child: const Text('Load More'),
-                                ),
-                        ),
-                      )
-                    else
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: Text(
-                            'No more transactions',
-                            style: GoogleFonts.inter(
-                              color: Colors.grey.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
+                    // No Load More button for strict "Last 24h" view
                   ],
                 );
               }(),
@@ -490,6 +439,66 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       iconData = Icons.school;
     } else if (item.icon == 'fitness_center') {
       iconData = Icons.fitness_center;
+    } else if (item.icon == 'smoking_rooms') {
+      iconData = Icons.smoking_rooms; // Cigars
+    } else if (item.icon == 'liquor') {
+      iconData = Icons.liquor; // Alcohol
+    } else if (item.icon == 'shopping_basket') {
+      iconData = Icons.shopping_basket; // Groceries
+    } else if (item.icon == 'eco') {
+      iconData = Icons.eco; // Vegetables
+    } else if (item.icon == 'local_gas_station') {
+      iconData = Icons.local_gas_station; // Fuel
+    } else if (item.icon == 'movie') {
+      iconData = Icons.movie; // Entertainment
+    } else if (item.icon == 'pets') {
+      iconData = Icons.pets; // Pets
+    } else if (item.icon == 'phone_android') {
+      iconData = Icons.phone_android; // Recharge
+    } else if (item.icon == 'wifi') {
+      iconData = Icons.wifi; // Internet
+    } else if (item.icon == 'electric_bolt') {
+      iconData = Icons.electric_bolt;
+    } else if (item.icon == 'coffee') {
+      iconData = Icons.coffee; // Coffee
+    } else if (item.icon == 'fastfood') {
+      iconData = Icons.fastfood; // Snacks
+    } else if (item.icon == 'checkroom') {
+      iconData = Icons.checkroom; // Clothes
+    } else if (item.icon == 'water_drop') {
+      iconData = Icons.water_drop; // Water
+    } else if (item.icon == 'flight') {
+      iconData = Icons.flight; // Travel
+    } else if (item.icon == 'local_taxi') {
+      iconData = Icons.local_taxi; // Taxi
+    } else if (item.icon == 'medication') {
+      iconData = Icons.medication; // Medicine
+    } else if (item.icon == 'local_laundry_service') {
+      iconData = Icons.local_laundry_service; // Laundry
+    } else if (item.icon == 'content_cut') {
+      iconData = Icons.content_cut; // Salon
+    } else if (item.icon == 'card_giftcard') {
+      iconData = Icons.card_giftcard; // Gift
+    } else if (item.icon == 'sports_esports') {
+      iconData = Icons.sports_esports; // Games
+    } else if (item.icon == 'child_care') {
+      iconData = Icons.child_care; // Kids
+    } else if (item.icon == 'car_repair') {
+      iconData = Icons.car_repair; // Repair
+    } else if (item.icon == 'local_parking') {
+      iconData = Icons.local_parking; // Parking
+    } else if (item.icon == 'menu_book') {
+      iconData = Icons.menu_book; // Books
+    } else if (item.icon == 'subscriptions') {
+      iconData = Icons.subscriptions; // Subs
+    } else if (item.icon == 'music_note') {
+      iconData = Icons.music_note; // Music
+    } else if (item.icon == 'cleaning_services') {
+      iconData = Icons.cleaning_services; // Maid
+    } else if (item.icon == 'spa') {
+      iconData = Icons.spa; // Spa
+    } else if (item.icon == 'celebration') {
+      iconData = Icons.celebration; // Party
     }
 
     // Dynamic Background Color Logic
@@ -543,21 +552,27 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               }
 
               // Regular Quick Entry Logic
+              // Capture context-dependent objects BEFORE async gap
+              final provider = context.read<TransactionProvider>();
+              final messenger = ScaffoldMessenger.of(context);
+
               // Ask for Payment Method for ALL transactions
               String? paymentMethod = await _selectPaymentMethod();
               if (paymentMethod == null) return; // Cancelled
 
-              context.read<TransactionProvider>().addTransaction(
-                item.title,
-                item.amount,
-                item.isExpense,
-                categoryId: item.categoryId,
-                itemId: item.id,
-                paymentMethod: paymentMethod,
-              );
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Added ${item.title}')));
+              if (mounted) {
+                provider.addTransaction(
+                  item.title,
+                  item.amount,
+                  item.isExpense,
+                  categoryId: item.categoryId,
+                  itemId: item.id,
+                  paymentMethod: paymentMethod,
+                );
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Added ${item.title}')),
+                );
+              }
             },
       onLongPress: _isReordering ? null : () => _showItemOptions(item),
       child: Container(
@@ -640,70 +655,60 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
   Future<void> _showVariableEntryDialog(dynamic item) async {
     final amountController = TextEditingController();
-    String? selectedPaymentMethod;
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
         title: Text('Add ${item.title}'),
         content: Form(
           key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Amount',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  prefixText: context.read<CurrencyProvider>().currencySymbol,
-                ),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Required' : null,
+          child: TextFormField(
+            controller: amountController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Amount',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                decoration: InputDecoration(
-                  labelText: 'Payment Method',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items:
-                    ['Cash', 'UPI', 'Debit Card', 'Credit Card', 'Net Banking']
-                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                        .toList(),
-                onChanged: (val) => selectedPaymentMethod = val,
-                validator: (value) => value == null ? 'Required' : null,
-              ),
-            ],
+              prefixText: context.read<CurrencyProvider>().currencySymbol,
+            ),
+            validator: (value) =>
+                value == null || value.isEmpty ? 'Required' : null,
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (formKey.currentState!.validate()) {
-                context.read<TransactionProvider>().addTransaction(
-                  item.title,
-                  double.parse(amountController.text),
-                  item.isExpense,
-                  categoryId: item.categoryId,
-                  itemId: item.id,
-                  paymentMethod: selectedPaymentMethod,
-                );
-                Navigator.pop(context);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Added ${item.title}')));
+                final amount = double.parse(amountController.text);
+
+                // Capture context-dependent objects BEFORE async gap
+                final provider = context.read<TransactionProvider>();
+                final messenger = ScaffoldMessenger.of(context);
+
+                Navigator.pop(dialogContext); // Close using dialog context
+
+                // Ask for payment method using outer context (implicit)
+                final paymentMethod = await _selectPaymentMethod();
+
+                // Check if widget is still mounted
+                if (paymentMethod != null && mounted) {
+                  // Use captured provider
+                  provider.addTransaction(
+                    item.title,
+                    amount,
+                    item.isExpense,
+                    categoryId: item.categoryId,
+                    itemId: item.id,
+                    paymentMethod: paymentMethod,
+                  );
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Added ${item.title}')),
+                  );
+                }
               }
             },
             child: const Text('Add'),
@@ -719,44 +724,49 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              item.title,
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                item.title,
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.swap_vert),
-              title: const Text('Reorder Items'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _isReordering = true);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Edit'),
-              onTap: () {
-                Navigator.pop(context);
-                _showEditItemDialog(item);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
-                _deleteItem(item);
-              },
-            ),
-          ],
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.swap_vert),
+                title: const Text('Reorder Items'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _isReordering = true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditItemDialog(item);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteItem(item);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -771,13 +781,6 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
   void _showEditItemDialog(dynamic item) {
     _showAddItemDialog(editingItem: item);
-  }
-
-  void _deleteTransaction(dynamic tx) {
-    context.read<TransactionProvider>().deleteTransaction(tx.id);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Deleted ${tx.title}')));
   }
 
   // --- Add/Edit Quick Entry Dialog ---
@@ -1177,18 +1180,27 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
 
             final customMethods = userProvider.customPaymentMethods;
 
-            final allMethods = [
-              {'name': 'Cash', 'icon': Icons.money},
-              {'name': 'UPI', 'icon': Icons.qr_code},
-              {'name': 'Debit Card', 'icon': Icons.credit_card},
-              {'name': 'Credit Card', 'icon': Icons.credit_score},
-              {'name': 'Bank Account', 'icon': Icons.account_balance},
-              ...customMethods.map((m) => {'name': m, 'icon': Icons.payment}),
-            ];
+            final allMethods =
+                [
+                  {'name': 'Cash', 'icon': Icons.money},
+                  {'name': 'UPI', 'icon': Icons.qr_code},
+                  {'name': 'Debit Card', 'icon': Icons.credit_card},
+                  {'name': 'Credit Card', 'icon': Icons.credit_score},
+                  {'name': 'Bank Account', 'icon': Icons.account_balance},
+                  ...customMethods.map(
+                    (m) => {'name': m, 'icon': Icons.payment},
+                  ),
+                ].where((method) {
+                  final name = method['name'] as String;
+                  // Custom methods are always shown (managed via add/delete)
+                  if (customMethods.contains(name)) return true;
+                  // All standard methods (including Cash) check toggle
+                  return userProvider.isPaymentMethodEnabled(name);
+                }).toList();
 
             return AlertDialog(
               title: Text(
-                'Select Payment Method',
+                'Payment Method',
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
@@ -1214,7 +1226,10 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                       name,
                       icon,
                       userProvider,
-                      primaryBank: primaryMethods[name],
+                      // Pass primaryBank only if defaults are enabled for this method
+                      primaryBank: userProvider.isPaymentMethodEnabled(name)
+                          ? primaryMethods[name]
+                          : null,
                       onLongPress: () {
                         if (name != 'Cash') {
                           handleLongPress(name);

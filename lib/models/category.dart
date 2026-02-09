@@ -33,7 +33,7 @@ class Category {
 
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
-      id: json['\$id'] ?? '',
+      id: json['\$id'] ?? json['id'] ?? '',
       userId: json['userId'] ?? '',
       name: json['name'] ?? '',
       type: json['type'] ?? 'expense',

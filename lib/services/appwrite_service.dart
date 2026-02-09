@@ -389,9 +389,11 @@ class AppwriteService {
         'amount': data['amount'],
         'categoryId': data['categoryId'],
         'itemId': data['itemId'],
-        'description': data['description'],
+        'title': data['title'] ?? data['description'] ?? '',
         'dateTime': data['dateTime'],
         'isExpense': data['isExpense'],
+        'ledgerId': data['ledgerId'],
+        'paymentMethod': data['paymentMethod'],
       };
 
       // Handle Usage logic

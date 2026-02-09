@@ -82,26 +82,79 @@ class TransactionProvider extends ChangeNotifier {
       _quickItems = _itemBox.values.where((i) => i.frequency != null).toList();
       _quickItems.sort((a, b) => a.order.compareTo(b.order));
 
-      notifyListeners(); // Show cached data
+      debugPrint(
+        'DEBUG: TransactionProvider - Cache loaded: ${_transactions.length} txs, ${_categories.length} cats, ${_quickItems.length} items',
+      );
+      notifyListeners(); // Show cached data (potentially empty on fresh install)
 
-      // 2. Fetch from Network
+      // 2. Ensure we have a user before network fetch
+      final user = await _appwriteService.getCurrentUser();
+      if (user == null) {
+        debugPrint(
+          'DEBUG: TransactionProvider - No user found, skipping network sync',
+        );
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+      final userId = user['userId'];
+      debugPrint(
+        'DEBUG: TransactionProvider - Starting network sync for user: $userId',
+      );
+
+      // 3. Fetch from Network
       // Transactions
       final transactionData = await _appwriteService.getTransactions();
+      debugPrint(
+        'DEBUG: TransactionProvider - Received ${transactionData.length} transactions from server',
+      );
+
       final networkTransactions = transactionData
           .map((data) => Transaction.fromJson(data))
           .toList();
 
       if (networkTransactions.isNotEmpty) {
+        // Merge: Keep network transactions, BUT also keep any local "temp" ones that aren't synced yet
+        final tempTransactions = _transactions.where((tx) {
+          final id = tx.id;
+          return id.startsWith('temp_') || RegExp(r'^\d+$').hasMatch(id);
+        }).toList();
+
+        // Avoid duplicates
         _transactions = networkTransactions;
+        for (var temp in tempTransactions) {
+          // Robust check: match if title, amount and time (within 60s) are same
+          final alreadyInNetwork = networkTransactions.any(
+            (t) =>
+                t.title == temp.title &&
+                (t.amount - temp.amount).abs() < 0.01 &&
+                t.dateTime.difference(temp.dateTime).inSeconds.abs() < 60,
+          );
+
+          if (!alreadyInNetwork) {
+            _transactions.insert(0, temp);
+          }
+        }
+
         _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-        _lastId = _transactions.last.id;
-        _hasMore = networkTransactions.length >= 25;
+
+        // CRITICAL: Update pagination state
+        if (networkTransactions.isNotEmpty) {
+          _lastId = networkTransactions.last.id;
+          _hasMore = networkTransactions.length >= 25;
+        }
 
         // Update Cache
         await _transactionBox.clear();
         await _transactionBox.putAll({for (var t in _transactions) t.id: t});
+        debugPrint(
+          'DEBUG: TransactionProvider - Cache updated with ${_transactions.length} items. HasMore: $_hasMore, LastId: $_lastId',
+        );
       } else {
         _hasMore = false;
+        if (_transactions.isEmpty) {
+          _transactions = [];
+        }
       }
 
       // Categories
@@ -109,46 +162,55 @@ class TransactionProvider extends ChangeNotifier {
 
       // Quick Items
       await _loadQuickItems();
-
-      // Load initial items if categories exist
-      if (_categories.isNotEmpty) {
-        await fetchItemsEx(_categories.first.id);
-      }
     } catch (e) {
-      print('Error fetching data: $e');
-      // On error, we already showed cached data, so user sees something.
+      debugPrint('DEBUG: TransactionProvider - Error fetching data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+      debugPrint(
+        'DEBUG: TransactionProvider - fetchData completed. Total txs: ${_transactions.length}',
+      );
     }
   }
 
   Future<void> _loadCategories() async {
     try {
       final categoryData = await _appwriteService.getCategories();
+      debugPrint(
+        'DEBUG: TransactionProvider - Received ${categoryData.length} categories from server',
+      );
+
       final networkCategories = categoryData
           .map((data) => Category.fromJson(data))
           .toList();
 
-      if (networkCategories.isNotEmpty) {
+      if (networkCategories.isNotEmpty || _categories.isEmpty) {
         _categories = networkCategories;
         // Update Cache
         await _categoryBox.clear();
         await _categoryBox.putAll({for (var c in _categories) c.id: c});
+        debugPrint('DEBUG: TransactionProvider - Category cache updated');
       }
     } catch (e) {
-      print('Error loading categories: $e');
+      debugPrint('DEBUG: TransactionProvider - Error loading categories: $e');
     }
   }
 
   Future<void> _loadQuickItems() async {
     try {
       final quickItemData = await _appwriteService.getQuickItems();
+      debugPrint(
+        'DEBUG: TransactionProvider - Received ${quickItemData.length} quick items from server',
+      );
+
       final networkItems = quickItemData.map((data) {
         final item = Item.fromJson(data);
         // Preserve local order preference if exists
         final cachedItem = _itemBox.get(item.id);
-        int localOrder = cachedItem?.order ?? 9999;
+        int localOrder = (cachedItem != null && cachedItem.order != 9999)
+            ? cachedItem.order
+            : 9999;
+
         // Create new item with preserved local order
         return Item(
           id: item.id,
@@ -166,16 +228,17 @@ class TransactionProvider extends ChangeNotifier {
         );
       }).toList();
 
-      if (networkItems.isNotEmpty) {
+      if (networkItems.isNotEmpty || _quickItems.isEmpty) {
         _quickItems = networkItems;
         _quickItems.sort((a, b) => a.order.compareTo(b.order));
 
-        // Update Cache with merged data
+        // Update Cache
+        await _itemBox.clear();
         await _itemBox.putAll({for (var i in _quickItems) i.id: i});
+        debugPrint('DEBUG: TransactionProvider - QuickItems cache updated');
       }
     } catch (e) {
-      print('Error loading quick items: $e');
-      // If network fails, we rely on _initHive()'s cache load (which we should also update to sort)
+      debugPrint('DEBUG: TransactionProvider - Error loading quick items: $e');
     }
   }
 
@@ -260,8 +323,7 @@ class TransactionProvider extends ChangeNotifier {
     SoundService().play(isExpense ? 'expense.mp3' : 'income.mp3');
 
     // Optimistic Update
-    final tempId = DateTime.now().millisecondsSinceEpoch
-        .toString(); // Use timestamp as temp ID
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
     final newTransaction = Transaction(
       id: tempId,
       title: title,
@@ -290,13 +352,23 @@ class TransactionProvider extends ChangeNotifier {
 
       if (result != null) {
         final realTx = Transaction.fromJson(result);
-        final index = _transactions.indexWhere((t) => t.id == tempId);
-        if (index != -1) {
-          _transactions[index] = realTx;
+
+        // Remove temp and replace with real, BUT check if real already exists (added by fetchData)
+        final tempIndex = _transactions.indexWhere((t) => t.id == tempId);
+        final realIndex = _transactions.indexWhere((t) => t.id == realTx.id);
+
+        if (tempIndex != -1) {
+          if (realIndex != -1) {
+            // Already there (maybe from a concurrent fetchData), just remove temp
+            _transactions.removeAt(tempIndex);
+          } else {
+            // Normal case: replace temp with real
+            _transactions[tempIndex] = realTx;
+          }
           notifyListeners();
         }
 
-        // Update Cache with real ID and remove temp
+        // Update Cache
         if (_isHiveInitialized) {
           await _transactionBox.delete(tempId);
           await _transactionBox.put(realTx.id, realTx);
@@ -304,7 +376,7 @@ class TransactionProvider extends ChangeNotifier {
 
         // Refresh meta data
         _loadQuickItems();
-        await _loadCategories(); // Await appropriate here?
+        await _loadCategories();
         notifyListeners();
         return true;
       } else {
@@ -603,10 +675,16 @@ class TransactionProvider extends ChangeNotifier {
             .map((data) => Transaction.fromJson(data))
             .toList();
 
-        // Append
-        _transactions.addAll(newTransactions);
+        // Append ONLY new ones to avoid duplicates
+        for (var tx in newTransactions) {
+          if (!_transactions.any((t) => t.id == tx.id)) {
+            _transactions.add(tx);
+          }
+        }
         _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-        _lastId = _transactions.last.id;
+        _lastId = newTransactions.isNotEmpty
+            ? newTransactions.last.id
+            : _lastId;
         _hasMore = newData.length >= 25;
 
         // Note: We don't necessarily clear the box here, but let's cache what we have

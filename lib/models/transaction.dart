@@ -49,7 +49,7 @@ class Transaction {
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
-      id: json['\$id'] ?? '',
+      id: json['\$id'] ?? json['id'] ?? '',
       title: json['title'] ?? '',
       amount: (json['amount'] ?? 0.0).toDouble(),
       isExpense: json['isExpense'] ?? true,
@@ -65,6 +65,7 @@ class Transaction {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'title': title,
       'amount': amount,
       'isExpense': isExpense,

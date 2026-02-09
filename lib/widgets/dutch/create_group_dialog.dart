@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:country_code_picker/country_code_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/dutch_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/appwrite_service.dart';
 import '../../utils/formatters.dart';
+import 'package:fast_contacts/fast_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class CreateGroupDialog extends StatefulWidget {
   const CreateGroupDialog({super.key});
@@ -19,7 +20,6 @@ class CreateGroupDialog extends StatefulWidget {
 class _CreateGroupDialogState extends State<CreateGroupDialog> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _memberPhoneController = TextEditingController();
 
   String _selectedType = 'trip';
   final List<String> _types = ['trip', 'home', 'couple', 'other'];
@@ -40,71 +40,51 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   // List of members to add: {id, name, phone}
   final List<Map<String, String>> _membersToAdd = [];
-  bool _isVerifyingMember = false;
   String? _memberError;
   bool _showInvite = false; // Added state
+  String _invitePhone = '';
   String _selectedCountryCode = '+91';
+  final TextEditingController _searchController = TextEditingController();
+  List<Contact> _contacts = [];
+  bool _contactsLoaded = false;
+  List<dynamic> _searchResults = [];
 
   @override
   void initState() {
     super.initState();
+    _loadContacts();
   }
 
-  Future<void> _verifyAndAddMember() async {
-    final rawPhone = _memberPhoneController.text.trim();
-    if (rawPhone.isEmpty) return;
-
-    setState(() {
-      _isVerifyingMember = true;
-      _memberError = null;
-      _showInvite = false; // Reset invite
-    });
-
-    try {
-      // Combine Country Code + Phone
-      // Remove leading 0 if present to be safe, though usually not needed if strictly E.164
-      final phone = '$_selectedCountryCode$rawPhone';
-
-      // 1. Check if self
-      final currentUser = context.read<UserProvider>().user;
-      if (currentUser?.phone == phone) {
-        setState(() => _memberError = "You are already in the group!");
-        return;
-      }
-
-      // 2. Check if already added
-      if (_membersToAdd.any((m) => m['phone'] == phone)) {
-        setState(() => _memberError = "Member already added.");
-        return;
-      }
-
-      // 3. Lookup User
-      final user = await AppwriteService().getUserByPhone(phone);
-      if (user != null) {
-        setState(() {
-          _membersToAdd.add({
-            'id': user['userId'],
-            'name': user['name'] ?? 'Unknown',
-            'phone': phone,
+  Future<void> _loadContacts() async {
+    if (_contactsLoaded) return;
+    final status = await Permission.contacts.request();
+    if (status.isGranted) {
+      try {
+        final contacts = await FastContacts.getAllContacts(
+          fields: [ContactField.displayName, ContactField.phoneNumbers],
+        );
+        if (mounted) {
+          setState(() {
+            _contacts = contacts;
+            _contactsLoaded = true;
           });
-          _memberPhoneController.clear();
-        });
-      } else {
-        setState(() {
-          _memberError = "User not found ($phone)";
-          _showInvite = true; // Show invite
-        });
+        }
+      } catch (e) {
+        debugPrint('Error loading contacts: $e');
       }
-    } catch (e) {
-      setState(() => _memberError = "Error finding user: $e");
-    } finally {
-      setState(() => _isVerifyingMember = false);
     }
   }
 
+  bool get _hasNonAppMembers =>
+      _membersToAdd.any((m) => m['id'] == null || m['id']!.isEmpty);
+
   void _removeMember(int index) {
     setState(() {
-      _membersToAdd.removeAt(index);
+      final removed = _membersToAdd.removeAt(index);
+      if (_invitePhone == removed['phone']) {
+        _showInvite = false;
+        _invitePhone = '';
+      }
     });
   }
 
@@ -297,10 +277,208 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                // Added Members List
-                if (_membersToAdd.isNotEmpty)
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) async {
+                    setState(() {
+                      if (value.isEmpty) {
+                        _searchResults = [];
+                      } else {
+                        _searchResults = _contacts
+                            .where((contact) {
+                              final name = contact.displayName;
+                              final nameMatch = name.toLowerCase().contains(
+                                value.toLowerCase(),
+                              );
+                              final phones = contact.phones;
+                              final phoneMatch = phones.any(
+                                (p) => p.number.contains(value),
+                              );
+                              return nameMatch || phoneMatch;
+                            })
+                            .take(5)
+                            .toList();
+                      }
+                    });
+
+                    if (value.length >= 3) {
+                      try {
+                        final remoteUsers = await AppwriteService()
+                            .searchContacts(value);
+                        if (_searchController.text == value) {
+                          setState(() {
+                            for (var user in remoteUsers) {
+                              final phone = user['phone'];
+                              bool exists = _searchResults.any((r) {
+                                if (r is Contact) {
+                                  return r.phones.any(
+                                    (p) => p.number.contains(phone),
+                                  );
+                                }
+                                return r['phone'] == phone;
+                              });
+                              if (!exists) {
+                                _searchResults.add({...user, 'isRemote': true});
+                              }
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        debugPrint('Error in remote search: $e');
+                      }
+                    }
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or number...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                  ),
+                ),
+
+                if (_searchResults.isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   Container(
-                    margin: const EdgeInsets.only(bottom: 12),
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor.withOpacity(0.1),
+                      ),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = _searchResults[index];
+                        String name = '';
+                        String phone = '';
+                        bool isRemote = false;
+
+                        if (item is Contact) {
+                          name = item.displayName;
+                          phone = item.phones.isNotEmpty
+                              ? item.phones.first.number
+                              : '';
+                        } else {
+                          name = item['name'] ?? '';
+                          phone = item['phone'] ?? '';
+                          isRemote = item['isRemote'] ?? false;
+                        }
+
+                        return ListTile(
+                          visualDensity: VisualDensity.compact,
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              if (isRemote)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'On Tap It',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          subtitle: phone.isNotEmpty
+                              ? Text(
+                                  phone,
+                                  style: GoogleFonts.inter(fontSize: 11),
+                                )
+                              : null,
+                          onTap: () async {
+                            final cleanPhone = phone.replaceAll(
+                              RegExp(r'\D'),
+                              '',
+                            );
+                            final formattedPhone = cleanPhone.length >= 10
+                                ? cleanPhone.substring(cleanPhone.length - 10)
+                                : cleanPhone;
+
+                            // Add to members list
+                            setState(() {
+                              _membersToAdd.add({
+                                'id': item is Contact
+                                    ? ''
+                                    : (item['userId'] ?? ''),
+                                'name': name,
+                                'phone': '$_selectedCountryCode$formattedPhone',
+                              });
+                              _searchResults = [];
+                              _searchController.clear();
+                              _memberError = null;
+                              _showInvite = false; // Reset before check
+                            });
+
+                            // If it's a local contact, try to check if they are registered
+                            if (item is Contact) {
+                              try {
+                                final fullPhone =
+                                    '$_selectedCountryCode$formattedPhone';
+                                final user = await AppwriteService()
+                                    .getUserByPhone(fullPhone);
+                                if (user != null) {
+                                  setState(() {
+                                    final last = _membersToAdd.last;
+                                    last['id'] = user['userId'];
+                                    last['name'] = user['name'] ?? last['name'];
+                                    _showInvite = false;
+                                  });
+                                } else {
+                                  setState(() {
+                                    _showInvite = true;
+                                    _invitePhone = fullPhone;
+                                  });
+                                }
+                              } catch (e) {
+                                debugPrint('Error checking registration: $e');
+                              }
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+
+                // Added Members List
+                if (_membersToAdd.isNotEmpty) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       border: Border.all(
@@ -312,13 +490,31 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                       children: _membersToAdd.asMap().entries.map((entry) {
                         final index = entry.key;
                         final m = entry.value;
+                        final isAppUser =
+                            m['id'] != null && m['id']!.isNotEmpty;
                         return ListTile(
                           dense: true,
                           leading: CircleAvatar(
-                            backgroundColor: Colors.deepPurple.shade100,
-                            child: Text(m['name']![0].toUpperCase()),
+                            backgroundColor: isAppUser
+                                ? Colors.deepPurple.shade100
+                                : Colors.grey.shade300,
+                            child: Text(
+                              m['name']![0].toUpperCase(),
+                              style: TextStyle(
+                                color: isAppUser
+                                    ? Colors.deepPurple
+                                    : Colors.grey,
+                              ),
+                            ),
                           ),
-                          title: Text(m['name']!),
+                          title: Text(
+                            m['name']!,
+                            style: TextStyle(
+                              color: isAppUser
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Colors.grey,
+                            ),
+                          ),
                           subtitle: Text(m['phone']!),
                           trailing: IconButton(
                             icon: const Icon(Icons.close, size: 18),
@@ -328,75 +524,32 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                       }).toList(),
                     ),
                   ),
+                  if (_hasNonAppMembers)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, left: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Only app users can be added to groups. Please remove others.',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
 
-                // Add Member Input
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).dividerColor.withOpacity(0.2),
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: CountryCodePicker(
-                        onChanged: (code) {
-                          if (code.dialCode != null) {
-                            _selectedCountryCode = code.dialCode!;
-                          }
-                        },
-                        // Initial selection and favorite list
-                        initialSelection: 'IN',
-                        favorite: const ['+91', 'US'],
-                        // optional parameters
-                        showCountryOnly: false,
-                        showOnlyCountryWhenClosed: false,
-                        alignLeft: false,
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _memberPhoneController,
-                        decoration: InputDecoration(
-                          hintText: 'Phone Number',
-                          prefixIcon: const Icon(Icons.phone, size: 18),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 14,
-                          ),
-                        ),
-                        keyboardType: TextInputType.phone,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      child: IconButton.filled(
-                        onPressed: _isVerifyingMember
-                            ? null
-                            : _verifyAndAddMember,
-                        icon: _isVerifyingMember
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.add),
-                      ),
-                    ),
-                  ],
-                ),
                 if (_memberError != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4, left: 4),
@@ -413,11 +566,9 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                       width: double.infinity,
                       child: TextButton.icon(
                         onPressed: () async {
-                          if (_memberPhoneController.text.isNotEmpty) {
-                            final phone =
-                                '$_selectedCountryCode${_memberPhoneController.text}';
+                          if (_invitePhone.isNotEmpty) {
                             final url = Uri.parse(
-                              'https://wa.me/$phone?text=Hey! Join me on Tap It to track our shared expenses easily. Download it here: [Link]',
+                              'https://wa.me/$_invitePhone?text=Hey! Join me on Tap It to track our shared expenses easily. Download it here: [Link]',
                             );
                             if (await canLaunchUrl(url)) {
                               await launchUrl(
@@ -448,7 +599,9 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isLoading ? null : _createGroup,
+                    onPressed: (isLoading || _hasNonAppMembers)
+                        ? null
+                        : _createGroup,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,

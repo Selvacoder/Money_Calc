@@ -59,7 +59,7 @@ class Item {
 
   factory Item.fromJson(Map<String, dynamic> json) {
     return Item(
-      id: json['\$id'] ?? '',
+      id: json['\$id'] ?? json['id'] ?? '',
       userId: json['userId'] ?? '',
       title: json['title'] ?? '',
       amount: (json['amount'] ?? 0.0).toDouble(),

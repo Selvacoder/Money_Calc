@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:country_code_picker/country_code_picker.dart';
-import 'package:url_launcher/url_launcher.dart'; // Added import
+import 'package:url_launcher/url_launcher.dart';
+import 'package:fast_contacts/fast_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../utils/formatters.dart';
 
 import '../models/ledger_transaction.dart';
@@ -26,6 +28,34 @@ class LedgerDashboard extends StatefulWidget {
 
 class _LedgerDashboardState extends State<LedgerDashboard> {
   bool _showAllPeople = false;
+  List<Contact> _contacts = [];
+  bool _contactsLoaded = false;
+
+  Future<void> _loadContacts() async {
+    if (_contactsLoaded) return;
+    debugPrint('DEBUG: Requesting contact permissions...');
+    final status = await Permission.contacts.request();
+    debugPrint('DEBUG: Contact permission status: $status');
+    if (status.isGranted) {
+      try {
+        debugPrint('DEBUG: Fetching contacts...');
+        final contacts = await FastContacts.getAllContacts(
+          fields: [ContactField.displayName, ContactField.phoneNumbers],
+        );
+        debugPrint('DEBUG: Fetched ${contacts.length} contacts');
+        if (mounted) {
+          setState(() {
+            _contacts = contacts;
+            _contactsLoaded = true;
+          });
+        }
+      } catch (e) {
+        debugPrint('DEBUG: Error loading contacts: $e');
+      }
+    } else {
+      debugPrint('DEBUG: Contact permission denied or restricted');
+    }
+  }
 
   // Copied Dialog Logic
   void _showAddDialog({
@@ -34,17 +64,21 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     double? initialAmount,
     bool isReceived = false,
   }) {
+    _loadContacts(); // Trigger contact load when dialog opens
     final nameController = TextEditingController(text: initialName);
     final phoneController = TextEditingController(text: initialPhone);
     final amountController = TextEditingController(
       text: initialAmount?.toString() ?? '',
     );
+    final searchController = TextEditingController();
     final descController = TextEditingController();
     String selectedCountryCode = '+91';
 
     bool? isRegistered;
     bool checkingRegistration = false;
     bool trackWithUser = true; // Default to true if user exists
+
+    List<dynamic> combinedResults = [];
 
     showDialog(
       context: context,
@@ -67,6 +101,192 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  TextField(
+                    controller: searchController,
+                    onChanged: (value) async {
+                      setDialogState(() {
+                        if (value.isEmpty) {
+                          combinedResults = [];
+                        } else {
+                          // Initial local search
+                          combinedResults = _contacts
+                              .where((contact) {
+                                final name = contact.displayName;
+                                final nameMatch = name.toLowerCase().contains(
+                                  value.toLowerCase(),
+                                );
+                                final phones = contact.phones;
+                                final phoneMatch = phones.any(
+                                  (p) => p.number.contains(value),
+                                );
+                                return nameMatch || phoneMatch;
+                              })
+                              .take(5)
+                              .toList();
+                        }
+                      });
+
+                      // Remote search for app users
+                      if (value.length >= 3) {
+                        try {
+                          final remoteUsers = await AppwriteService()
+                              .searchContacts(value);
+                          if (searchController.text == value) {
+                            setDialogState(() {
+                              for (var user in remoteUsers) {
+                                // Simple duplicate check by phone
+                                final phone = user['phone'];
+                                bool exists = combinedResults.any((r) {
+                                  if (r is Contact) {
+                                    return r.phones.any(
+                                      (p) => p.number.contains(phone),
+                                    );
+                                  }
+                                  return r['phone'] == phone;
+                                });
+                                if (!exists) {
+                                  combinedResults.add({
+                                    ...user,
+                                    'isRemote': true,
+                                  });
+                                }
+                              }
+                            });
+                          }
+                        } catch (e) {
+                          debugPrint('Error in remote search: $e');
+                        }
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search by name or number...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.withOpacity(0.05),
+                    ),
+                  ),
+                  if (combinedResults.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: combinedResults.length,
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = combinedResults[index];
+                          String name = '';
+                          String phone = '';
+                          bool isRemote = false;
+
+                          if (item is Contact) {
+                            name = item.displayName;
+                            phone = item.phones.isNotEmpty
+                                ? item.phones.first.number
+                                : '';
+                          } else {
+                            name = item['name'] ?? '';
+                            phone = item['phone'] ?? '';
+                            isRemote = item['isRemote'] ?? false;
+                          }
+
+                          return ListTile(
+                            visualDensity: VisualDensity.compact,
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (isRemote)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'On Tap It',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            subtitle: phone.isNotEmpty
+                                ? Text(
+                                    phone,
+                                    style: GoogleFonts.inter(fontSize: 11),
+                                  )
+                                : null,
+                            onTap: () async {
+                              final phoneToUse = phone;
+                              final cleanPhone = phoneToUse.replaceAll(
+                                RegExp(r'\D'),
+                                '',
+                              );
+                              final formattedPhone = cleanPhone.length >= 10
+                                  ? cleanPhone.substring(cleanPhone.length - 10)
+                                  : cleanPhone;
+
+                              nameController.text = name;
+                              phoneController.text = formattedPhone;
+
+                              setDialogState(() {
+                                combinedResults = [];
+                                searchController.clear();
+                                checkingRegistration = true;
+                              });
+
+                              // Trigger Registration Check
+                              try {
+                                final fullPhone =
+                                    '$selectedCountryCode$formattedPhone';
+                                final user = await AppwriteService()
+                                    .getUserByPhone(fullPhone);
+
+                                setDialogState(() {
+                                  isRegistered = user != null;
+                                  checkingRegistration = false;
+                                  trackWithUser = isRegistered == true;
+                                });
+                              } catch (e) {
+                                setDialogState(
+                                  () => checkingRegistration = false,
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Container(
@@ -216,49 +436,17 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Autocomplete<Map<String, dynamic>>(
-                    optionsBuilder: (TextEditingValue textEditingValue) async {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<Map<String, dynamic>>.empty();
-                      }
-                      return await AppwriteService().searchContacts(
-                        textEditingValue.text,
-                      );
-                    },
-                    displayStringForOption: (option) => option['name'] ?? '',
-                    onSelected: (Map<String, dynamic> selection) {
-                      nameController.text = selection['name'];
-                      if (selection['phone'] != null) {
-                        phoneController.text = selection['phone'];
-                      }
-                    },
-                    fieldViewBuilder:
-                        (context, controller, focusNode, onFieldSubmitted) {
-                          if (controller.text != nameController.text) {
-                            controller.text = nameController.text;
-                          }
-
-                          controller.addListener(
-                            () => nameController.text = controller.text,
-                          );
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            textCapitalization: TextCapitalization.sentences,
-                            inputFormatters: [
-                              CapitalizeFirstLetterTextFormatter(),
-                            ],
-                            decoration: InputDecoration(
-                              labelText: (isReceived
-                                  ? 'Lender Name'
-                                  : 'Borrower Name'),
-                              prefixIcon: const Icon(Icons.person),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        },
+                  TextField(
+                    controller: nameController,
+                    textCapitalization: TextCapitalization.sentences,
+                    inputFormatters: [CapitalizeFirstLetterTextFormatter()],
+                    decoration: InputDecoration(
+                      labelText: (isReceived ? 'Lender Name' : 'Borrower Name'),
+                      prefixIcon: const Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(

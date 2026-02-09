@@ -64,6 +64,8 @@ dependencies:
   permission_handler: ^11.0.1
   fl_chart: ^0.66.2 # Adding fl_chart
   nanoid: ^1.0.0
+  fast_contacts: ^5.0.1
+
 
 dev_dependencies:
   sentry_dart_plugin: ^3.2.1

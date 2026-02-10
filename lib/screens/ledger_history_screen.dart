@@ -570,6 +570,11 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
     final otherName = isSent
         ? transaction.receiverName
         : transaction.senderName;
+    final otherId = isSent ? transaction.receiverId : transaction.senderId;
+    final otherPhoto = otherId != null
+        ? context.read<LedgerProvider>().userPhotos[otherId]
+        : null;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -586,17 +591,22 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSent ? const Color(0xFFFFE5E5) : const Color(0xFFE5F5E9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isSent ? Icons.arrow_outward : Icons.arrow_downward,
-              color: isSent ? const Color(0xFFFF6B6B) : const Color(0xFF51CF66),
-              size: 24,
-            ),
+          CircleAvatar(
+            backgroundColor: isSent
+                ? Colors.red.withOpacity(0.1)
+                : Colors.green.withOpacity(0.1),
+            backgroundImage: (otherPhoto != null && otherPhoto.isNotEmpty)
+                ? NetworkImage(otherPhoto)
+                : null,
+            child: (otherPhoto == null || otherPhoto.isEmpty)
+                ? Icon(
+                    isSent ? Icons.arrow_outward : Icons.arrow_downward,
+                    color: isSent
+                        ? const Color(0xFFFF6B6B)
+                        : const Color(0xFF51CF66),
+                    size: 20,
+                  )
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(

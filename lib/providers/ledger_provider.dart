@@ -34,6 +34,8 @@ class LedgerProvider extends ChangeNotifier {
 
   String? _currentUserId;
   String? get currentUserId => _currentUserId;
+  Map<String, String> _userPhotos = {};
+  Map<String, String> get userPhotos => _userPhotos;
 
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
@@ -89,6 +91,15 @@ class LedgerProvider extends ChangeNotifier {
       }
     } finally {
       _isLoading = false;
+      if (_ledgerTransactions.isNotEmpty ||
+          _incomingRequests.isNotEmpty ||
+          _outgoingRequests.isNotEmpty) {
+        _fetchUserPhotos([
+          ..._ledgerTransactions,
+          ..._incomingRequests,
+          ..._outgoingRequests,
+        ]);
+      }
       Future.microtask(() => notifyListeners());
     }
   }
@@ -167,10 +178,8 @@ class LedgerProvider extends ChangeNotifier {
         _lastId = newTransactions.last.id;
         _hasMore = data.length >= 25;
 
-        // Optionally cache more
-        if (_ledgerTransactions.length <= 100 && _isHiveInitialized) {
-          await _ledgerBox.putAll({for (var t in newTransactions) t.id: t});
-        }
+        _fetchUserPhotos(newTransactions);
+        notifyListeners();
       } else {
         _hasMore = false;
       }
@@ -609,6 +618,41 @@ class LedgerProvider extends ChangeNotifier {
     if (phone == null || phone.isEmpty) return '';
     String digits = phone.replaceAll(RegExp(r'\D'), '');
     return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+  }
+
+  Future<void> _fetchUserPhotos(List<LedgerTransaction> transactions) async {
+    final Set<String> userIds = {};
+    for (var tx in transactions) {
+      if (tx.senderId.isNotEmpty && tx.senderId != _currentUserId) {
+        userIds.add(tx.senderId);
+      }
+      if (tx.receiverId != null &&
+          tx.receiverId!.isNotEmpty &&
+          tx.receiverId != _currentUserId) {
+        userIds.add(tx.receiverId!);
+      }
+    }
+
+    // Filter out already fetched ones (optional, but good for performance)
+    final List<String> toFetch = userIds
+        .where((id) => !_userPhotos.containsKey(id))
+        .toList();
+
+    if (toFetch.isEmpty) return;
+
+    try {
+      final profiles = await _appwriteService.getProfilesByIds(toFetch);
+      for (var profile in profiles) {
+        final id = profile['userId'];
+        final photo = profile['photoUrl'];
+        if (id != null && photo != null && photo.isNotEmpty) {
+          _userPhotos[id] = photo;
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching participant photos: $e');
+    }
   }
 
   @override

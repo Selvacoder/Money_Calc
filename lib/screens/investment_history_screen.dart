@@ -382,7 +382,7 @@ class _InvestmentHistoryScreenState extends State<InvestmentHistoryScreen> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.grey.shade300),
                               ),
@@ -443,7 +443,7 @@ class _InvestmentHistoryScreenState extends State<InvestmentHistoryScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
@@ -673,7 +673,7 @@ class _InvestmentHistoryScreenState extends State<InvestmentHistoryScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? Theme.of(context).colorScheme.primary
-              : Colors.white,
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected

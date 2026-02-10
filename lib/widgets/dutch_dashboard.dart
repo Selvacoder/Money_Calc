@@ -236,6 +236,8 @@ class _DutchDashboardState extends State<DutchDashboard> {
               bottom: 16,
               child: FloatingActionButton.extended(
                 onPressed: () => _showInviteCodeDialog(context),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
                 label: Text(
                   'Invite Code',
                   style: GoogleFonts.inter(fontWeight: FontWeight.w600),

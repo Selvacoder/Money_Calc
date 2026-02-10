@@ -39,7 +39,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  // 0: Personal, 1: Ledger, 2: Investment
+  // 0: Personal, 1: Ledger, 2: Investment, 3: Dutch
   int _currentMode = 0;
   final LocalAuthentication auth = LocalAuthentication();
 
@@ -52,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!isBiometricEnabled) {
         setState(() {
           _currentMode = 1; // Switch to Ledger
+          _selectedIndex = 0; // Reset to Home
         });
         return;
       }
@@ -63,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (didAuthenticate) {
         setState(() {
           _currentMode = 1; // Switch to Ledger
+          _selectedIndex = 0; // Reset to Home
         });
       }
     } on PlatformException catch (e) {
@@ -222,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIndex: _selectedIndex,
           onDestinationSelected: _onItemTapped,
           backgroundColor: theme.cardColor,
-          indicatorColor: theme.colorScheme.primary.withOpacity(0.2),
+          indicatorColor: theme.colorScheme.primary.withOpacity(1.0),
           destinations: [
             const NavigationDestination(
               icon: Icon(Icons.home_filled),
@@ -270,8 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
           } else {
             setState(() {
               _currentMode = modeIndex;
-              _selectedIndex =
-                  0; // Reset to Home when switching modes to avoid index mismatch
+              _selectedIndex = 0; // Reset to Home when switching modes
             });
           }
         }

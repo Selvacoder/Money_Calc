@@ -235,10 +235,23 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Email',
                             hintText: 'Enter your email',
-                            prefixIcon: const Icon(Icons.email_outlined),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.email_outlined,
+                              color: Colors.grey.shade600,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -264,15 +277,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Password',
                             hintText: 'Enter your password',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.lock_outline,
+                              color: Colors.grey.shade600,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
+                                color: Colors.grey.shade600,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -363,15 +390,30 @@ class _LoginScreenState extends State<LoginScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Logging in...',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                                 )
                               : Text(
                                   'Login',
@@ -453,7 +495,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(context).pushNamed('/signup');
+                                Navigator.of(
+                                  context,
+                                ).pushReplacementNamed('/signup');
                               },
                               child: Text(
                                 'Sign Up',

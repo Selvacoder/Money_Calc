@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/currency_provider.dart';
+import '../utils/formatters.dart';
 import '../models/user_profile.dart';
 import 'settings/notifications_screen.dart';
 import 'settings/theme_screen.dart';
@@ -62,10 +64,7 @@ class AccountScreen extends StatelessWidget {
               padding: const EdgeInsets.only(top: 60, bottom: 30),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    primaryColor.withOpacity(0.8),
-                    primaryColor.withOpacity(0.6),
-                  ],
+                  colors: [primaryColor, primaryColor.withOpacity(0.9)],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -76,15 +75,49 @@ class AccountScreen extends StatelessWidget {
               child: Column(
                 children: [
                   // Avatar
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.person,
-                      size: 50,
-                      color: primaryColor.withOpacity(0.5),
-                    ),
-                    // backgroundImage: user?.photoUrl != null ? NetworkImage(user!.photoUrl) : null,
+                  // Avatar with Edit Button
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.white,
+                        backgroundImage:
+                            (user?.photoUrl != null &&
+                                user!.photoUrl.isNotEmpty)
+                            ? NetworkImage(user.photoUrl)
+                            : null,
+                        child:
+                            (user?.photoUrl == null || user!.photoUrl.isEmpty)
+                            ? Icon(Icons.person, size: 50, color: primaryColor)
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: InkWell(
+                          onTap: () => _pickAndUploadImage(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.edit,
+                              size: 16,
+                              color: primaryColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
 
@@ -365,7 +398,7 @@ class AccountScreen extends StatelessWidget {
             ),
             child: Icon(
               icon,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              color: Theme.of(context).colorScheme.primary,
               size: 20,
             ),
           ),
@@ -445,6 +478,54 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _pickAndUploadImage(BuildContext context) async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+      maxWidth: 512,
+      maxHeight: 512,
+    );
+
+    if (image != null && context.mounted) {
+      // Limit file size to 5MB
+      final fileSize = await image.length();
+      if (fileSize > 5 * 1024 * 1024) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image size exceeds 5MB limit'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      try {
+        final provider = context.read<UserProvider>();
+        final url = await provider.uploadProfilePhoto(image.path);
+        if (url != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to upload photo: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _showCurrencySelectionDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -511,6 +592,7 @@ class AccountScreen extends StatelessWidget {
   void _showEditProfileDialog(BuildContext context) {
     final user = context.read<UserProvider>().user;
     final nameController = TextEditingController(text: user?.name ?? '');
+    final phoneController = TextEditingController(text: user?.phone ?? '');
 
     showDialog(
       context: context,
@@ -525,6 +607,8 @@ class AccountScreen extends StatelessWidget {
           children: [
             TextField(
               controller: nameController,
+              textCapitalization: TextCapitalization.sentences,
+              inputFormatters: [CapitalizeFirstLetterTextFormatter()],
               decoration: InputDecoration(
                 labelText: 'Name',
                 border: OutlineInputBorder(
@@ -532,9 +616,20 @@ class AccountScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Phone Number',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
             const SizedBox(height: 12),
             Text(
-              'Email and phone can be updated in account settings',
+              'Email can be updated in account settings',
               style: GoogleFonts.inter(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -549,9 +644,9 @@ class AccountScreen extends StatelessWidget {
               if (nameController.text.isNotEmpty && user != null) {
                 final updatedProfile = UserProfile(
                   userId: user.userId,
-                  name: nameController.text,
+                  name: nameController.text.trim(),
                   email: user.email,
-                  phone: user.phone,
+                  phone: phoneController.text.trim(),
                   photoUrl: user.photoUrl,
                   joinDate: user.joinDate,
                 );

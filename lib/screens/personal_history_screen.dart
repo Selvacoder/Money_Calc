@@ -416,11 +416,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                               decoration: BoxDecoration(
                                 color: Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Theme.of(
-                                    context,
-                                  ).dividerColor.withOpacity(0.1),
-                                ),
+                                border: Border.all(color: Colors.grey.shade300),
                               ),
                               child: Icon(
                                 Icons.download,
@@ -448,9 +444,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                                 border: Border.all(
                                   color: _selectedDate != null
                                       ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(
-                                          context,
-                                        ).dividerColor.withOpacity(0.1),
+                                      : Colors.grey.shade300,
                                 ),
                               ),
                               child: Row(
@@ -508,9 +502,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.1),
-                      ),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
                     child: TextField(
                       onChanged: (value) {
@@ -648,7 +640,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).dividerColor.withOpacity(0.1),
+                : Colors.grey.shade300,
           ),
         ),
         child: Row(

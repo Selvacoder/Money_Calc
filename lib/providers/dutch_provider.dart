@@ -282,6 +282,7 @@ class DutchProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _globalExpenses = [];
   List<Map<String, dynamic>> _globalSettlements = [];
   Map<String, double> _globalBalances = {};
+  List<Map<String, dynamic>> _globalMemberProfiles = [];
 
   bool _hasMoreExpenses = true;
   String? _lastExpenseId;
@@ -291,6 +292,7 @@ class DutchProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get globalExpenses => _globalExpenses;
   List<Map<String, dynamic>> get globalSettlements => _globalSettlements;
   Map<String, double> get globalBalances => _globalBalances;
+  List<Map<String, dynamic>> get globalMemberProfiles => _globalMemberProfiles;
   bool get hasMoreExpenses => _hasMoreExpenses;
   bool get hasMoreSettlements => _hasMoreSettlements;
 
@@ -327,6 +329,10 @@ class DutchProvider extends ChangeNotifier {
 
       _mergeSettlements(allSettlements: allSettlements);
       _calculateGlobalBalances();
+
+      // Fetch profiles for all users in global balances
+      await _fetchGlobalMemberProfiles();
+
       print(
         'DEBUG fetchGlobalData: Loaded ${_globalExpenses.length} expenses, ${_globalSettlements.length} settlements',
       );
@@ -349,6 +355,27 @@ class DutchProvider extends ChangeNotifier {
     _globalBalances = {};
     // Reuse logic or refactor to generic method
     _calculateBalancesFor(_globalExpenses, _globalSettlements, _globalBalances);
+  }
+
+  Future<void> _fetchGlobalMemberProfiles() async {
+    try {
+      // Get all unique user IDs from global balances
+      final Set<String> userIds = _globalBalances.keys.toSet();
+
+      if (userIds.isNotEmpty) {
+        _globalMemberProfiles = await AppwriteService().getProfilesByIds(
+          userIds.toList(),
+        );
+        print(
+          'DEBUG: Fetched ${_globalMemberProfiles.length} global member profiles',
+        );
+      } else {
+        _globalMemberProfiles = [];
+      }
+    } catch (e) {
+      print('Error fetching global member profiles: $e');
+      _globalMemberProfiles = [];
+    }
   }
 
   // Refactored Helper

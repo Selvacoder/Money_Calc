@@ -65,6 +65,7 @@ dependencies:
   fl_chart: ^0.66.2 # Adding fl_chart
   nanoid: ^1.0.0
   fast_contacts: ^5.0.1
+  image_picker: ^1.0.7
 
 
 dev_dependencies:
@@ -109,6 +110,7 @@ flutter:
     - assets/
     - assets/sounds/
     - assets/icon/
+    - assets/fonts/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -121,17 +123,16 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter_18pt-Regular.ttf
+        - asset: assets/fonts/Inter_18pt-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter_18pt-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter_18pt-Bold.ttf
+          weight: 700
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

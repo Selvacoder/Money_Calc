@@ -92,7 +92,7 @@ class UserProvider extends ChangeNotifier {
             name: userData['name'],
             email: userData['email'],
             phone: userData['phone'],
-            photoUrl: '', // Placeholder
+            photoUrl: userData['photoUrl'] ?? '',
             joinDate: DateTime.parse(userData['joinDate']),
           );
           _user = newUser;
@@ -262,19 +262,54 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> updateProfile(UserProfile updatedProfile) async {
     _isLoading = true;
-    Future.microtask(() => notifyListeners()); // Wrap notifyListeners
+    notifyListeners();
     try {
-      // Mocking the call or calling a method I need to create
-      // await _authService.updateProfile(updatedProfile);
+      // Update Auth and Database
+      await _appwriteService.updateUserProfile(
+        userId: updatedProfile.userId,
+        name: updatedProfile.name,
+        phone: updatedProfile.phone,
+        photoUrl: updatedProfile.photoUrl,
+      );
 
-      // For now, update local state
       _user = updatedProfile;
       if (_isHiveInitialized) {
         await _userBox.put('current_user', updatedProfile);
       }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
-      // TODO: Persist to backend
-      // await _appwriteService.updateUser(...)
+  Future<String?> uploadProfilePhoto(String filePath) async {
+    if (_user == null) return null;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final url = await _appwriteService.uploadProfilePhoto(
+        _user!.userId,
+        filePath,
+      );
+      if (url != null) {
+        // Update profile with the new photourl
+        final updatedProfile = UserProfile(
+          userId: _user!.userId,
+          name: _user!.name,
+          email: _user!.email,
+          phone: _user!.phone,
+          photoUrl: url,
+          joinDate: _user!.joinDate,
+        );
+        await updateProfile(updatedProfile);
+        return url;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error uploading photo provider: $e');
+      return null;
     } finally {
       _isLoading = false;
       notifyListeners();

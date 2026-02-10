@@ -18,6 +18,7 @@ class AppwriteService {
   late Client client;
   late Account account;
   late Databases databases;
+  late Storage storage;
 
   void init() {
     client = Client()
@@ -27,6 +28,7 @@ class AppwriteService {
 
     account = Account(client);
     databases = Databases(client);
+    storage = Storage(client);
 
     functions = Functions(client);
   }
@@ -189,21 +191,21 @@ class AppwriteService {
           ],
         );
 
-        if (profileDocs.documents.isNotEmpty) {
-          final profileData = profileDocs.documents.first.data;
-          // user.phone might be empty in Auth, but present in Profile doc
-          if (profileData['phone'] != null &&
-              profileData['phone'].toString().isNotEmpty) {
-            phone = profileData['phone'].toString();
-          }
-        }
-
-        // Parse Banks and Primary Methods
+        Map<String, String> primaryPaymentMethods = {};
         List<String> banks = [];
         List<String> customPaymentMethods = [];
-        Map<String, String> primaryPaymentMethods = {};
+        String photoUrl = '';
+
         if (profileDocs.documents.isNotEmpty) {
           final data = profileDocs.documents.first.data;
+
+          if (data['phone'] != null && data['phone'].toString().isNotEmpty) {
+            phone = data['phone'].toString();
+          }
+
+          if (data['photoUrl'] != null) {
+            photoUrl = data['photoUrl'].toString();
+          }
 
           if (data['banks'] != null) {
             banks = List<String>.from(data['banks']);
@@ -239,6 +241,7 @@ class AppwriteService {
           'name': user.name,
           'email': user.email,
           'phone': phone.isNotEmpty ? phone : '',
+          'photoUrl': photoUrl,
           'joinDate': user.registration,
           'banks': banks,
           'primaryPaymentMethods': primaryPaymentMethods,
@@ -260,11 +263,12 @@ class AppwriteService {
     }
   }
 
-  // Update user name (in Auth) and Profile (in DB)
+  // Update user profile and photo
   Future<bool> updateUserProfile({
     required String userId,
     required String name,
     required String phone,
+    String? photoUrl,
   }) async {
     try {
       // 1. Update Auth Name
@@ -279,12 +283,17 @@ class AppwriteService {
         ],
       );
 
+      final Map<String, dynamic> updateData = {'name': name, 'phone': phone};
+      if (photoUrl != null) {
+        updateData['photoUrl'] = photoUrl;
+      }
+
       if (profileDocs.documents.isNotEmpty) {
         await databases.updateDocument(
           databaseId: AppwriteConfig.databaseId,
           collectionId: AppwriteConfig.profilesCollectionId,
           documentId: profileDocs.documents.first.$id,
-          data: {'name': name, 'phone': phone},
+          data: updateData,
         );
       } else {
         // Create if missing
@@ -293,6 +302,7 @@ class AppwriteService {
           name: name,
           email: '',
           phone: phone,
+          photoUrl: photoUrl,
         );
       }
 
@@ -300,6 +310,44 @@ class AppwriteService {
     } catch (e) {
       print('Error updating profile: $e');
       return false;
+    }
+  }
+
+  // Upload Profile Photo
+  Future<String?> uploadProfilePhoto(String userId, String filePath) async {
+    try {
+      final file = await storage.createFile(
+        bucketId: AppwriteConfig.profilePhotosBucketId,
+        fileId: userId,
+        file: InputFile.fromPath(
+          path: filePath,
+          filename: 'profile_$userId.jpg',
+        ),
+        permissions: [
+          Permission.read(Role.any()),
+          Permission.write(Role.user(userId)),
+        ],
+      );
+
+      // Return the preview URL
+      final url =
+          '${AppwriteConfig.endpoint}/storage/buckets/${AppwriteConfig.profilePhotosBucketId}/files/${file.$id}/view?project=${AppwriteConfig.projectId}';
+      return url;
+    } catch (e) {
+      // If file already exists, we might need to delete it first or use unique ID
+      if (e is AppwriteException && e.code == 409) {
+        try {
+          await storage.deleteFile(
+            bucketId: AppwriteConfig.profilePhotosBucketId,
+            fileId: userId,
+          );
+          return await uploadProfilePhoto(userId, filePath);
+        } catch (e2) {
+          print('Error deleting old photo: $e2');
+        }
+      }
+      print('Error uploading photo: $e');
+      return null;
     }
   }
 
@@ -1117,7 +1165,8 @@ class AppwriteService {
     required String userId,
     required String name,
     required String email,
-    String? phone, // Added phone
+    String? phone,
+    String? photoUrl,
     List<String> banks = const [],
     Map<String, String> primaryPaymentMethods = const {},
     List<String> customPaymentMethods = const [],
@@ -1132,6 +1181,7 @@ class AppwriteService {
           'name': name,
           'email': email,
           'phone': phone ?? '',
+          'photoUrl': photoUrl ?? '',
           'banks': banks,
           'primaryPaymentMethods': jsonEncode(primaryPaymentMethods),
           'customPaymentMethods': jsonEncode(customPaymentMethods),

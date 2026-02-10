@@ -258,10 +258,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         // Name Field
                         TextField(
                           controller: _nameController,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Full Name',
                             hintText: 'Enter your full name',
-                            prefixIcon: const Icon(Icons.person_outline),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: Colors.grey.shade600,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -287,10 +300,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Email',
                             hintText: 'Enter your email',
-                            prefixIcon: const Icon(Icons.email_outlined),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.email_outlined,
+                              color: Colors.grey.shade600,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -333,6 +359,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 showCountryOnly: false,
                                 showOnlyCountryWhenClosed: false,
                                 alignLeft: false,
+                                textStyle: GoogleFonts.inter(
+                                  color: const Color(0xFF1E1E1E),
+                                  fontSize: 16,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -340,9 +370,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               child: TextField(
                                 controller: _phoneController,
                                 keyboardType: TextInputType.phone,
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF1E1E1E),
+                                  fontSize: 16,
+                                ),
                                 decoration: InputDecoration(
                                   labelText: 'Phone Number',
                                   hintText: 'Enter phone number',
+                                  labelStyle: GoogleFonts.inter(
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  hintStyle: GoogleFonts.inter(
+                                    color: Colors.grey.shade400,
+                                  ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -371,15 +411,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Password',
                             hintText: 'Create a password',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.lock_outline,
+                              color: Colors.grey.shade600,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
+                                color: Colors.grey.shade600,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -412,15 +466,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextField(
                           controller: _confirmPasswordController,
                           obscureText: _obscureConfirmPassword,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1E1E1E),
+                            fontSize: 16,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Confirm Password',
                             hintText: 'Re-enter your password',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            labelStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade700,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.lock_outline,
+                              color: Colors.grey.shade600,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscureConfirmPassword
                                     ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
+                                color: Colors.grey.shade600,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -494,15 +562,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Creating account...',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                                 )
                               : Text(
                                   'Sign Up',
@@ -527,7 +610,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                             ),
                             GestureDetector(
-                              onTap: () => Navigator.pop(context),
+                              onTap: () => Navigator.of(
+                                context,
+                              ).pushReplacementNamed('/login'),
                               child: Text(
                                 'Login',
                                 style: GoogleFonts.inter(

@@ -460,6 +460,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
         label: const Text('Add Expense'),
         icon: const Icon(Icons.add),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }
@@ -544,16 +545,29 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                               backgroundColor: Theme.of(
                                 context,
                               ).primaryColor.withOpacity(0.1),
-                              child: Text(
-                                userName.isNotEmpty
-                                    ? userName[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
+                              backgroundImage:
+                                  (userProfile['photoUrl'] != null &&
+                                      userProfile['photoUrl']
+                                          .toString()
+                                          .isNotEmpty)
+                                  ? NetworkImage(userProfile['photoUrl'])
+                                  : null,
+                              child:
+                                  (userProfile['photoUrl'] == null ||
+                                      userProfile['photoUrl']
+                                          .toString()
+                                          .isEmpty)
+                                  ? Text(
+                                      userName.isNotEmpty
+                                          ? userName[0].toUpperCase()
+                                          : '?',
+                                      style: TextStyle(
+                                        color: Theme.of(context).primaryColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    )
+                                  : null,
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -847,6 +861,12 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     final memberName = b['name'];
                     final share = b['amount'];
 
+                    final profile = provider.currentGroupMemberProfiles
+                        .firstWhere(
+                          (p) => p['userId'] == memberId,
+                          orElse: () => {},
+                        );
+
                     final memberSettlements = settlements.where((s) {
                       final sPayer = _safeId(s['payerId']);
                       final sReceiver = _safeId(s['receiverId']);
@@ -896,14 +916,25 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                             backgroundColor: Theme.of(
                               context,
                             ).colorScheme.primaryContainer,
-                            child: Text(
-                              memberName[0].toUpperCase(),
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
+                            backgroundImage:
+                                (profile['photoUrl'] != null &&
+                                    profile['photoUrl'].toString().isNotEmpty)
+                                ? NetworkImage(profile['photoUrl'])
+                                : null,
+                            child:
+                                (profile['photoUrl'] == null ||
+                                    profile['photoUrl'].toString().isEmpty)
+                                ? Text(
+                                    memberName[0].toUpperCase(),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1143,10 +1174,78 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('Record payment to $otherUserName'),
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Theme.of(
+                    context,
+                  ).primaryColor.withOpacity(0.1),
+                  backgroundImage:
+                      (context
+                                  .read<DutchProvider>()
+                                  .currentGroupMemberProfiles
+                                  .firstWhere(
+                                    (p) => p['userId'] == otherUserId,
+                                    orElse: () => {},
+                                  )['photoUrl'] !=
+                              null &&
+                          context
+                              .read<DutchProvider>()
+                              .currentGroupMemberProfiles
+                              .firstWhere(
+                                (p) => p['userId'] == otherUserId,
+                                orElse: () => {},
+                              )['photoUrl']
+                              .toString()
+                              .isNotEmpty)
+                      ? NetworkImage(
+                          context
+                              .read<DutchProvider>()
+                              .currentGroupMemberProfiles
+                              .firstWhere(
+                                (p) => p['userId'] == otherUserId,
+                                orElse: () => {},
+                              )['photoUrl'],
+                        )
+                      : null,
+                  child:
+                      (context
+                                  .read<DutchProvider>()
+                                  .currentGroupMemberProfiles
+                                  .firstWhere(
+                                    (p) => p['userId'] == otherUserId,
+                                    orElse: () => {},
+                                  )['photoUrl'] ==
+                              null ||
+                          context
+                              .read<DutchProvider>()
+                              .currentGroupMemberProfiles
+                              .firstWhere(
+                                (p) => p['userId'] == otherUserId,
+                                orElse: () => {},
+                              )['photoUrl']
+                              .toString()
+                              .isEmpty)
+                      ? Text(
+                          otherUserName.isNotEmpty
+                              ? otherUserName[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        )
+                      : null,
+                ),
                 const SizedBox(height: 16),
+                Text(
+                  'Record payment to $otherUserName',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
                 TextField(
                   controller: amountController,
                   decoration: const InputDecoration(

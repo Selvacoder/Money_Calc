@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
+import '../../utils/formatters.dart';
 
 class BankDetailsScreen extends StatefulWidget {
   const BankDetailsScreen({super.key});
@@ -33,7 +34,8 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
             labelText: 'Account Name',
             hintText: 'e.g., HDFC, SBI, Chase',
           ),
-          textCapitalization: TextCapitalization.words,
+          textCapitalization: TextCapitalization.sentences,
+          inputFormatters: [CapitalizeFirstLetterTextFormatter()],
         ),
         actions: [
           TextButton(
@@ -71,7 +73,8 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
             hintText: 'e.g., Wallet, Sodexo, Forex Card',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          textCapitalization: TextCapitalization.words,
+          textCapitalization: TextCapitalization.sentences,
+          inputFormatters: [CapitalizeFirstLetterTextFormatter()],
         ),
         actions: [
           TextButton(

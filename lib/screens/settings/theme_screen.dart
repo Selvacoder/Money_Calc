@@ -191,6 +191,8 @@ class _ThemeScreenState extends State<ThemeScreen> {
                           ),
                           FloatingActionButton.small(
                             onPressed: () {},
+                            backgroundColor: previewTheme.colorScheme.primary,
+                            foregroundColor: previewTheme.colorScheme.onPrimary,
                             child: const Icon(Icons.add),
                           ),
                           Switch(value: true, onChanged: (_) {}),

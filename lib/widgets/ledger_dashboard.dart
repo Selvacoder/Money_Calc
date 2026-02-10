@@ -788,6 +788,12 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                         final otherName = isMeSender
                             ? tx.receiverName
                             : tx.senderName;
+                        final otherId = isMeSender
+                            ? tx.receiverId
+                            : tx.senderId;
+                        final otherPhoto = otherId != null
+                            ? ledgerProvider.userPhotos[otherId]
+                            : null;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -809,12 +815,22 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                                 backgroundColor: isExpense
                                     ? Colors.red.withOpacity(0.1)
                                     : Colors.green.withOpacity(0.1),
-                                child: Icon(
-                                  isExpense
-                                      ? Icons.arrow_downward
-                                      : Icons.arrow_upward,
-                                  color: isExpense ? Colors.red : Colors.green,
-                                ),
+                                backgroundImage:
+                                    (otherPhoto != null &&
+                                        otherPhoto.isNotEmpty)
+                                    ? NetworkImage(otherPhoto)
+                                    : null,
+                                child:
+                                    (otherPhoto == null || otherPhoto.isEmpty)
+                                    ? Icon(
+                                        isExpense
+                                            ? Icons.arrow_downward
+                                            : Icons.arrow_upward,
+                                        color: isExpense
+                                            ? Colors.red
+                                            : Colors.green,
+                                      )
+                                    : null,
                               ),
                               const SizedBox(width: 16),
                               Expanded(
@@ -903,6 +919,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             return _buildPersonGridItem(
               b['name'],
               b['phone'],
+              b['userId'],
               b['balance'],
               transactions,
               myIdentities,
@@ -984,6 +1001,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     Map<String, double> balances = {};
     Map<String, String> names = {};
     Map<String, String> phones = {};
+    Map<String, String> ids = {};
     Map<String, DateTime> lastInteraction = {};
 
     for (var t in transactions) {
@@ -992,6 +1010,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           myIdentities.any((id) => _arePhonesEqual(t.senderPhone, id));
       final otherName = isSent ? t.receiverName : t.senderName;
       final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
+      final otherId = isSent ? t.receiverId : t.senderId;
 
       // Skip if hidden (Check both name AND phone?)
       if (hiddenPeople.contains(otherName)) continue;
@@ -1023,6 +1042,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
         phones[key] = otherPhone;
       }
 
+      if (otherId != null && otherId.isNotEmpty && !ids.containsKey(key)) {
+        ids[key] = otherId;
+      }
+
       // Aggregate Balance
       balances[key] = (balances[key] ?? 0) + (isSent ? t.amount : -t.amount);
     }
@@ -1032,6 +1055,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
           (e) => {
             'name': names[e.key] ?? 'Unknown',
             'phone': phones[e.key] ?? '',
+            'userId': ids[e.key] ?? '',
             'balance': e.value,
           },
         )
@@ -1204,6 +1228,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
   Widget _buildPersonGridItem(
     String name,
     String phone,
+    String? personUserId,
     double bal,
     List<LedgerTransaction> tx,
     List<String> myIdentities,
@@ -1291,7 +1316,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -1308,18 +1333,48 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                CircleAvatar(
-                  radius: 22, // Reduced from 26
-                  backgroundColor: Theme.of(
-                    context,
-                  ).primaryColor.withOpacity(0.1),
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      fontSize: 18, // Reduced from 22
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.grey.shade600.withOpacity(0.3),
+                      width: 2,
                     ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 22, // Reduced from 26
+                    backgroundColor: Theme.of(
+                      context,
+                    ).primaryColor.withOpacity(0.1),
+                    backgroundImage:
+                        (personUserId != null &&
+                            personUserId.isNotEmpty &&
+                            context
+                                .read<LedgerProvider>()
+                                .userPhotos
+                                .containsKey(personUserId))
+                        ? NetworkImage(
+                            context
+                                .read<LedgerProvider>()
+                                .userPhotos[personUserId]!,
+                          )
+                        : null,
+                    child:
+                        (personUserId == null ||
+                            personUserId.isEmpty ||
+                            !context
+                                .read<LedgerProvider>()
+                                .userPhotos
+                                .containsKey(personUserId))
+                        ? Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '?',
+                            style: TextStyle(
+                              fontSize: 18, // Reduced from 22
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          )
+                        : null,
                   ),
                 ),
                 Positioned(
@@ -1347,7 +1402,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 13, // Reduced from 15
-                color: Colors.black87,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

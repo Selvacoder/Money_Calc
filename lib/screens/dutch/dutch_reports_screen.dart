@@ -50,11 +50,14 @@ class DutchReportsScreen extends StatelessWidget {
 
                     if (isSettled) return const SizedBox.shrink();
 
-                    final userProfile = provider.currentGroupMemberProfiles
-                        .firstWhere(
-                          (p) => p['userId'] == userId,
-                          orElse: () => {},
-                        );
+                    final userProfile =
+                        (isGlobal
+                                ? provider.globalMemberProfiles
+                                : provider.currentGroupMemberProfiles)
+                            .firstWhere(
+                              (p) => p['userId'] == userId,
+                              orElse: () => {},
+                            );
                     final userName = userProfile['name'] ?? userId;
                     final initials = userName.isNotEmpty
                         ? userName[0].toUpperCase()
@@ -78,13 +81,24 @@ class DutchReportsScreen extends StatelessWidget {
                             backgroundColor: isOwed
                                 ? Colors.green.withOpacity(0.1)
                                 : Colors.red.withOpacity(0.1),
-                            child: Text(
-                              initials,
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                color: isOwed ? Colors.green : Colors.red,
-                              ),
-                            ),
+                            backgroundImage:
+                                (userProfile['photoUrl'] != null &&
+                                    userProfile['photoUrl']
+                                        .toString()
+                                        .isNotEmpty)
+                                ? NetworkImage(userProfile['photoUrl'])
+                                : null,
+                            child:
+                                (userProfile['photoUrl'] == null ||
+                                    userProfile['photoUrl'].toString().isEmpty)
+                                ? Text(
+                                    initials,
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      color: isOwed ? Colors.green : Colors.red,
+                                    ),
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(

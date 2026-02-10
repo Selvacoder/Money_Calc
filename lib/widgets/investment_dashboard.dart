@@ -21,6 +21,7 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Stack(
+      fit: StackFit.expand,
       children: [
         // Main Content
         RefreshIndicator(
@@ -51,12 +52,24 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
                   ),
                   const SizedBox(height: 24),
 
-                  Text(
-                    'Your Assets',
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Your Assets',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _showAddInvestmentDialog(context),
+                        icon: Icon(
+                          Icons.add_circle,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
 
@@ -120,13 +133,16 @@ class _InvestmentDashboardState extends State<InvestmentDashboard> {
 
         // FAB
         Positioned(
-          bottom: 24,
-          right: 24,
+          bottom: 16,
+          right: 16,
           child: FloatingActionButton.extended(
             onPressed: () => _showAddInvestmentDialog(context),
             backgroundColor: colorScheme.primary,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Asset'),
+            foregroundColor: Colors.white,
+            label: Text(
+              'Add Asset',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       ],

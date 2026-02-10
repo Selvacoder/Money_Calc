@@ -14,6 +14,7 @@ import '../widgets/personal_dashboard.dart';
 import '../widgets/ledger_dashboard.dart';
 import '../widgets/investment_dashboard.dart';
 import '../widgets/dutch_dashboard.dart';
+import '../widgets/starter_guide.dart';
 
 import 'ledger_history_screen.dart';
 import 'ledger/ledger_due_date_screen.dart';
@@ -41,7 +42,13 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   // 0: Personal, 1: Ledger, 2: Investment, 3: Dutch
   int _currentMode = 0;
+  bool _showGuide = false;
   final LocalAuthentication auth = LocalAuthentication();
+
+  final GlobalKey _personalKey = GlobalKey();
+  final GlobalKey _ledgerKey = GlobalKey();
+  final GlobalKey _investmentKey = GlobalKey();
+  final GlobalKey _dutchKey = GlobalKey();
 
   Future<void> _authenticate() async {
     try {
@@ -81,6 +88,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     Future.microtask(() async {
       final userProvider = context.read<UserProvider>();
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeenGuide = prefs.getBool('has_seen_guide') ?? false;
+
+      if (!hasSeenGuide && mounted) {
+        setState(() => _showGuide = true);
+      }
 
       if (userProvider.isInitialCheckDone &&
           userProvider.isAuthenticated &&
@@ -118,152 +131,178 @@ class _HomeScreenState extends State<HomeScreen> {
     // Dynamic Title based on mode? Or generic?
     // User requested toggle inside AppBar actions.
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        toolbarHeight: 80,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6), // Reduced padding
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary, // Restored background color
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Image.asset(
-                'assets/icon/app_logo.png',
-                width: 28, // Increased logo size
-                height: 28,
-              ),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            toolbarHeight: 80,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            titleSpacing: 20,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6), // Reduced padding
+                  decoration: BoxDecoration(
+                    color:
+                        theme.colorScheme.primary, // Restored background color
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Image.asset(
+                    'assets/icon/app_logo.png',
+                    width: 28, // Increased logo size
+                    height: 28,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Tap It',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    color: theme.appBarTheme.titleTextStyle?.color,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(
-              'Tap It',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-                color: theme.appBarTheme.titleTextStyle?.color,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Consumer<LedgerProvider>(
-            builder: (context, provider, child) {
-              final requestCount = provider.incomingRequests.length;
-              return IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NotificationScreen(),
+            actions: [
+              Consumer<LedgerProvider>(
+                builder: (context, provider, child) {
+                  final requestCount = provider.incomingRequests.length;
+                  return IconButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationScreen(),
+                        ),
+                      );
+                    },
+                    icon: Badge(
+                      isLabelVisible: requestCount > 0,
+                      label: Text('$requestCount'),
+                      child: Icon(
+                        Icons.notifications_outlined,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
                   );
                 },
-                icon: Badge(
-                  isLabelVisible: requestCount > 0,
-                  label: Text('$requestCount'),
-                  child: Icon(
-                    Icons.notifications_outlined,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AccountScreen(),
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.settings,
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: IconButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AccountScreen(),
+              ),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(50),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(30),
                   ),
-                );
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildToggleBtn('Personal', 0, _personalKey),
+                      _buildToggleBtn('Ledger', 1, _ledgerKey),
+                      _buildToggleBtn('Investment', 2, _investmentKey),
+                      _buildToggleBtn('Go Dutch', 3, _dutchKey), // NEW
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          body: _buildBody(),
+          bottomNavigationBar: NavigationBarTheme(
+            data: NavigationBarThemeData(
+              labelTextStyle: MaterialStateProperty.all(
+                GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ),
+            child: NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              backgroundColor: theme.cardColor,
+              indicatorColor: theme.colorScheme.primary.withOpacity(1.0),
+              destinations: [
+                const NavigationDestination(
+                  icon: Icon(Icons.home_filled),
+                  label: 'Home',
+                ),
+                if (_currentMode == 0)
+                  const NavigationDestination(
+                    icon: Icon(Icons.category),
+                    label: 'Category',
+                  ),
+                if (_currentMode == 1) // Ledger Mode
+                  const NavigationDestination(
+                    icon: Icon(Icons.calendar_month),
+                    label: 'Due Date',
+                  ),
+                if (_currentMode == 2) // Investment Mode
+                  const NavigationDestination(
+                    icon: Icon(Icons.auto_awesome),
+                    label: 'AI Analyzer',
+                  ),
+                const NavigationDestination(
+                  icon: Icon(Icons.history),
+                  label: 'History',
+                ),
+                const NavigationDestination(
+                  icon: Icon(Icons.bar_chart),
+                  label: 'Report',
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_showGuide)
+          Positioned.fill(
+            child: StarterGuide(
+              targetKeys: [_personalKey, _ledgerKey, _investmentKey, _dutchKey],
+              onStepChanged: (step) {
+                setState(() {
+                  _currentMode = step;
+                  _selectedIndex = 0;
+                });
               },
-              icon: Icon(Icons.settings, color: theme.colorScheme.onSurface),
+              onFinish: () {
+                setState(() {
+                  _showGuide = false;
+                  _currentMode = 0;
+                  _selectedIndex = 0;
+                });
+              },
             ),
           ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildToggleBtn('Personal', 0),
-                  _buildToggleBtn('Ledger', 1),
-                  _buildToggleBtn('Investment', 2),
-                  _buildToggleBtn('Go Dutch', 3), // NEW
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: _buildBody(),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          labelTextStyle: MaterialStateProperty.all(
-            GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
-        child: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: _onItemTapped,
-          backgroundColor: theme.cardColor,
-          indicatorColor: theme.colorScheme.primary.withOpacity(1.0),
-          destinations: [
-            const NavigationDestination(
-              icon: Icon(Icons.home_filled),
-              label: 'Home',
-            ),
-            if (_currentMode == 0)
-              const NavigationDestination(
-                icon: Icon(Icons.category),
-                label: 'Category',
-              ),
-            if (_currentMode == 1) // Ledger Mode
-              const NavigationDestination(
-                icon: Icon(Icons.calendar_month),
-                label: 'Due Date',
-              ),
-            if (_currentMode == 2) // Investment Mode
-              const NavigationDestination(
-                icon: Icon(Icons.auto_awesome),
-                label: 'AI Analyzer',
-              ),
-            // Dutch Mode (3) currently has no special second tab, or maybe "Scan"?
-            // For now, standard History/Report
-            const NavigationDestination(
-              icon: Icon(Icons.history),
-              label: 'History',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.bar_chart),
-              label: 'Report',
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _buildToggleBtn(String text, int modeIndex) {
+  Widget _buildToggleBtn(String text, int modeIndex, GlobalKey key) {
     final isActive = _currentMode == modeIndex;
     return GestureDetector(
+      key: key,
       onTap: () {
         if (!isActive) {
           if (modeIndex == 1) {

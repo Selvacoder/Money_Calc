@@ -24,22 +24,22 @@ class _StarterGuideState extends State<StarterGuide> {
 
   final List<Map<String, String>> _guideData = [
     {
-      'title': 'Personal Mode',
+      'title': 'Tap Spend',
       'description':
           'Track your daily expenses, manage categories, and see your personal balance at a glance.',
     },
     {
-      'title': 'Ledger Mode',
+      'title': 'Tap Due',
       'description':
           'Manage debts and credits with friends. Record transactions and set due date reminders.',
     },
     {
-      'title': 'Investment Mode',
+      'title': 'Tap Invest',
       'description':
           'Monitor your stocks and crypto portfolio. Get AI-powered insights for smarter growth.',
     },
     {
-      'title': 'Go Dutch Mode',
+      'title': 'Split It',
       'description':
           'Perfect for split bills and group trips. Settle up shared expenses effortlessly.',
     },

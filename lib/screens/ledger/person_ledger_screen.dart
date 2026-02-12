@@ -327,7 +327,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                 ),
               ),
               subtitle: Text(
-                'Notify instantly if they use MoneyCalc',
+                'Notify instantly if they use Tap It',
                 style: GoogleFonts.inter(
                   color: Colors.grey.shade600,
                   fontSize: 13,
@@ -436,7 +436,7 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
             builder: (context) => AlertDialog(
               title: const Text('User Not Found'),
               content: Text(
-                '${widget.personName} is not on MoneyCalc yet. Would you like to send a WhatsApp reminder instead?',
+                '${widget.personName} is not on Tap It yet. Would you like to send a WhatsApp reminder instead?',
               ),
               actions: [
                 TextButton(
@@ -476,10 +476,10 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     String message = '';
     if (balance > 0) {
       message =
-          'Hi ${widget.personName}, just a friendly reminder that you owe me ${widget.currencySymbol}$amount on MoneyCalc. Thanks!';
+          'Hi ${widget.personName}, just a friendly reminder that you owe me ${widget.currencySymbol}$amount on Tap It. Thanks!';
     } else {
       message =
-          'Hi ${widget.personName}, I owe you ${widget.currencySymbol}$amount on MoneyCalc. Letting you know!';
+          'Hi ${widget.personName}, I owe you ${widget.currencySymbol}$amount on Tap It. Letting you know!';
     }
 
     final encodedMessage = Uri.encodeComponent(message);
@@ -578,11 +578,11 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(Icons.delete, size: 20, color: Colors.red),
+                      Icon(Icons.delete, size: 20, color: Colors.orange),
                       SizedBox(width: 12),
                       Text(
-                        'Delete Person',
-                        style: TextStyle(color: Colors.red),
+                        'Remove from View',
+                        style: TextStyle(color: Colors.orange),
                       ),
                     ],
                   ),
@@ -1554,9 +1554,9 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Person'),
+        title: const Text('Remove from Dashboard?'),
         content: Text(
-          'Are you sure you want to delete ${widget.personName} and all their ${widget.transactions.length} transactions? This cannot be undone.',
+          'This will remove ${widget.personName} from your dashboard. Records will reappear if you add a new transaction for them.',
         ),
         actions: [
           TextButton(
@@ -1568,33 +1568,25 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
               Navigator.pop(context);
 
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Deleting person...')),
+                SnackBar(content: Text('Removing ${widget.personName}...')),
               );
 
-              final success = await context.read<LedgerProvider>().deletePerson(
-                name: widget.personName,
-                phone: widget.personPhone,
-              );
+              final provider = context.read<LedgerProvider>();
+              await provider.softDeletePerson(widget.personName);
 
-              if (success) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Person deleted successfully'),
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${widget.personName} removed from dashboard',
                     ),
-                  );
-                  Navigator.pop(context);
-                }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to delete person')),
-                  );
-                }
+                  ),
+                );
+                Navigator.pop(context);
               }
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Remove'),
           ),
         ],
       ),

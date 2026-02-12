@@ -30,6 +30,9 @@ class UserProvider extends ChangeNotifier {
   List<String> _customPaymentMethods = [];
   List<String> get customPaymentMethods => _customPaymentMethods;
 
+  String _paymentMethodLayout = 'grid'; // Default layout
+  String get paymentMethodLayout => _paymentMethodLayout;
+
   late Box<UserProfile> _userBox;
   late Box _settingsBox; // New box for banks and primary methods
   bool _isHiveInitialized = false;
@@ -60,6 +63,10 @@ class UserProvider extends ChangeNotifier {
     );
     _customPaymentMethods = List<String>.from(
       _settingsBox.get('custom_payment_methods', defaultValue: []),
+    );
+    _paymentMethodLayout = _settingsBox.get(
+      'payment_method_layout',
+      defaultValue: 'grid',
     );
   }
 
@@ -503,5 +510,13 @@ class UserProvider extends ChangeNotifier {
         customPaymentMethods: _customPaymentMethods,
       );
     }
+  }
+
+  Future<void> setPaymentMethodLayout(String layout) async {
+    _paymentMethodLayout = layout;
+    if (_isHiveInitialized) {
+      await _settingsBox.put('payment_method_layout', layout);
+    }
+    notifyListeners();
   }
 }

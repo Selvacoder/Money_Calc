@@ -28,20 +28,55 @@ class LedgerProvider extends ChangeNotifier {
 
   late Box<LedgerTransaction> _ledgerBox;
   late Box<String> _hiddenPeopleBox;
+  late Box<String> _softDeletedPeopleBox;
   bool _isHiveInitialized = false;
   List<String> _hiddenPeople = [];
+  List<String> _softDeletedPeople = [];
   List<String> get hiddenPeople => _hiddenPeople;
+  List<String> get softDeletedPeople => _softDeletedPeople;
 
   String? _currentUserId;
   String? get currentUserId => _currentUserId;
   Map<String, String> _userPhotos = {};
   Map<String, String> get userPhotos => _userPhotos;
 
+  /// Returns a list of unique users the current user has interacted with who are on the app
+  List<Map<String, String>> get knownAppUsers {
+    final Map<String, Map<String, String>> users = {};
+
+    for (var tx in _ledgerTransactions) {
+      if (_currentUserId == null) continue;
+
+      // Check receiver
+      if (tx.receiverId != null &&
+          tx.receiverId!.isNotEmpty &&
+          tx.receiverId != _currentUserId) {
+        users[tx.receiverId!] = {
+          'id': tx.receiverId!,
+          'name': tx.receiverName,
+          'phone': tx.receiverPhone ?? '',
+        };
+      }
+      // Check sender
+      if (tx.senderId.isNotEmpty && tx.senderId != _currentUserId) {
+        users[tx.senderId] = {
+          'id': tx.senderId,
+          'name': tx.senderName,
+          'phone': tx.senderPhone,
+        };
+      }
+    }
+
+    return users.values.toList();
+  }
+
   Future<void> _initHive() async {
     if (_isHiveInitialized) return;
     _ledgerBox = await Hive.openBox<LedgerTransaction>('ledger');
     _hiddenPeopleBox = await Hive.openBox<String>('hidden_people');
+    _softDeletedPeopleBox = await Hive.openBox<String>('soft_deleted_people');
     _hiddenPeople = _hiddenPeopleBox.values.toList();
+    _softDeletedPeople = _softDeletedPeopleBox.values.toList();
     _isHiveInitialized = true;
   }
 
@@ -275,6 +310,13 @@ class LedgerProvider extends ChangeNotifier {
       // Pending
       _outgoingRequests.insert(0, optimisticTx);
     }
+
+    // AUTO-UNHIDE/UNSOFT-DELETE
+    await unhidePerson(actualSenderName);
+    await unhidePerson(actualReceiverName);
+    await unsoftDeletePerson(actualSenderName);
+    await unsoftDeletePerson(actualReceiverName);
+
     notifyListeners();
 
     try {
@@ -460,6 +502,29 @@ class LedgerProvider extends ChangeNotifier {
         if (value == name) keyToDelete = key;
       });
       if (keyToDelete != null) await _hiddenPeopleBox.delete(keyToDelete);
+      notifyListeners();
+    }
+  }
+
+  Future<void> softDeletePerson(String name) async {
+    if (!_softDeletedPeople.contains(name)) {
+      _softDeletedPeople.add(name);
+      await _softDeletedPeopleBox.add(name);
+      notifyListeners();
+    }
+  }
+
+  Future<void> unsoftDeletePerson(String name) async {
+    if (_softDeletedPeople.contains(name)) {
+      _softDeletedPeople.remove(name);
+      final Map<dynamic, String> boxMap = _softDeletedPeopleBox
+          .toMap()
+          .cast<dynamic, String>();
+      dynamic keyToDelete;
+      boxMap.forEach((key, value) {
+        if (value == name) keyToDelete = key;
+      });
+      if (keyToDelete != null) await _softDeletedPeopleBox.delete(keyToDelete);
       notifyListeners();
     }
   }

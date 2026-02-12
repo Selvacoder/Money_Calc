@@ -18,7 +18,8 @@ class HelpScreen extends StatelessWidget {
             color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(
@@ -100,8 +101,8 @@ class HelpScreen extends StatelessWidget {
                     onPressed: () async {
                       final Uri emailLaunchUri = Uri(
                         scheme: 'mailto',
-                        path: 'support@moneycalc.com',
-                        query: 'subject=MoneyCalc Support Request',
+                        path: 'support@tapit.com',
+                        query: 'subject=Tap It Support Request',
                       );
                       if (await canLaunchUrl(emailLaunchUri)) {
                         await launchUrl(emailLaunchUri);
@@ -141,11 +142,11 @@ class HelpScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -166,7 +167,7 @@ class HelpScreen extends StatelessWidget {
               answer,
               style: GoogleFonts.inter(
                 fontSize: 14,
-                color: Colors.grey.shade600,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 height: 1.5,
               ),
             ),

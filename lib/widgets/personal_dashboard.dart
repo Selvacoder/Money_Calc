@@ -469,12 +469,8 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       iconData = Icons.water_drop; // Water
     } else if (item.icon == 'flight') {
       iconData = Icons.flight; // Travel
-    } else if (item.icon == 'local_taxi') {
-      iconData = Icons.local_taxi; // Taxi
     } else if (item.icon == 'medication') {
       iconData = Icons.medication; // Medicine
-    } else if (item.icon == 'local_laundry_service') {
-      iconData = Icons.local_laundry_service; // Laundry
     } else if (item.icon == 'content_cut') {
       iconData = Icons.content_cut; // Salon
     } else if (item.icon == 'card_giftcard') {
@@ -487,18 +483,12 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       iconData = Icons.car_repair; // Repair
     } else if (item.icon == 'local_parking') {
       iconData = Icons.local_parking; // Parking
-    } else if (item.icon == 'menu_book') {
-      iconData = Icons.menu_book; // Books
     } else if (item.icon == 'subscriptions') {
       iconData = Icons.subscriptions; // Subs
     } else if (item.icon == 'music_note') {
       iconData = Icons.music_note; // Music
     } else if (item.icon == 'cleaning_services') {
       iconData = Icons.cleaning_services; // Maid
-    } else if (item.icon == 'spa') {
-      iconData = Icons.spa; // Spa
-    } else if (item.icon == 'celebration') {
-      iconData = Icons.celebration; // Party
     }
 
     // Dynamic Background Color Logic
@@ -831,115 +821,166 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
       child: Stack(
         children: [
           // Content
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    color: Colors.white70,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
+          Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.account_balance_wallet_outlined,
                       color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      size: 20,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '$currencySymbol${balance.toStringAsFixed(2)}',
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
+                    const SizedBox(width: 8),
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.arrow_upward_rounded,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Income',
-                              style: GoogleFonts.inter(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$currencySymbol${income.toStringAsFixed(2)}',
-                          style: GoogleFonts.inter(
-                            color: const Color(0xFF51CF66), // Green
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 8),
+                Text(
+                  '$currencySymbol${balance.toStringAsFixed(2)}',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
                   ),
-                  Container(height: 40, width: 1, color: Colors.white12),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.arrow_downward_rounded,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Expenses',
-                              style: GoogleFonts.inter(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$currencySymbol${expense.toStringAsFixed(2)}',
-                          style: GoogleFonts.inter(
-                            color: const Color(0xFFFF6B6B), // Red
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                ),
+                const SizedBox(height: 12),
+                // Progress Bar (Dual Color: Green for Income, Red for Expense)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    height: 6,
+                    width: double.infinity,
+                    color: Colors.white.withOpacity(0.15),
+                    child: (income > 0 || expense > 0)
+                        ? Row(
+                            children: [
+                              if (income > 0)
+                                Expanded(
+                                  flex: (income * 100).toInt(),
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Color(0xFF51CF66), // Light green
+                                          Color(0xFF37B24D), // Darker green
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              if (expense > 0)
+                                Expanded(
+                                  flex: (expense * 100).toInt(),
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Color(0xFFFF6B6B), // Light red
+                                          Color(0xFFE03131), // Darker red
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : null,
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.arrow_upward_rounded,
+                                color: Colors.white70,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Income',
+                                style: GoogleFonts.inter(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$currencySymbol${income.toStringAsFixed(2)}',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFF51CF66), // Green
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(height: 40, width: 1, color: Colors.white12),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.arrow_downward_rounded,
+                                color: Colors.white70,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Expenses',
+                                style: GoogleFonts.inter(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$currencySymbol${expense.toStringAsFixed(2)}',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFFFF6B6B), // Red
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
 
           // Indicators (Dots)
           Positioned(
-            top: 0,
+            top: 6,
             left: 0,
             right: 0,
             child: Row(
@@ -1113,14 +1154,14 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
   Future<String?> _selectPaymentMethod() {
     return showDialog<String>(
       context: context,
-      barrierDismissible: true, // Changed to true
+      barrierDismissible: true,
       builder: (context) {
         return Consumer<UserProvider>(
           builder: (context, userProvider, child) {
+            final isGridView = userProvider.paymentMethodLayout == 'grid';
             final primaryMethods = userProvider.primaryPaymentMethods;
 
             Future<void> handleLongPress(String method) async {
-              // One-time bank selection override
               final selectedBank = await showModalBottomSheet<String>(
                 context: context,
                 shape: const RoundedRectangleBorder(
@@ -1173,13 +1214,11 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
               );
 
               if (selectedBank != null) {
-                // If a bank was selected, return the combined string immediately
                 Navigator.pop(context, '$method ($selectedBank)');
               }
             }
 
             final customMethods = userProvider.customPaymentMethods;
-
             final allMethods =
                 [
                   {'name': 'Cash', 'icon': Icons.money},
@@ -1192,57 +1231,214 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
                   ),
                 ].where((method) {
                   final name = method['name'] as String;
-                  // Custom methods are always shown (managed via add/delete)
                   if (customMethods.contains(name)) return true;
-                  // All standard methods (including Cash) check toggle
                   return userProvider.isPaymentMethodEnabled(name);
                 }).toList();
 
             return AlertDialog(
-              title: Text(
-                'Payment Method',
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Payment Method',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () =>
+                        userProvider.setPaymentMethodLayout('grid'),
+                    icon: Icon(
+                      Icons.grid_view_rounded,
+                      size: 20,
+                      color: isGridView
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () =>
+                        userProvider.setPaymentMethodLayout('list'),
+                    icon: Icon(
+                      Icons.view_headline_rounded,
+                      size: 20,
+                      color: !isGridView
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
+                    ),
+                  ),
+                ],
               ),
               content: SizedBox(
                 width: double.maxFinite,
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const BouncingScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio:
-                        1.0, // Square aspect ratio for more height
-                  ),
-                  itemCount: allMethods.length,
-                  itemBuilder: (context, index) {
-                    final item = allMethods[index];
-                    final name = item['name'] as String;
-                    final icon = item['icon'] as IconData;
+                child: isGridView
+                    ? GridView.builder(
+                        shrinkWrap: true,
+                        physics: const BouncingScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.0,
+                            ),
+                        itemCount: allMethods.length,
+                        itemBuilder: (context, index) {
+                          final item = allMethods[index];
+                          final name = item['name'] as String;
+                          final icon = item['icon'] as IconData;
 
-                    return _buildPaymentOption(
-                      context,
-                      name,
-                      icon,
-                      userProvider,
-                      // Pass primaryBank only if defaults are enabled for this method
-                      primaryBank: userProvider.isPaymentMethodEnabled(name)
-                          ? primaryMethods[name]
-                          : null,
-                      onLongPress: () {
-                        if (name != 'Cash') {
-                          handleLongPress(name);
-                        }
-                      },
-                    );
-                  },
-                ),
+                          return _buildPaymentOption(
+                            context,
+                            name,
+                            icon,
+                            userProvider,
+                            primaryBank:
+                                userProvider.isPaymentMethodEnabled(name)
+                                ? primaryMethods[name]
+                                : null,
+                            onLongPress: () {
+                              if (name != 'Cash') {
+                                handleLongPress(name);
+                              }
+                            },
+                          );
+                        },
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: allMethods.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = allMethods[index];
+                          final name = item['name'] as String;
+                          final icon = item['icon'] as IconData;
+
+                          return _buildVerticalPaymentOption(
+                            context,
+                            name,
+                            icon,
+                            userProvider,
+                            primaryBank:
+                                userProvider.isPaymentMethodEnabled(name)
+                                ? primaryMethods[name]
+                                : null,
+                            onLongPress: () {
+                              if (name != 'Cash') {
+                                handleLongPress(name);
+                              }
+                            },
+                          );
+                        },
+                      ),
               ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildVerticalPaymentOption(
+    BuildContext context,
+    String method,
+    IconData icon,
+    UserProvider userProvider, {
+    String? primaryBank,
+    VoidCallback? onLongPress,
+  }) {
+    return InkWell(
+      onTap: () {
+        if (method != 'Cash' && userProvider.banks.isEmpty) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(
+                'Add Bank Details?',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+              content: Text(
+                'You haven\'t added any banks yet. Adding a bank helps you track accounts better.',
+                style: GoogleFonts.inter(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context, method);
+                  },
+                  child: const Text('Use Default'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BankDetailsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Add Bank'),
+                ),
+              ],
+            ),
+          );
+        } else if (method != 'Cash' &&
+            primaryBank == null &&
+            userProvider.banks.isNotEmpty) {
+          onLongPress?.call();
+        } else {
+          String result = method;
+          if (primaryBank != null) {
+            result = '$method ($primaryBank)';
+          }
+          Navigator.pop(context, result);
+        }
+      },
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    method,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (primaryBank != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      primaryBank,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8), // Replaced arrow with some trailing space
+          ],
+        ),
+      ),
     );
   }
 

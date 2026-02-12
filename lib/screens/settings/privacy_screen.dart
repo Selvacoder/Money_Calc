@@ -141,7 +141,8 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(
@@ -245,11 +246,11 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -265,7 +266,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         secondary: Container(
           padding: const EdgeInsets.all(8),
@@ -295,11 +299,11 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -329,7 +333,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

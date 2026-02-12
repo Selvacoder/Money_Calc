@@ -14,6 +14,7 @@ class DutchDashboard extends StatefulWidget {
 
 class _DutchDashboardState extends State<DutchDashboard> {
   int _currentPage = 0; // 0=Overall, 1=Yearly, 2=Monthly, 3=Weekly, 4=Daily
+  bool _showAllGroups = false;
 
   @override
   void initState() {
@@ -30,9 +31,12 @@ class _DutchDashboardState extends State<DutchDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    print('DEBUG DutchDashboard build: Re-rendering dashboard...');
     final provider = context.watch<DutchProvider>();
     final groups = provider.groups;
     final isLoading = provider.isLoading;
+
+    final filteredGroups = groups;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -94,6 +98,8 @@ class _DutchDashboardState extends State<DutchDashboard> {
                     ),
 
                     const SizedBox(height: 24),
+
+                    const SizedBox(height: 8),
 
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -209,17 +215,30 @@ class _DutchDashboardState extends State<DutchDashboard> {
                             physics: const NeverScrollableScrollPhysics(),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 0.85,
+                                  crossAxisCount: 3,
+                                  childAspectRatio: 0.75,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
                                 ),
-                            itemCount: groups.length,
+                            itemCount: _showAllGroups
+                                ? filteredGroups.length
+                                : (filteredGroups.length > 9
+                                      ? 9
+                                      : filteredGroups.length),
                             itemBuilder: (context, index) {
-                              final group = groups[index];
+                              final group = filteredGroups[index];
                               return _buildGroupCard(group);
                             },
                           ),
+                          if (groups.length > 9)
+                            TextButton(
+                              onPressed: () => setState(
+                                () => _showAllGroups = !_showAllGroups,
+                              ),
+                              child: Text(
+                                _showAllGroups ? 'Show Less' : 'Show More',
+                              ),
+                            ),
                           if (provider.hasMoreGroups)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 20),
@@ -260,46 +279,76 @@ class _DutchDashboardState extends State<DutchDashboard> {
       },
       onLongPress: () => _showGroupOptions(context, group),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
           border: Border.all(color: Colors.grey.withOpacity(0.1)),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.grey.shade600.withOpacity(0.3),
+                  width: 2,
+                ),
               ),
-              child: Icon(
-                _getIconData(group['icon']),
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withOpacity(0.1),
+                child: Icon(
+                  _getIconData(group['icon']),
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 12),
             Text(
               group['name'] ?? 'Unnamed',
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 13,
               ),
+              textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
-            Text(
-              'Settled up', // TODO: Group specific balance
-              style: GoogleFonts.inter(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.greenAccent
-                    : Colors.green.shade700,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+            Consumer<DutchProvider>(
+              builder: (context, provider, child) {
+                final pendingCount = provider.getPendingCount(
+                  group['id'] ?? '',
+                );
+                final hasPending = pendingCount > 0;
+
+                return Text(
+                  hasPending ? '$pendingCount pending' : 'Settled up',
+                  style: GoogleFonts.inter(
+                    color: hasPending
+                        ? (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.orangeAccent
+                              : Colors.orange.shade800)
+                        : (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.greenAccent
+                              : Colors.green.shade700),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
             ),
           ],
         ),

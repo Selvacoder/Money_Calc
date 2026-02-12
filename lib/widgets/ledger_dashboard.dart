@@ -994,8 +994,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     List<String> myIdentities,
     String? currentUserId,
   ) {
-    // Filter hidden people
+    // Filter hidden and soft-deleted people
     final hiddenPeople = context.read<LedgerProvider>().hiddenPeople;
+    final softDeletedPeople = context.read<LedgerProvider>().softDeletedPeople;
 
     // Use a complex key for grouping: Phone (priority) -> Name
     Map<String, double> balances = {};
@@ -1012,8 +1013,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       final otherPhone = isSent ? t.receiverPhone : t.senderPhone;
       final otherId = isSent ? t.receiverId : t.senderId;
 
-      // Skip if hidden (Check both name AND phone?)
-      if (hiddenPeople.contains(otherName)) continue;
+      // Skip if hidden or soft-deleted
+      if (hiddenPeople.contains(otherName) ||
+          softDeletedPeople.contains(otherName))
+        continue;
 
       // Grouping Key Logic
       String key;
@@ -1469,10 +1472,10 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
+              leading: const Icon(Icons.delete, color: Colors.orange),
               title: const Text(
-                'Delete Person',
-                style: TextStyle(color: Colors.red),
+                'Remove from Dashboard',
+                style: TextStyle(color: Colors.orange),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -1674,9 +1677,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Person'),
+        title: const Text('Remove from Dashboard?'),
         content: Text(
-          'Are you sure you want to delete $name and all their transactions? This cannot be undone.',
+          'This will remove $name from your dashboard. Records will reappear if you add a new transaction for them.',
         ),
         actions: [
           TextButton(
@@ -1687,33 +1690,21 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
             onPressed: () async {
               Navigator.pop(context);
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Deleting person...')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Removing $name...')));
 
-              final success = await context.read<LedgerProvider>().deletePerson(
-                name: name,
-                phone: phone,
-              );
+              final provider = context.read<LedgerProvider>();
+              await provider.softDeletePerson(name);
 
-              if (success) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Person deleted successfully'),
-                    ),
-                  );
-                }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to delete person')),
-                  );
-                }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$name removed from dashboard')),
+                );
               }
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -1726,13 +1717,20 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final hiddenPeople = context.watch<LedgerProvider>().hiddenPeople;
+            final provider = context.watch<LedgerProvider>();
+            final hiddenPeople = provider.hiddenPeople;
+            final softDeletedPeople = provider.softDeletedPeople;
+
+            // Only show manually hidden people, NOT soft-deleted ones
+            final visibleHiddenPeople = hiddenPeople
+                .where((name) => !softDeletedPeople.contains(name))
+                .toList();
 
             return AlertDialog(
               title: const Text('Hidden People'),
               content: SizedBox(
                 width: double.maxFinite,
-                child: hiddenPeople.isEmpty
+                child: visibleHiddenPeople.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(20.0),
                         child: Text(
@@ -1743,9 +1741,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                       )
                     : ListView.builder(
                         shrinkWrap: true,
-                        itemCount: hiddenPeople.length,
+                        itemCount: visibleHiddenPeople.length,
                         itemBuilder: (context, index) {
-                          final name = hiddenPeople[index];
+                          final name = visibleHiddenPeople[index];
                           return ListTile(
                             title: Text(name),
                             trailing: IconButton(

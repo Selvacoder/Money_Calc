@@ -35,7 +35,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   void _shareInviteCode() {
     final code = widget.group['inviteCode'] ?? 'NO_CODE';
     final name = widget.group['name'] ?? 'Group';
-    Share.share('Join my group "$name" on MoneyCalc using code: $code');
+    Share.share('Join my group "$name" on Tap It using code: $code');
   }
 
   void _copyCode() {
@@ -55,17 +55,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(widget.group['name'] ?? 'Group Details'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              // TODO: Group Settings
-            },
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.group['name'] ?? 'Group Details')),
       body: NotificationListener<ScrollNotification>(
         onNotification: (ScrollNotification scrollInfo) {
           if (scrollInfo.metrics.pixels >=
@@ -173,12 +163,18 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _shareInviteCode,
-                              icon: const Icon(Icons.share, size: 18),
+                              icon: const Icon(Icons.share, size: 14),
                               label: const Text('Invite'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.deepPurple,
-                                textStyle: GoogleFonts.inter(fontSize: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                textStyle: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -197,12 +193,18 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.history, size: 18),
+                              icon: const Icon(Icons.history, size: 14),
                               label: const Text('History'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white.withOpacity(0.2),
                                 foregroundColor: Colors.white,
-                                textStyle: GoogleFonts.inter(fontSize: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                textStyle: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -224,13 +226,19 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                               },
                               icon: const Icon(
                                 Icons.analytics_outlined,
-                                size: 18,
+                                size: 14,
                               ),
                               label: const Text('Reports'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white.withOpacity(0.2),
                                 foregroundColor: Colors.white,
-                                textStyle: GoogleFonts.inter(fontSize: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                textStyle: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -484,15 +492,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
               Text(
                 'Balance Details',
                 style: GoogleFonts.inter(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ],
@@ -505,7 +513,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               border: Border.all(color: Colors.grey.withOpacity(0.1)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -542,9 +550,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                           children: [
                             CircleAvatar(
                               radius: 18,
-                              backgroundColor: Theme.of(
-                                context,
-                              ).primaryColor.withOpacity(0.1),
+                              backgroundColor:
+                                  (userProfile['photoUrl'] == null ||
+                                      userProfile['photoUrl']
+                                          .toString()
+                                          .isEmpty)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer,
                               backgroundImage:
                                   (userProfile['photoUrl'] != null &&
                                       userProfile['photoUrl']
@@ -561,8 +575,8 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                       userName.isNotEmpty
                                           ? userName[0].toUpperCase()
                                           : '?',
-                                      style: TextStyle(
-                                        color: Theme.of(context).primaryColor,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
@@ -597,7 +611,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   'Paid: ',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                                 Text(
@@ -605,7 +621,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
-                                    color: Colors.black87,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                   ),
                                 ),
                               ],
@@ -618,7 +636,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   'Share: ',
                                   style: GoogleFonts.inter(
                                     fontSize: 10,
-                                    color: Colors.grey.shade500,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .withOpacity(0.7),
                                   ),
                                 ),
                                 Text(
@@ -626,7 +647,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade700,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -639,7 +662,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   balance >= 0 ? 'Gets back: ' : 'Owes: ',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),

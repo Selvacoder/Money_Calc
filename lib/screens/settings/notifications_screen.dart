@@ -56,7 +56,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(
@@ -138,9 +139,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 margin: const EdgeInsets.only(top: 8, bottom: 12),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(
+                    color: Theme.of(context).dividerColor.withOpacity(0.1),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -204,11 +207,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -224,7 +227,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         activeColor: Theme.of(context).colorScheme.primary,
         value: value,

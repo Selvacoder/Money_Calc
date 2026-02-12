@@ -1,7 +1,7 @@
-# Money Calc Documentation
+# Tap It Documentation
 
 ## 1. Project Overview
-Money Calc is a Flutter-based personal finance application designed to help users track their income, expenses, and debts (ledger). It features a modern UI, dark/light mode support, and seamless synchronization with a backend.
+Tap It is a Flutter-based personal finance application designed to help users track their income, expenses, and debts (ledger). It features a modern UI, dark/light mode support, and seamless synchronization with a backend.
 
 ## 2. Architecture & Tech Stack
 

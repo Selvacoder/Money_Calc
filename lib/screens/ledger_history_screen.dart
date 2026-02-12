@@ -75,6 +75,10 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     // Filter transactions
+    final ledgerProvider = context.read<LedgerProvider>();
+    final hiddenPeople = ledgerProvider.hiddenPeople;
+    final softDeletedPeople = ledgerProvider.softDeletedPeople;
+
     List<LedgerTransaction> filteredTransactions = widget.transactions.where((
       t,
     ) {
@@ -82,6 +86,14 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
       bool isSent = widget.myIdentities.any(
         (id) => _arePhonesEqual(t.senderPhone, id),
       );
+
+      final otherName = isSent ? t.receiverName : t.senderName;
+
+      // Filter out hidden and soft-deleted people
+      if (hiddenPeople.contains(otherName) ||
+          softDeletedPeople.contains(otherName)) {
+        return false;
+      }
 
       // 1. Date Filter
       if (_selectedDate != null) {

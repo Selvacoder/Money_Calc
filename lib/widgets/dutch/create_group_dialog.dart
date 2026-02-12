@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/dutch_provider.dart';
+import '../../providers/ledger_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/appwrite_service.dart';
 import '../../utils/formatters.dart';
@@ -11,7 +12,8 @@ import 'package:fast_contacts/fast_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CreateGroupDialog extends StatefulWidget {
-  const CreateGroupDialog({super.key});
+  final List<Map<String, String>>? initialMembers;
+  const CreateGroupDialog({super.key, this.initialMembers});
 
   @override
   State<CreateGroupDialog> createState() => _CreateGroupDialogState();
@@ -41,8 +43,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   // List of members to add: {id, name, phone}
   final List<Map<String, String>> _membersToAdd = [];
   String? _memberError;
-  bool _showInvite = false; // Added state
-  String _invitePhone = '';
   String _selectedCountryCode = '+91';
   final TextEditingController _searchController = TextEditingController();
   List<Contact> _contacts = [];
@@ -52,6 +52,9 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialMembers != null) {
+      _membersToAdd.addAll(widget.initialMembers!);
+    }
     _loadContacts();
   }
 
@@ -80,11 +83,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   void _removeMember(int index) {
     setState(() {
-      final removed = _membersToAdd.removeAt(index);
-      if (_invitePhone == removed['phone']) {
-        _showInvite = false;
-        _invitePhone = '';
-      }
+      _membersToAdd.removeAt(index);
     });
   }
 
@@ -95,23 +94,16 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
     final dutchProvider = context.read<DutchProvider>();
     final currencyProvider = context.read<CurrencyProvider>();
     final currentUser = userProvider.user;
-    print('DEBUG: Current User: $currentUser');
 
-    if (currentUser == null) {
-      print('DEBUG: User is null, cannot create group');
-      return;
-    }
+    if (currentUser == null) return;
 
-    // Compile Member IDs (CurrentUser + Added Members)
     final memberIds = [currentUser.userId];
     for (var m in _membersToAdd) {
       memberIds.add(m['id']!);
     }
 
     try {
-      // Use the BuildContext safely
       final scaffoldMessenger = ScaffoldMessenger.of(context);
-
       final rawName = _nameController.text.trim();
       final name = rawName.isNotEmpty
           ? rawName[0].toUpperCase() + rawName.substring(1)
@@ -127,9 +119,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       );
 
       if (success) {
-        if (mounted) {
-          Navigator.pop(context); // Close Dialog
-        }
+        if (mounted) Navigator.pop(context);
       } else {
         if (mounted) {
           scaffoldMessenger.showSnackBar(
@@ -153,6 +143,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<DutchProvider>().isLoading;
+    final ledgerProvider = context.watch<LedgerProvider>();
+    final suggestedUsers = ledgerProvider.knownAppUsers;
 
     return Dialog(
       backgroundColor: Theme.of(context).cardColor,
@@ -176,7 +168,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
                 const SizedBox(height: 24),
 
-                // Group Name
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.sentences,
@@ -194,7 +185,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
                 const SizedBox(height: 16),
 
-                // Icon Selector
                 Text(
                   'Icon',
                   style: GoogleFonts.inter(
@@ -239,7 +229,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
                 const SizedBox(height: 16),
 
-                // Group Type
                 Text(
                   'Type',
                   style: GoogleFonts.inter(
@@ -267,7 +256,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
                 const SizedBox(height: 24),
 
-                // Members Section
                 Text(
                   'Members',
                   style: GoogleFonts.inter(
@@ -277,7 +265,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                // Search Bar
                 TextField(
                   controller: _searchController,
                   onChanged: (value) async {
@@ -291,8 +278,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                               final nameMatch = name.toLowerCase().contains(
                                 value.toLowerCase(),
                               );
-                              final phones = contact.phones;
-                              final phoneMatch = phones.any(
+                              final phoneMatch = contact.phones.any(
                                 (p) => p.number.contains(value),
                               );
                               return nameMatch || phoneMatch;
@@ -309,16 +295,45 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                         if (_searchController.text == value) {
                           setState(() {
                             for (var user in remoteUsers) {
-                              final phone = user['phone'];
-                              bool exists = _searchResults.any((r) {
+                              final remotePhone = user['phone']
+                                  .toString()
+                                  .replaceAll(RegExp(r'\D'), '');
+                              final remoteFormatted = remotePhone.length >= 10
+                                  ? remotePhone.substring(
+                                      remotePhone.length - 10,
+                                    )
+                                  : remotePhone;
+
+                              int index = _searchResults.indexWhere((r) {
                                 if (r is Contact) {
-                                  return r.phones.any(
-                                    (p) => p.number.contains(phone),
-                                  );
+                                  return r.phones.any((p) {
+                                    final pNorm = p.number.replaceAll(
+                                      RegExp(r'\D'),
+                                      '',
+                                    );
+                                    final pFormatted = pNorm.length >= 10
+                                        ? pNorm.substring(pNorm.length - 10)
+                                        : pNorm;
+                                    return pFormatted == remoteFormatted;
+                                  });
                                 }
-                                return r['phone'] == phone;
+                                final rNorm = r['phone'].toString().replaceAll(
+                                  RegExp(r'\D'),
+                                  '',
+                                );
+                                final rFormatted = rNorm.length >= 10
+                                    ? rNorm.substring(rNorm.length - 10)
+                                    : rNorm;
+                                return rFormatted == remoteFormatted;
                               });
-                              if (!exists) {
+
+                              if (index != -1) {
+                                // Replace local contact with remote user data
+                                _searchResults[index] = {
+                                  ...user,
+                                  'isRemote': true,
+                                };
+                              } else {
                                 _searchResults.add({...user, 'isRemote': true});
                               }
                             }
@@ -342,29 +357,87 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     ),
                     filled: true,
                     fillColor: Theme.of(context).colorScheme.surface,
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchResults = [];
+                              });
+                            },
+                          )
+                        : null,
                   ),
                 ),
 
-                if (_searchResults.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.1),
-                      ),
+                // Suggested People
+                if (_searchController.text.isEmpty &&
+                    suggestedUsers.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Available People',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 130,
                     child: ListView.separated(
-                      shrinkWrap: true,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: suggestedUsers.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final user = suggestedUsers[index];
+                        final isSelected = _membersToAdd.any(
+                          (m) => m['id'] == user['id'],
+                        );
+                        return _buildMemberCard(
+                          name: user['name']!,
+                          phone: user['phone']!,
+                          id: user['id']!,
+                          isSelected: isSelected,
+                          isAppUser: true,
+                          showInvite: false,
+                          onTap: () {
+                            setState(() {
+                              if (isSelected) {
+                                _membersToAdd.removeWhere(
+                                  (m) => m['id'] == user['id'],
+                                );
+                              } else {
+                                _membersToAdd.add({
+                                  'id': user['id']!,
+                                  'name': user['name']!,
+                                  'phone': user['phone']!,
+                                });
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
+                if (_searchResults.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 130,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
                       itemCount: _searchResults.length,
                       separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
+                          const SizedBox(width: 12),
                       itemBuilder: (context, index) {
                         final item = _searchResults[index];
                         String name = '';
                         String phone = '';
+                        String id = '';
                         bool isRemote = false;
 
                         if (item is Contact) {
@@ -375,76 +448,62 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                         } else {
                           name = item['name'] ?? '';
                           phone = item['phone'] ?? '';
+                          id = item['userId'] ?? '';
                           isRemote = item['isRemote'] ?? false;
                         }
 
-                        return ListTile(
-                          visualDensity: VisualDensity.compact,
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              if (isRemote)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'On Tap It',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 9,
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          subtitle: phone.isNotEmpty
-                              ? Text(
-                                  phone,
-                                  style: GoogleFonts.inter(fontSize: 11),
-                                )
-                              : null,
-                          onTap: () async {
-                            final cleanPhone = phone.replaceAll(
-                              RegExp(r'\D'),
-                              '',
-                            );
-                            final formattedPhone = cleanPhone.length >= 10
-                                ? cleanPhone.substring(cleanPhone.length - 10)
-                                : cleanPhone;
+                        final isSelected = _membersToAdd.any(
+                          (m) =>
+                              m['phone'] == phone ||
+                              (isRemote && m['id'] == id),
+                        );
 
-                            // Add to members list
+                        return _buildMemberCard(
+                          name: name,
+                          phone: phone,
+                          id: id,
+                          isSelected: isSelected,
+                          isAppUser: isRemote,
+                          showInvite: false,
+                          onTap: () async {
                             setState(() {
-                              _membersToAdd.add({
-                                'id': item is Contact
-                                    ? ''
-                                    : (item['userId'] ?? ''),
-                                'name': name,
-                                'phone': '$_selectedCountryCode$formattedPhone',
-                              });
-                              _searchResults = [];
-                              _searchController.clear();
-                              _memberError = null;
-                              _showInvite = false; // Reset before check
+                              if (isSelected) {
+                                _membersToAdd.removeWhere(
+                                  (m) =>
+                                      m['phone'] == phone ||
+                                      (isRemote && m['id'] == id),
+                                );
+                              } else {
+                                final cleanPhone = phone.replaceAll(
+                                  RegExp(r'\D'),
+                                  '',
+                                );
+                                final formattedPhone = cleanPhone.length >= 10
+                                    ? cleanPhone.substring(
+                                        cleanPhone.length - 10,
+                                      )
+                                    : cleanPhone;
+
+                                _membersToAdd.add({
+                                  'id': id,
+                                  'name': name,
+                                  'phone':
+                                      '$_selectedCountryCode$formattedPhone',
+                                });
+                              }
                             });
 
-                            // If it's a local contact, try to check if they are registered
-                            if (item is Contact) {
+                            if (!isSelected && item is Contact) {
                               try {
+                                final cleanPhone = phone.replaceAll(
+                                  RegExp(r'\D'),
+                                  '',
+                                );
+                                final formattedPhone = cleanPhone.length >= 10
+                                    ? cleanPhone.substring(
+                                        cleanPhone.length - 10,
+                                      )
+                                    : cleanPhone;
                                 final fullPhone =
                                     '$_selectedCountryCode$formattedPhone';
                                 final user = await AppwriteService()
@@ -454,12 +513,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                                     final last = _membersToAdd.last;
                                     last['id'] = user['userId'];
                                     last['name'] = user['name'] ?? last['name'];
-                                    _showInvite = false;
-                                  });
-                                } else {
-                                  setState(() {
-                                    _showInvite = true;
-                                    _invitePhone = fullPhone;
                                   });
                                 }
                               } catch (e) {
@@ -473,60 +526,100 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                   ),
                 ],
 
-                const SizedBox(height: 16),
-
-                // Added Members List
-                if (_membersToAdd.isNotEmpty) ...[
+                if (_searchController.text.isNotEmpty &&
+                    _searchResults.isEmpty) ...[
+                  const SizedBox(height: 12),
                   Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(8),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.1),
-                      ),
+                      color: Colors.orange.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withOpacity(0.1)),
                     ),
                     child: Column(
-                      children: _membersToAdd.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final m = entry.value;
+                      children: [
+                        Text(
+                          'No app users found for "${_searchController.text}"',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final text = _searchController.text.trim();
+                            final isPhone = RegExp(
+                              r'^\+?[0-9]{10,}$',
+                            ).hasMatch(text);
+                            final url = Uri.parse(
+                              isPhone
+                                  ? 'https://wa.me/$text?text=Hey! Join me on Tap It to track our shared expenses easily.'
+                                  : 'whatsapp://send?text=Hey! Join me on Tap It to track our shared expenses easily.',
+                            );
+                            if (await canLaunchUrl(url)) {
+                              await launchUrl(
+                                url,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.share, size: 16),
+                          label: const Text('Invite via WhatsApp'),
+                          style: TextButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+
+                if (_membersToAdd.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Added Members',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 130,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _membersToAdd.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final m = _membersToAdd[index];
                         final isAppUser =
                             m['id'] != null && m['id']!.isNotEmpty;
-                        return ListTile(
-                          dense: true,
-                          leading: CircleAvatar(
-                            backgroundColor: isAppUser
-                                ? Colors.deepPurple.shade100
-                                : Colors.grey.shade300,
-                            child: Text(
-                              m['name']![0].toUpperCase(),
-                              style: TextStyle(
-                                color: isAppUser
-                                    ? Colors.deepPurple
-                                    : Colors.grey,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            m['name']!,
-                            style: TextStyle(
-                              color: isAppUser
-                                  ? Theme.of(context).colorScheme.onSurface
-                                  : Colors.grey,
-                            ),
-                          ),
-                          subtitle: Text(m['phone']!),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close, size: 18),
-                            onPressed: () => _removeMember(index),
-                          ),
+                        return _buildMemberCard(
+                          name: m['name']!,
+                          phone: m['phone']!,
+                          id: m['id'] ?? '',
+                          isSelected: true,
+                          isAppUser: isAppUser,
+                          showInvite: true,
+                          onRemove: () => _removeMember(index),
                         );
-                      }).toList(),
+                      },
                     ),
                   ),
                   if (_hasNonAppMembers)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12, left: 4),
+                      padding: const EdgeInsets.only(top: 12, left: 4),
                       child: Row(
                         children: [
                           Icon(
@@ -559,43 +652,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     ),
                   ),
 
-                if (_showInvite)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          if (_invitePhone.isNotEmpty) {
-                            final url = Uri.parse(
-                              'https://wa.me/$_invitePhone?text=Hey! Join me on Tap It to track our shared expenses easily. Download it here: [Link]',
-                            );
-                            if (await canLaunchUrl(url)) {
-                              await launchUrl(
-                                url,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.share, size: 16),
-                        label: const Text('Invite via WhatsApp'),
-                        style: TextButton.styleFrom(
-                          backgroundColor: const Color(0xFF25D366),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
                 const SizedBox(height: 32),
 
-                // Actions
-                // Actions
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -625,6 +683,181 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberCard({
+    required String name,
+    required String phone,
+    required String id,
+    required bool isSelected,
+    required bool isAppUser,
+    required bool showInvite,
+    VoidCallback? onTap,
+    VoidCallback? onRemove,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 110,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.withOpacity(0.1),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: isAppUser
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                      : Colors.grey.shade100,
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: isAppUser
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (isSelected && onRemove == null)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).cardColor,
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 8,
+                      ),
+                    ),
+                  ),
+                if (onRemove != null)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: GestureDetector(
+                      onTap: onRemove,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).cardColor,
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              name,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (isAppUser)
+              Text(
+                'On Tap It',
+                style: GoogleFonts.inter(
+                  fontSize: 7,
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              )
+            else ...[
+              Text(
+                phone,
+                style: GoogleFonts.inter(fontSize: 7, color: Colors.grey),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (showInvite) ...[
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () async {
+                    final url = Uri.parse(
+                      'https://wa.me/$phone?text=Hey! Join me on Tap It to track our shared expenses easily.',
+                    );
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF25D366),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.share, size: 8, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Invite',
+                          style: GoogleFonts.inter(
+                            fontSize: 8,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ],
         ),
       ),
     );

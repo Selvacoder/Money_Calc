@@ -222,10 +222,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildToggleBtn('Personal', 0, _personalKey),
-                      _buildToggleBtn('Ledger', 1, _ledgerKey),
-                      _buildToggleBtn('Investment', 2, _investmentKey),
-                      _buildToggleBtn('Go Dutch', 3, _dutchKey), // NEW
+                      _buildToggleBtn('Tap Spend', 0, _personalKey),
+                      _buildToggleBtn('Tap Due', 1, _ledgerKey),
+                      _buildToggleBtn('Tap Invest', 2, _investmentKey),
+                      _buildToggleBtn('Split It', 3, _dutchKey),
                     ],
                   ),
                 ),

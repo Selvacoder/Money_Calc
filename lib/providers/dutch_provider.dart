@@ -231,6 +231,23 @@ class DutchProvider extends ChangeNotifier {
     return val.toString();
   }
 
+  /// Get the count of pending items (expenses + settlements) for a specific group
+  int getPendingCount(String groupId) {
+    final pendingExpenses = _globalExpenses
+        .where(
+          (e) => _safeId(e['groupId']) == groupId && e['status'] == 'pending',
+        )
+        .length;
+
+    final pendingSettlements = _globalSettlements
+        .where(
+          (s) => _safeId(s['groupId']) == groupId && s['status'] == 'pending',
+        )
+        .length;
+
+    return pendingExpenses + pendingSettlements;
+  }
+
   // Calculate Total Owed/Owe globally (across all groups) - Future implementation
 
   Future<void> fetchGroups() async {

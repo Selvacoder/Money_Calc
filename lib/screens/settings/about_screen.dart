@@ -18,7 +18,8 @@ class AboutScreen extends StatelessWidget {
             color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(
@@ -47,7 +48,7 @@ class AboutScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'MoneyCalc',
+              'Tap It',
               style: GoogleFonts.inter(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -59,7 +60,7 @@ class AboutScreen extends StatelessWidget {
               'Version 1.0.0 (Build 100)',
               style: GoogleFonts.inter(
                 fontSize: 14,
-                color: Colors.grey.shade500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
 
@@ -88,10 +89,12 @@ class AboutScreen extends StatelessWidget {
             const SizedBox(height: 48),
 
             Text(
-              '© 2026 MoneyCalc Inc.',
+              '© 2026 Tap It Inc.',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                color: Colors.grey.shade400,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withOpacity(0.5),
               ),
             ),
           ],
@@ -125,11 +128,11 @@ class AboutScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -137,7 +140,10 @@ class AboutScreen extends StatelessWidget {
       ),
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: Colors.grey.shade600),
+        leading: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         title: Text(
           title,
           style: GoogleFonts.inter(

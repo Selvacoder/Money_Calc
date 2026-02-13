@@ -27,8 +27,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
   String _selectedPayerId = '';
   String _splitType = 'equal'; // 'equal' or 'exact'
-  Map<String, bool> _involvedMembers = {};
-  Map<String, double> _exactAmounts = {};
+  final Map<String, bool> _involvedMembers = {};
+  final Map<String, double> _exactAmounts = {};
   bool _isSubmitting = false;
 
   @override
@@ -285,7 +285,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       ),
                     );
                   }
-                }).toList(),
+                }),
 
                 const SizedBox(height: 24),
                 SizedBox(

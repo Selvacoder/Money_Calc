@@ -43,7 +43,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
   // List of members to add: {id, name, phone}
   final List<Map<String, String>> _membersToAdd = [];
   String? _memberError;
-  String _selectedCountryCode = '+91';
+  final String _selectedCountryCode = '+91';
   final TextEditingController _searchController = TextEditingController();
   List<Contact> _contacts = [];
   bool _contactsLoaded = false;

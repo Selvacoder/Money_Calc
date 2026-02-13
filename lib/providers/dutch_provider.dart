@@ -10,7 +10,7 @@ class DutchProvider extends ChangeNotifier {
 
   List<Map<String, dynamic>> _groups = [];
   bool _isLoading = false;
-  String? _error = null;
+  String? _error;
   bool _isInit = true; // Flag for first build
 
   bool _hasMoreGroups = true;
@@ -868,17 +868,10 @@ class DutchProvider extends ChangeNotifier {
 
       if (success) {
         String payerName = 'Someone';
-        String receiverName = 'Someone';
         try {
           payerName =
               _currentGroupMemberProfiles.firstWhere(
                 (p) => p['userId'] == payerId,
-                orElse: () => {},
-              )['name'] ??
-              'Someone';
-          receiverName =
-              _currentGroupMemberProfiles.firstWhere(
-                (p) => p['userId'] == receiverId,
                 orElse: () => {},
               )['name'] ??
               'Someone';
@@ -1196,8 +1189,9 @@ class DutchProvider extends ChangeNotifier {
           // Find expense where this person owes the receiver
           for (var exp in _currentGroupExpenses) {
             final expPayerId = _safeId(exp['payerId']);
-            if (expPayerId != sReceiver)
+            if (expPayerId != sReceiver) {
               continue; // Settlement receiver must be expense payer
+            }
 
             final splitType = exp['splitType'];
             final splitDataRaw = exp['splitData'];
@@ -1414,10 +1408,5 @@ class DutchProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

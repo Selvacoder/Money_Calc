@@ -43,7 +43,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
   // Suggestion State
   String? _suggestionMessage;
-  String? _suggestionTarget; // 'ledger', 'investment', 'dutch'
 
   final List<String> iconOptions = [
     'star',
@@ -147,7 +146,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
   void _checkSuggestions() {
     final title = _titleController.text.toLowerCase();
-    String? categoryName = '';
+    String categoryName = '';
 
     // Get selected category name
     if (_selectedCategoryId != null) {
@@ -159,7 +158,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
     }
 
     String? message;
-    String? target;
 
     // Helper check
     bool matches(String text, List<String> keywords) {
@@ -188,24 +186,20 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
     // Check Title & Category
     if (matches(title, ledgerKeywords) ||
-        matches(categoryName!, ledgerKeywords)) {
+        matches(categoryName, ledgerKeywords)) {
       message = 'Tracking a loan? Use the Ledger feature for better tracking.';
-      target = 'ledger';
     } else if (matches(title, investmentKeywords) ||
         matches(categoryName, investmentKeywords)) {
       message =
           'Investments have their own dedicated section with AI analysis.';
-      target = 'investment';
     } else if (matches(title, dutchKeywords) ||
         matches(categoryName, dutchKeywords)) {
       message = 'Splitting bills? Try "Go Dutch" to manage group expenses.';
-      target = 'dutch';
     }
 
     if (message != _suggestionMessage) {
       setState(() {
         _suggestionMessage = message;
-        _suggestionTarget = target;
       });
     }
   }

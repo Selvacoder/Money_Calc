@@ -199,7 +199,7 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
                 ),
               )
             else
-              Container(
+              SizedBox(
                 height: banks.length > 5 ? 400 : null,
                 child: ListView.separated(
                   shrinkWrap: true,

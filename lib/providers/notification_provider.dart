@@ -42,9 +42,4 @@ class NotificationProvider extends ChangeNotifier {
       }
     }
   }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

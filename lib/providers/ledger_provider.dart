@@ -37,7 +37,7 @@ class LedgerProvider extends ChangeNotifier {
 
   String? _currentUserId;
   String? get currentUserId => _currentUserId;
-  Map<String, String> _userPhotos = {};
+  final Map<String, String> _userPhotos = {};
   Map<String, String> get userPhotos => _userPhotos;
 
   /// Returns a list of unique users the current user has interacted with who are on the app
@@ -718,10 +718,5 @@ class LedgerProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error fetching participant photos: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

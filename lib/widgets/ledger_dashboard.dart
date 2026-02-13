@@ -1015,8 +1015,9 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
       // Skip if hidden or soft-deleted
       if (hiddenPeople.contains(otherName) ||
-          softDeletedPeople.contains(otherName))
+          softDeletedPeople.contains(otherName)) {
         continue;
+      }
 
       // Grouping Key Logic
       String key;

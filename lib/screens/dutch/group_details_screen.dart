@@ -905,8 +905,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                       if (!peopleMatch) return false;
 
                       // Strict match on expense ID
-                      if (sExpId.isNotEmpty && sExpId == targetExpId)
+                      if (sExpId.isNotEmpty && sExpId == targetExpId) {
                         return true;
+                      }
 
                       // If settlement has NO expense ID, fall back to Amount match
                       if (sExpId.isEmpty) {

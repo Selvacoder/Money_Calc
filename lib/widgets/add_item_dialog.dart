@@ -795,7 +795,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Update failed: $error'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
@@ -803,9 +803,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       }
       try {
         await _handleNotification(widget.editingItem!.id, isUpdate: true);
-      } catch (e) {
-        print('Notification error (ignoring): $e');
-      }
+      } catch (e) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Updated ${_titleController.text}')),
@@ -816,9 +814,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
       if (newItem != null) {
         try {
           await _handleNotification(newItem.id, isUpdate: false);
-        } catch (e) {
-          print('Notification error (ignoring): $e');
-        }
+        } catch (e) {}
       }
     }
     if (mounted) Navigator.pop(context);

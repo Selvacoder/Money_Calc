@@ -21,17 +21,14 @@ class _DutchDashboardState extends State<DutchDashboard> {
     super.initState();
     Future.microtask(() {
       final provider = context.read<DutchProvider>();
-      print('DEBUG Dashboard: Fetching groups and global data...');
+
       provider.fetchGroups();
-      provider.fetchGlobalData().then((_) {
-        print('DEBUG Dashboard: Global data fetched');
-      });
+      provider.fetchGlobalData().then((_) {});
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    print('DEBUG DutchDashboard build: Re-rendering dashboard...');
     final provider = context.watch<DutchProvider>();
     final groups = provider.groups;
     final isLoading = provider.isLoading;
@@ -362,15 +359,11 @@ class _DutchDashboardState extends State<DutchDashboard> {
     DateTime? startDate;
     final now = DateTime.now();
 
-    print(
-      'DEBUG _buildCurrentShareCard: currentPage=$_currentPage, currentUserId=${provider.currentUserId}',
-    );
-
     switch (_currentPage) {
       case 0: // Overall
         title = 'Overall Share';
         share = provider.getGlobalUserShare();
-        print('DEBUG Overall Share called, result=$share');
+
         break;
       case 1: // Yearly
         title = 'Yearly Share';
@@ -522,7 +515,6 @@ class _DutchDashboardState extends State<DutchDashboard> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Successfully joined group!'),
-                                    backgroundColor: Colors.green,
                                   ),
                                 );
                               } else {
@@ -664,9 +656,13 @@ class _DutchDashboardState extends State<DutchDashboard> {
                                 );
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Failed to update group'),
-                                    backgroundColor: Colors.red,
+                                  SnackBar(
+                                    content: const Text(
+                                      'Failed to update group',
+                                    ),
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.error,
                                   ),
                                 );
                               }
@@ -716,9 +712,9 @@ class _DutchDashboardState extends State<DutchDashboard> {
                   );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Failed to delete group'),
-                      backgroundColor: Colors.red,
+                    SnackBar(
+                      content: const Text('Failed to delete group'),
+                      backgroundColor: Theme.of(context).colorScheme.error,
                     ),
                   );
                 }

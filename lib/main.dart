@@ -101,6 +101,14 @@ class MyApp extends StatelessWidget {
               ),
               useMaterial3: true,
               scaffoldBackgroundColor: Colors.white,
+              snackBarTheme: SnackBarThemeData(
+                backgroundColor: themeProvider.seedColor,
+                contentTextStyle: const TextStyle(color: Colors.white),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               appBarTheme: const AppBarTheme(
                 backgroundColor: Colors.white,
                 elevation: 0,
@@ -131,6 +139,14 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               scaffoldBackgroundColor: const Color(0xFF121212),
               cardColor: const Color(0xFF1E1E1E),
+              snackBarTheme: SnackBarThemeData(
+                backgroundColor: themeProvider.seedColor,
+                contentTextStyle: const TextStyle(color: Colors.white),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               appBarTheme: const AppBarTheme(
                 backgroundColor: Color(0xFF121212),
                 elevation: 0,
@@ -178,9 +194,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       await NotificationService().init();
       await NotificationService().requestPermissions();
-    } catch (e) {
-      debugPrint('Error initializing notifications: $e');
-    }
+    } catch (e) {}
 
     // Setup Notification Provider
     if (mounted) {

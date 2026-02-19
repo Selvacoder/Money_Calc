@@ -581,7 +581,10 @@ class _LedgerDueDateScreenState extends State<LedgerDueDateScreen> {
     } else {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open WhatsApp')),
+          SnackBar(
+            content: const Text('Could not open WhatsApp'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     }

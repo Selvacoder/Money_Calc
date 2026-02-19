@@ -226,10 +226,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                       // Notification to provider handled via callback below, which triggers optimistic update in Provider.
                       // No need for local setState here as we are watching the provider.
 
-                      print(
-                        'DEBUG: Settle Up Pressed. Amount: $amount, IsReceived: $isReceived',
-                      );
-
                       // NETWORK CALL - Run in background
                       final userProvider = context.read<UserProvider>();
                       final error = await widget.onAddTransaction(
@@ -241,7 +237,6 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         currentUserPhone: userProvider.user?.phone,
                         currentUserEmail: userProvider.user?.email,
                       );
-                      print('DEBUG: Settle Up Result: $error');
 
                       if (error != null) {
                         if (mounted) {
@@ -458,9 +453,12 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }
@@ -491,9 +489,12 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not open WhatsApp: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open WhatsApp: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }
@@ -1516,8 +1517,11 @@ class _PersonLedgerScreenState extends State<PersonLedgerScreen> {
                         } else {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Failed to update person'),
+                              SnackBar(
+                                content: const Text('Failed to update person'),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.error,
                               ),
                             );
                           }

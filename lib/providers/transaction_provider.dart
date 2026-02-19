@@ -82,32 +82,19 @@ class TransactionProvider extends ChangeNotifier {
       _quickItems = _itemBox.values.where((i) => i.frequency != null).toList();
       _quickItems.sort((a, b) => a.order.compareTo(b.order));
 
-      debugPrint(
-        'DEBUG: TransactionProvider - Cache loaded: ${_transactions.length} txs, ${_categories.length} cats, ${_quickItems.length} items',
-      );
       notifyListeners(); // Show cached data (potentially empty on fresh install)
 
       // 2. Ensure we have a user before network fetch
       final user = await _appwriteService.getCurrentUser();
       if (user == null) {
-        debugPrint(
-          'DEBUG: TransactionProvider - No user found, skipping network sync',
-        );
         _isLoading = false;
         notifyListeners();
         return;
       }
-      final userId = user['userId'];
-      debugPrint(
-        'DEBUG: TransactionProvider - Starting network sync for user: $userId',
-      );
 
       // 3. Fetch from Network
       // Transactions
       final transactionData = await _appwriteService.getTransactions();
-      debugPrint(
-        'DEBUG: TransactionProvider - Received ${transactionData.length} transactions from server',
-      );
 
       final networkTransactions = transactionData
           .map((data) => Transaction.fromJson(data))
@@ -147,9 +134,6 @@ class TransactionProvider extends ChangeNotifier {
         // Update Cache
         await _transactionBox.clear();
         await _transactionBox.putAll({for (var t in _transactions) t.id: t});
-        debugPrint(
-          'DEBUG: TransactionProvider - Cache updated with ${_transactions.length} items. HasMore: $_hasMore, LastId: $_lastId',
-        );
       } else {
         _hasMore = false;
         if (_transactions.isEmpty) {
@@ -163,45 +147,32 @@ class TransactionProvider extends ChangeNotifier {
       // Quick Items
       await _loadQuickItems();
     } catch (e) {
-      debugPrint('DEBUG: TransactionProvider - Error fetching data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
-      debugPrint(
-        'DEBUG: TransactionProvider - fetchData completed. Total txs: ${_transactions.length}',
-      );
     }
   }
 
   Future<void> _loadCategories() async {
     try {
       final categoryData = await _appwriteService.getCategories();
-      debugPrint(
-        'DEBUG: TransactionProvider - Received ${categoryData.length} categories from server',
-      );
 
       final networkCategories = categoryData
           .map((data) => Category.fromJson(data))
           .toList();
 
-      if (networkCategories.isNotEmpty || _categories.isEmpty) {
-        _categories = networkCategories;
-        // Update Cache
-        await _categoryBox.clear();
+      _categories = networkCategories;
+      // Update Cache
+      await _categoryBox.clear();
+      if (_categories.isNotEmpty) {
         await _categoryBox.putAll({for (var c in _categories) c.id: c});
-        debugPrint('DEBUG: TransactionProvider - Category cache updated');
       }
-    } catch (e) {
-      debugPrint('DEBUG: TransactionProvider - Error loading categories: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadQuickItems() async {
     try {
       final quickItemData = await _appwriteService.getQuickItems();
-      debugPrint(
-        'DEBUG: TransactionProvider - Received ${quickItemData.length} quick items from server',
-      );
 
       final networkItems = quickItemData.map((data) {
         final item = Item.fromJson(data);
@@ -228,18 +199,15 @@ class TransactionProvider extends ChangeNotifier {
         );
       }).toList();
 
-      if (networkItems.isNotEmpty || _quickItems.isEmpty) {
-        _quickItems = networkItems;
-        _quickItems.sort((a, b) => a.order.compareTo(b.order));
+      _quickItems = networkItems;
+      _quickItems.sort((a, b) => a.order.compareTo(b.order));
 
-        // Update Cache
-        await _itemBox.clear();
+      // Update Cache
+      await _itemBox.clear();
+      if (_quickItems.isNotEmpty) {
         await _itemBox.putAll({for (var i in _quickItems) i.id: i});
-        debugPrint('DEBUG: TransactionProvider - QuickItems cache updated');
       }
-    } catch (e) {
-      debugPrint('DEBUG: TransactionProvider - Error loading quick items: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> updateItemsOrder(List<Item> reorderedSubset) async {
@@ -307,9 +275,7 @@ class TransactionProvider extends ChangeNotifier {
       final itemData = await _appwriteService.getItems(categoryId);
       _items = itemData.map((data) => Item.fromJson(data)).toList();
       notifyListeners();
-    } catch (e) {
-      print('Error loading items: $e');
-    }
+    } catch (e) {}
   }
 
   Future<bool> addTransaction(
@@ -385,7 +351,6 @@ class TransactionProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('Add Transaction Error: $e');
       // Offline or Error
       // Keep the optimistic update in memory/cache?
       // If we want Offline-First, we keep it.
@@ -424,7 +389,7 @@ class TransactionProvider extends ChangeNotifier {
 
     if (!success) {
       // Failed to delete on server
-      print('Failed to delete transaction $id on server');
+
       // We do NOT revert locally to avoid "zombie" items.
       // User can resync if needed.
       return false;
@@ -456,7 +421,6 @@ class TransactionProvider extends ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print('Error adding item: $e');
       return null; // Return null instead of rethrowing
     }
   }
@@ -504,7 +468,6 @@ class TransactionProvider extends ChangeNotifier {
       final error = await _appwriteService.updateItem(id, data);
 
       if (error != null) {
-        print('Failed to update item $id on server: $error');
         // Revert is fine for UPDATE, but for DELETE we want it gone.
         // Keeping revert for update as it helps avoid state desync for editable fields.
         _quickItems[index] = oldItem;
@@ -521,7 +484,6 @@ class TransactionProvider extends ChangeNotifier {
       // Optimistic update is sufficient for this use case.
       return null;
     } catch (e) {
-      print('Error updating item: $e');
       return e.toString();
     }
   }
@@ -537,9 +499,7 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
 
     final success = await _appwriteService.deleteItem(id);
-    if (!success) {
-      print('Failed to delete item $id on server');
-    }
+    if (!success) {}
   }
 
   Future<Category?> addCategory(String name, String type, String icon) async {
@@ -560,7 +520,6 @@ class TransactionProvider extends ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print('Error adding category: $e');
       return null;
     }
   }
@@ -608,25 +567,7 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
 
     final success = await _appwriteService.deleteCategory(id);
-    if (!success) {
-      print('Failed to delete category $id on server');
-    }
-  }
-
-  Future<void> clearLocalData() async {
-    if (_isHiveInitialized) {
-      await _transactionBox.clear();
-      await _categoryBox.clear();
-      await _itemBox.clear();
-    }
-    _transactions = [];
-    _categories = [];
-    _items = [];
-    _quickItems = [];
-    notifyListeners();
-
-    // Refetch
-    await fetchData();
+    if (!success) {}
   }
 
   // Helper method for syncing ledger to wallet
@@ -699,10 +640,63 @@ class TransactionProvider extends ChangeNotifier {
         _hasMore = false;
       }
     } catch (e) {
-      print('Error loading more transactions: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> resetSpend({DateTime? startDate, DateTime? endDate}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _initHive();
+
+      // 1. Server-side deletion
+      await _appwriteService.deleteAllTransactions(
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // 2. Clear local data
+      if (startDate == null && endDate == null) {
+        if (_isHiveInitialized) {
+          await _transactionBox.clear();
+          await _categoryBox.clear();
+          await _itemBox.clear();
+        }
+        _transactions = [];
+        _categories = [];
+        _quickItems = [];
+        _items = [];
+      } else {
+        // Partial reset: Remove matching items from local list and Hive PROACTIVELY
+        final toRemove = _transactions.where((t) {
+          if (startDate != null && t.dateTime.isBefore(startDate)) return false;
+          if (endDate != null && t.dateTime.isAfter(endDate)) return false;
+          return true;
+        }).toList();
+
+        for (var t in toRemove) {
+          _transactions.remove(t);
+          if (_isHiveInitialized) {
+            await _transactionBox.delete(t.id);
+          }
+        }
+
+        // Refetch to sync any other changes
+        await fetchData();
+      }
+      notifyListeners();
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _isLoading = false;
+
+      notifyListeners();
+      rethrow;
     }
   }
 }

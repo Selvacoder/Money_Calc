@@ -61,10 +61,7 @@ class _CategoryScreenState extends State<CategoryScreen>
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          print('===== FAB CLICKED =====');
-          print('Current tab: ${_tabController.index}');
           _showCategoryDialog(context);
-          print('===== _showCategoryDialog called =====');
         },
         backgroundColor: colorScheme.primary,
         child: const Icon(Icons.add, color: Colors.white),
@@ -139,28 +136,17 @@ class _CategoryScreenState extends State<CategoryScreen>
   // Removed navigation to detail screen
 
   void _showCategoryDialog(BuildContext context, {Category? category}) {
-    print('===== INSIDE _showCategoryDialog =====');
-    print('Category: ${category?.name ?? "NEW"}');
-    print('InitialType: ${_tabController.index == 0 ? "expense" : "income"}');
-
     try {
-      print('===== CALLING showDialog =====');
       showDialog(
         context: context,
         builder: (context) {
-          print('===== BUILDER CALLED =====');
           return CategoryDialog(
             category: category,
             initialType: _tabController.index == 0 ? 'expense' : 'income',
           );
         },
       );
-      print('===== showDialog returned =====');
-    } catch (e, stack) {
-      print('===== ERROR IN showDialog =====');
-      print('Error: $e');
-      print('Stack: $stack');
-    }
+    } catch (e) {}
   }
 
   void _showAddItemDialog(

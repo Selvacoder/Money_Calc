@@ -70,9 +70,7 @@ class UserProfile {
         if (decoded is Map) {
           return Map<String, String>.from(decoded);
         }
-      } catch (e) {
-        print('Error parsing primaryPaymentMethods: $e');
-      }
+      } catch (e) {}
     }
     return {};
   }

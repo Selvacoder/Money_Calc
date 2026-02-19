@@ -74,7 +74,6 @@ class UserProvider extends ChangeNotifier {
     _isLoading = true;
     Future.microtask(() => notifyListeners());
 
-    debugPrint('DEBUG: checkAuthStatus started (forceCheck: $forceCheck)');
     try {
       await _initHive();
 
@@ -90,7 +89,7 @@ class UserProvider extends ChangeNotifier {
 
       // 2. Check Real Auth
       final isLoggedIn = await _authService.isLoggedIn(forceCheck: forceCheck);
-      debugPrint('DEBUG: checkAuthStatus - isLoggedIn: $isLoggedIn');
+
       if (isLoggedIn) {
         final userData = await _authService.getCurrentUser();
         if (userData != null) {
@@ -129,9 +128,6 @@ class UserProvider extends ChangeNotifier {
 
           _user = newUser;
           _isAuthenticated = true;
-          debugPrint(
-            'DEBUG: checkAuthStatus - Authenticated as ${newUser.email}',
-          );
 
           // Update Cache
           await _userBox.put('current_user', newUser);
@@ -155,9 +151,7 @@ class UserProvider extends ChangeNotifier {
         _user = null;
         if (_isHiveInitialized) await _userBox.clear();
       } else {
-        if (e is! AppwriteException || e.code != 401) {
-          print('Auth Check Error: $e');
-        }
+        if (e is! AppwriteException || e.code != 401) {}
         // On other errors (offline), trust cache.
         if (_user != null) {
           _isAuthenticated = true;
@@ -178,7 +172,7 @@ class UserProvider extends ChangeNotifier {
 
     try {
       final result = await _authService.login(email: email, password: password);
-      debugPrint('DEBUG: Login result: $result');
+
       if (result['success']) {
         // Essential delay for Web session propagation
         await Future.delayed(const Duration(milliseconds: 200));
@@ -187,7 +181,7 @@ class UserProvider extends ChangeNotifier {
       return result;
     } catch (e) {
       String msg = 'Login failed. Please try again.';
-      debugPrint('DEBUG: Login Error: $e');
+
       if (e is AppwriteException) {
         switch (e.type) {
           case 'user_invalid_credentials':
@@ -240,7 +234,7 @@ class UserProvider extends ChangeNotifier {
       return result;
     } catch (e) {
       String msg = 'Sign up failed. Please try again.';
-      debugPrint('DEBUG: Signup Error: $e');
+
       if (e is AppwriteException) {
         switch (e.type) {
           case 'user_already_exists':
@@ -284,7 +278,6 @@ class UserProvider extends ChangeNotifier {
         await _userBox.put('current_user', updatedProfile);
       }
     } catch (e) {
-      debugPrint('Error updating profile: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -315,7 +308,6 @@ class UserProvider extends ChangeNotifier {
       }
       return null;
     } catch (e) {
-      debugPrint('Error uploading photo provider: $e');
       return null;
     } finally {
       _isLoading = false;
@@ -361,7 +353,6 @@ class UserProvider extends ChangeNotifier {
       _isAuthenticated = false;
     } catch (e) {
       // Log error but proceed with local logout if Appwrite logout fails
-      print('Logout Error: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

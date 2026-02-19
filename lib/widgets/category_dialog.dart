@@ -260,7 +260,10 @@ class _CategoryDialogState extends State<CategoryDialog> {
     if (checkDuplicate) {
       if (provider.isCategoryNameDuplicate(name, _selectedType)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Category already exists')),
+          SnackBar(
+            content: const Text('Category already exists'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
         return;
       }
@@ -277,8 +280,9 @@ class _CategoryDialogState extends State<CategoryDialog> {
       if (newCategory == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to add category. Please try again.'),
+            SnackBar(
+              content: const Text('Failed to add category. Please try again.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }

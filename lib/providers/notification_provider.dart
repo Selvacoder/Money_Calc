@@ -14,7 +14,6 @@ class NotificationProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   Future<void> init(String userId) async {
-    debugPrint('DEBUG: NotificationProvider Initializing for userId: $userId');
     _userId = userId;
     await fetchNotifications();
   }
@@ -28,13 +27,11 @@ class NotificationProvider extends ChangeNotifier {
 
     try {
       final data = await _appwriteService.getNotifications(_userId!);
-      debugPrint('DEBUG: Fetched ${data.length} notifications for $_userId');
+
       _notifications = data;
       notifyListeners();
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        debugPrint('Error fetching notifications: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
     } finally {
       if (!silent) {
         _isLoading = false;

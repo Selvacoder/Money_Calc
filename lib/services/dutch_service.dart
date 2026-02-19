@@ -43,8 +43,6 @@ class DutchService {
         xasync: false, // Wait for result
       );
 
-      print('DEBUG: Function Status: ${execution.status}');
-
       // Try to parse the response regardless of status check
       try {
         final dynamic decoded = jsonDecode(execution.responseBody);
@@ -67,20 +65,10 @@ class DutchService {
         throw 'Function execution failed. Status: ${execution.status}, Body: ${execution.responseBody}';
       }
     } catch (e) {
-      print('CRITICAL: Cloud Function Failed. Error: $e');
-      if (e is AppwriteException) {
-        print(
-          'Appwrite Code: ${e.code}, Message: ${e.message}, Response: ${e.response}',
-        );
-      }
-
       // FALLBACK (If function not deployed): Create locally with creator-only permission?
       // Or just fail. Given strict security requirement, we should fail or warn.
       if (e.toString().contains('function_not_found') ||
           e.toString().contains('404')) {
-        print(
-          'Function not found. Trying local creation (Limited features)...',
-        );
         return _createGroupLocally(
           name: name,
           type: type,
@@ -144,7 +132,6 @@ class DutchService {
       data['id'] = doc.$id;
       return data;
     } catch (e) {
-      print('Error fetching group by ID: $e');
       return null;
     }
   }
@@ -183,7 +170,6 @@ class DutchService {
 
       return docs;
     } catch (e) {
-      print('Error fetching groups: $e');
       rethrow;
     }
   }
@@ -219,8 +205,6 @@ class DutchService {
         xasync: false,
       );
 
-      print('DEBUG: addExpense Status: ${execution.status}');
-
       try {
         final dynamic decoded = jsonDecode(execution.responseBody);
         if (decoded is Map && decoded.containsKey('\$id')) {
@@ -239,10 +223,7 @@ class DutchService {
         throw 'Function execution failed. Status: ${execution.status}, Body: ${execution.responseBody}';
       }
     } catch (e) {
-      print('CRITICAL: Cloud Function Failed (addExpense). Error: $e');
-      if (e is AppwriteException) {
-        print('Appwrite Code: ${e.code}, Message: ${e.message}');
-      }
+      if (e is AppwriteException) {}
       return null;
     }
   }
@@ -267,9 +248,7 @@ class DutchService {
         collectionId: AppwriteConfig.dutchExpensesCollectionId,
         queries: queries,
       );
-      print(
-        'DEBUG: Appwrite response documents count: ${result.documents.length}',
-      );
+
       final docs = result.documents.map((d) {
         final data = d.data;
         data['id'] = d.$id;
@@ -292,7 +271,6 @@ class DutchService {
       });
       return filtered;
     } catch (e) {
-      print('Error fetching expenses: $e');
       rethrow;
     }
   }
@@ -331,7 +309,6 @@ class DutchService {
 
       return docs;
     } catch (e) {
-      print('Error fetching all expenses: $e');
       rethrow;
     }
   }
@@ -370,7 +347,6 @@ class DutchService {
 
       return docs;
     } catch (e) {
-      print('Error fetching all settlements: $e');
       rethrow;
     }
   }
@@ -402,15 +378,12 @@ class DutchService {
         xasync: false,
       );
 
-      print('DEBUG: settleDebt Status: ${execution.status}');
-
       if (execution.status.toString().contains('completed')) {
         return true;
       } else {
         throw 'Function execution failed. Status: ${execution.status}, Body: ${execution.responseBody}';
       }
     } catch (e) {
-      print('CRITICAL: Cloud Function Failed (settleDebt). Error: $e');
       return false;
     }
   }
@@ -435,7 +408,7 @@ class DutchService {
         collectionId: AppwriteConfig.dutchSettlementsCollectionId,
         queries: queries,
       );
-      print('DEBUG: Appwrite Settlements count: ${result.documents.length}');
+
       final docs = result.documents.map((d) {
         final data = d.data;
         data['id'] = d.$id;
@@ -450,7 +423,6 @@ class DutchService {
       });
       return filtered;
     } catch (e) {
-      print('Error fetching settlements: $e');
       rethrow;
     }
   }
@@ -467,7 +439,6 @@ class DutchService {
       );
       return true;
     } catch (e) {
-      print('Error updating expense status: $e');
       return false;
     }
   }
@@ -485,8 +456,76 @@ class DutchService {
       );
       return true;
     } catch (e) {
-      print('Error updating settlement status: $e');
       return false;
     }
+  }
+
+  Future<void> deleteAllDutchData({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final user = await account.get();
+    final userId = user.$id;
+
+    final List<String> expenseQueries = [
+      Query.equal('payerId', [userId]),
+    ];
+    final List<String> settlementQueriesPayer = [
+      Query.equal('payerId', [userId]),
+    ];
+    final List<String> settlementQueriesReceiver = [
+      Query.equal('receiverId', [userId]),
+    ];
+
+    if (startDate != null) {
+      final startStr = startDate.toIso8601String();
+      expenseQueries.add(Query.greaterThanEqual('dateTime', startStr));
+      settlementQueriesPayer.add(Query.greaterThanEqual('dateTime', startStr));
+      settlementQueriesReceiver.add(
+        Query.greaterThanEqual('dateTime', startStr),
+      );
+    }
+    if (endDate != null) {
+      final endStr = endDate.toIso8601String();
+      expenseQueries.add(Query.lessThanEqual('dateTime', endStr));
+      settlementQueriesPayer.add(Query.lessThanEqual('dateTime', endStr));
+      settlementQueriesReceiver.add(Query.lessThanEqual('dateTime', endStr));
+    }
+
+    // 1. Delete expenses
+    await AppwriteService().batchDeleteDocuments(
+      collectionId: AppwriteConfig.dutchExpensesCollectionId,
+      queries: expenseQueries,
+    );
+
+    // 2. Delete settlements (as payer)
+    await AppwriteService().batchDeleteDocuments(
+      collectionId: AppwriteConfig.dutchSettlementsCollectionId,
+      queries: settlementQueriesPayer,
+    );
+
+    // 3. Delete settlements (as receiver)
+    await AppwriteService().batchDeleteDocuments(
+      collectionId: AppwriteConfig.dutchSettlementsCollectionId,
+      queries: settlementQueriesReceiver,
+    );
+
+    // 4. Delete Groups created by user within range
+    final List<String> groupQueries = [Query.equal('createdBy', userId)];
+    if (startDate != null) {
+      groupQueries.add(
+        Query.greaterThanEqual('\$createdAt', startDate.toIso8601String()),
+      );
+    }
+    if (endDate != null) {
+      groupQueries.add(
+        Query.lessThanEqual('\$createdAt', endDate.toIso8601String()),
+      );
+    }
+
+    await AppwriteService().batchDeleteDocuments(
+      collectionId: AppwriteConfig.dutchGroupsCollectionId,
+      queries: groupQueries,
+    );
   }
 }

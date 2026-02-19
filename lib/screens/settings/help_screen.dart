@@ -109,8 +109,13 @@ class HelpScreen extends StatelessWidget {
                       } else {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Could not launch email client.'),
+                            SnackBar(
+                              content: const Text(
+                                'Could not launch email client.',
+                              ),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
                             ),
                           );
                         }

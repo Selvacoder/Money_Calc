@@ -52,14 +52,9 @@ class AppwriteService {
               break;
             }
           }
-        } catch (e) {
-          debugPrint('Error accessing localStorage: $e');
-        }
+        } catch (e) {}
 
         if (!hasSession) {
-          debugPrint(
-            'DEBUG: isLoggedIn - No session keys found in localStorage. Keys: ${html.window.localStorage.keys.toList()}',
-          );
           return false;
         }
 
@@ -73,9 +68,7 @@ class AppwriteService {
     } catch (e) {
       // 401 means not logged in, other errors mean network/server issues
       // Silence 401 to avoid console noise for unauthenticated users
-      if (e is! AppwriteException || e.code != 401) {
-        debugPrint('isLoggedIn error: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
       return false;
     }
   }
@@ -219,9 +212,7 @@ class AppwriteService {
                   jsonDecode(pmData),
                 );
               }
-            } catch (e) {
-              print('Error parsing primary payment methods: $e');
-            }
+            } catch (e) {}
           }
 
           if (data['customPaymentMethods'] != null) {
@@ -230,9 +221,7 @@ class AppwriteService {
               if (cpmData is String && cpmData.isNotEmpty) {
                 customPaymentMethods = List<String>.from(jsonDecode(cpmData));
               }
-            } catch (e) {
-              print('Error parsing custom payment methods: $e');
-            }
+            } catch (e) {}
           }
         }
 
@@ -247,9 +236,7 @@ class AppwriteService {
           'primaryPaymentMethods': primaryPaymentMethods,
           'customPaymentMethods': customPaymentMethods,
         };
-      } catch (e) {
-        print('Error fetching profile doc: $e');
-      }
+      } catch (e) {}
 
       return {
         'userId': user.$id,
@@ -308,7 +295,6 @@ class AppwriteService {
 
       return true;
     } catch (e) {
-      print('Error updating profile: $e');
       return false;
     }
   }
@@ -342,11 +328,9 @@ class AppwriteService {
             fileId: userId,
           );
           return await uploadProfilePhoto(userId, filePath);
-        } catch (e2) {
-          print('Error deleting old photo: $e2');
-        }
+        } catch (e2) {}
       }
-      print('Error uploading photo: $e');
+
       return null;
     }
   }
@@ -383,7 +367,6 @@ class AppwriteService {
       }
       return false;
     } catch (e) {
-      print('Error updating user preferences: $e');
       return false;
     }
   }
@@ -420,9 +403,7 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        print('Error fetching transactions: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
       return [];
     }
   }
@@ -467,7 +448,6 @@ class AppwriteService {
       response['id'] = doc.$id;
       return response;
     } catch (e) {
-      print('Error creating transaction: $e');
       return null;
     }
   }
@@ -485,10 +465,6 @@ class AppwriteService {
       final senderPhone = transactionData['senderPhone'] ?? '';
       final receiverPhone = transactionData['receiverPhone'] ?? '';
 
-      print(
-        'DEBUG: Init - Sender: $senderId ($senderPhone), Receiver: $receiverId ($receiverPhone)',
-      );
-
       // Universal ID Resolution: Check both parties
       try {
         if (senderId.isEmpty &&
@@ -497,10 +473,7 @@ class AppwriteService {
           final sUser = await getUserByPhone(senderPhone);
           if (sUser != null) {
             senderId = sUser['userId'];
-            print('DEBUG: Resolved Sender ID: $senderId');
-          } else {
-            print('DEBUG: Failed to resolve Sender: $senderPhone');
-          }
+          } else {}
         }
 
         if (receiverId.isEmpty &&
@@ -509,14 +482,9 @@ class AppwriteService {
           final rUser = await getUserByPhone(receiverPhone);
           if (rUser != null) {
             receiverId = rUser['userId'];
-            print('DEBUG: Resolved Receiver ID: $receiverId');
-          } else {
-            print('DEBUG: Failed to resolve Receiver: $receiverPhone');
-          }
+          } else {}
         }
-      } catch (e) {
-        print('DEBUG: ID Resolution Failed (Non-fatal): $e');
-      }
+      } catch (e) {}
 
       // Determine Status & Permissions
       String status = transactionData['status'] ?? 'confirmed';
@@ -548,9 +516,6 @@ class AppwriteService {
           throw 'Cannot request money: Receiver not registered';
         }
       }
-      print(
-        'DEBUG: Final decision - Sender: $senderId, Receiver: $receiverId, Status: $status',
-      );
 
       final data = {
         'senderId': senderId,
@@ -567,9 +532,6 @@ class AppwriteService {
         'status': status,
       };
       try {
-        print(
-          'DEBUG: Creating Document. Data: $data, Perms: ${perms.toList()}',
-        );
         final doc = await databases.createDocument(
           databaseId: AppwriteConfig.databaseId,
           collectionId: AppwriteConfig.ledgerCollectionId,
@@ -583,9 +545,6 @@ class AppwriteService {
         return response;
       } on AppwriteException catch (e) {
         if (e.code == 401) {
-          print(
-            'DEBUG: Permission Error (401). Retrying with MINIMAL permissions (Me Only)...',
-          );
           // Retry with ONLY my permissions
           final minPerms = [
             Permission.read(Role.user(myId)),
@@ -611,23 +570,18 @@ class AppwriteService {
           }
 
           if (targetId != null && targetId.isNotEmpty) {
-            shareLedgerTransaction(doc.$id, targetId)
-                .then((_) {
-                  print('DEBUG: Triggered share function for ${doc.$id}');
-                })
-                .catchError((e) {
-                  print('DEBUG: Share function failed: $e');
-                });
+            shareLedgerTransaction(
+              doc.$id,
+              targetId,
+            ).then((_) {}).catchError((e) {});
           }
           return response;
         }
         rethrow;
       } catch (e) {
-        print('DEBUG: Generic Error in createDocument: $e');
         rethrow;
       }
     } catch (e) {
-      print('Error creating ledger transaction: $e');
       rethrow;
     }
   }
@@ -637,11 +591,8 @@ class AppwriteService {
     String transactionId,
     String receiverId,
   ) async {
-    print(
-      'DEBUG: shareLedgerTransaction called. TxID: $transactionId, Receiver: $receiverId',
-    );
     try {
-      final execution = await functions.createExecution(
+      await functions.createExecution(
         functionId: AppwriteConfig.shareTransactionFunctionId,
         body: jsonEncode({
           'transactionId': transactionId,
@@ -650,13 +601,7 @@ class AppwriteService {
           'collectionId': AppwriteConfig.ledgerCollectionId,
         }),
       );
-      print(
-        'DEBUG: Function Execution Triggered. Status: ${execution.status}, ID: ${execution.$id}',
-      );
-      print('DEBUG: Function Response Body: ${execution.responseBody}');
-    } catch (e) {
-      print('DEBUG: Error calling share function: $e');
-    }
+    } catch (e) {}
   }
 
   Future<bool> updateLedgerTransactionStatus(String id, String status) async {
@@ -669,7 +614,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error updating ledger status: $e');
       return false;
     }
   }
@@ -693,7 +637,6 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching profiles by IDs: $e');
       return [];
     }
   }
@@ -726,7 +669,6 @@ class AppwriteService {
       }
       return null;
     } catch (e) {
-      print('Error finding user by phone: $e');
       return null;
     }
   }
@@ -759,7 +701,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting transaction: $e');
       return false;
     }
   }
@@ -769,8 +710,6 @@ class AppwriteService {
   // Join Group via Invite Code
   Future<bool> joinGroup(String inviteCode, String userId) async {
     try {
-      print('DEBUG: Attempting to join group with code: "$inviteCode"');
-
       // Use Cloud Function for secure join
       if (AppwriteConfig.joinGroupFunctionId.isNotEmpty) {
         final execution = await functions.createExecution(
@@ -783,9 +722,6 @@ class AppwriteService {
           }),
           xasync: false,
         );
-
-        print('DEBUG: Function Execution Status: ${execution.status}');
-        print('DEBUG: Function Response: ${execution.responseBody}');
 
         if (execution.status.toString().contains('completed')) {
           final response = jsonDecode(execution.responseBody);
@@ -806,7 +742,6 @@ class AppwriteService {
         throw 'Join Function not configured. Please deploy function and update ID.';
       }
     } catch (e) {
-      print('Error joining group: $e');
       if (e is AppwriteException) {
         throw e.message ?? 'Failed to join group';
       }
@@ -829,7 +764,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error updating group: $e');
       if (e is AppwriteException) {
         throw e.message ?? 'Failed to update group';
       }
@@ -847,7 +781,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting group: $e');
       if (e is AppwriteException) {
         throw e.message ?? 'Failed to delete group';
       }
@@ -870,9 +803,7 @@ class AppwriteService {
         documentId: categoryId,
         data: {'usageCount': currentUsage + 1},
       );
-    } catch (e) {
-      print('Error incrementing category usage: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> incrementItemUsage(String itemId) async {
@@ -889,9 +820,7 @@ class AppwriteService {
         documentId: itemId,
         data: {'usageCount': currentUsage + 1},
       );
-    } catch (e) {
-      print('Error incrementing item usage: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> decrementCategoryUsage(String categoryId) async {
@@ -910,9 +839,7 @@ class AppwriteService {
           data: {'usageCount': currentUsage - 1},
         );
       }
-    } catch (e) {
-      print('Error decrementing category usage: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> decrementItemUsage(String itemId) async {
@@ -931,9 +858,7 @@ class AppwriteService {
           data: {'usageCount': currentUsage - 1},
         );
       }
-    } catch (e) {
-      print('Error decrementing item usage: $e');
-    }
+    } catch (e) {}
   }
 
   // --- CATEGORIES & ITEMS ---
@@ -959,7 +884,6 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching categories: $e');
       return [];
     }
   }
@@ -992,7 +916,6 @@ class AppwriteService {
       response['id'] = doc.$id;
       return response;
     } catch (e) {
-      print('Error creating category: $e');
       return null;
     }
   }
@@ -1010,7 +933,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error updating category: $e');
       return false;
     }
   }
@@ -1033,7 +955,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting category: $e');
       return false;
     }
   }
@@ -1060,7 +981,6 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching quick items: $e');
       return [];
     }
   }
@@ -1087,7 +1007,6 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error fetching items: $e');
       return [];
     }
   }
@@ -1123,7 +1042,6 @@ class AppwriteService {
       response['id'] = doc.$id;
       return response;
     } catch (e) {
-      print('Error creating item: $e');
       rethrow; // Rethrow to let UI handle the error
     }
   }
@@ -1138,7 +1056,6 @@ class AppwriteService {
       );
       return null; // Success
     } catch (e) {
-      print('Error updating item: $e');
       if (e is AppwriteException) {
         return e.message;
       }
@@ -1155,7 +1072,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting item: $e');
       return false;
     }
   }
@@ -1194,7 +1110,6 @@ class AppwriteService {
         ],
       );
     } catch (e) {
-      print('Error creating profile: $e');
       rethrow; // Propagate error so signUp knows profile failed
     }
   }
@@ -1215,7 +1130,6 @@ class AppwriteService {
 
       return result.documents.map((doc) => doc.data).toList();
     } catch (e) {
-      print('Error searching contacts: $e');
       return [];
     }
   }
@@ -1336,7 +1250,6 @@ class AppwriteService {
 
       return allTransactions;
     } catch (e) {
-      print('Error fetching ledger transactions: $e');
       return null; // Return null on error to distinguish from empty list
     }
   }
@@ -1352,7 +1265,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting ledger transaction: $e');
       return false;
     }
   }
@@ -1467,7 +1379,6 @@ class AppwriteService {
       }
       return true;
     } catch (e) {
-      print('Error updating ledger person: $e');
       return false;
     }
   }
@@ -1523,7 +1434,6 @@ class AppwriteService {
       }
       return true;
     } catch (e) {
-      print('Error deleting ledger person: $e');
       return false;
     }
   }
@@ -1570,9 +1480,7 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        print('Error fetching investments: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
       return [];
     }
   }
@@ -1590,6 +1498,8 @@ class AppwriteService {
         'currentAmount': data['currentAmount'] ?? 0.0,
         'quantity': data['quantity'] ?? 0.0,
         'lastUpdated': DateTime.now().toIso8601String(),
+        'createdAt': DateTime.now()
+            .toIso8601String(), // Custom field for easier querying
       };
 
       final doc = await databases.createDocument(
@@ -1607,7 +1517,6 @@ class AppwriteService {
       response['id'] = doc.$id;
       return response;
     } catch (e) {
-      print('Error creating investment: $e');
       return null;
     }
   }
@@ -1627,7 +1536,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error updating investment: $e');
       return false;
     }
   }
@@ -1643,7 +1551,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting investment: $e');
       return false;
     }
   }
@@ -1681,9 +1588,7 @@ class AppwriteService {
       if (e is AppwriteException && e.code == 401) {
         _skipInvestmentFetch =
             true; // Guard against future attempts this session
-      } else {
-        debugPrint('Error fetching investment transactions: $e');
-      }
+      } else {}
       return [];
     }
   }
@@ -1719,7 +1624,6 @@ class AppwriteService {
       response['id'] = doc.$id;
       return response;
     } catch (e) {
-      print('Error creating investment transaction: $e');
       return null;
     }
   }
@@ -1733,7 +1637,6 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error deleting investment transaction: $e');
       return false;
     }
   }
@@ -1759,9 +1662,7 @@ class AppwriteService {
         return data;
       }).toList();
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        print('Error fetching notifications: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
       return [];
     }
   }
@@ -1790,8 +1691,192 @@ class AppwriteService {
       );
       return true;
     } catch (e) {
-      print('Error creating notification: $e');
       return false;
+    }
+  }
+
+  // --- DATA CLEANUP ---
+
+  Future<void> batchDeleteDocuments({
+    required String collectionId,
+    required List<String> queries,
+  }) async {
+    try {
+      bool hasMore = true;
+      while (hasMore) {
+        final result = await databases.listDocuments(
+          databaseId: AppwriteConfig.databaseId,
+          collectionId: collectionId,
+          queries: [
+            ...queries,
+            Query.limit(100), // Delete in chunks
+          ],
+        );
+
+        if (result.documents.isEmpty) {
+          hasMore = false;
+          break;
+        }
+
+        for (var doc in result.documents) {
+          try {
+            await databases.deleteDocument(
+              databaseId: AppwriteConfig.databaseId,
+              collectionId: collectionId,
+              documentId: doc.$id,
+            );
+          } catch (e) {
+            // Log and continue - don't let one 401 crash the whole batch
+          }
+        }
+
+        // Small delay to prevent rate limiting
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAllTransactions({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final user = await account.get();
+      final userId = user.$id;
+
+      // 1. Transactions Query (dateTime)
+      final List<String> txQueries = [
+        Query.equal('userId', [userId]),
+      ];
+      if (startDate != null) {
+        txQueries.add(
+          Query.greaterThanEqual('dateTime', startDate.toIso8601String()),
+        );
+      }
+      if (endDate != null) {
+        txQueries.add(
+          Query.lessThanEqual('dateTime', endDate.toIso8601String()),
+        );
+      }
+
+      // 2. Metadata Query ($createdAt)
+      final List<String> metaQueries = [
+        Query.equal('userId', [userId]),
+      ];
+      if (startDate != null) {
+        metaQueries.add(
+          Query.greaterThanEqual('\$createdAt', startDate.toIso8601String()),
+        );
+      }
+      if (endDate != null) {
+        metaQueries.add(
+          Query.lessThanEqual('\$createdAt', endDate.toIso8601String()),
+        );
+      }
+
+      await batchDeleteDocuments(
+        collectionId: AppwriteConfig.transactionsCollectionId,
+        queries: txQueries,
+      );
+      await batchDeleteDocuments(
+        collectionId: AppwriteConfig.categoriesCollectionId,
+        queries: metaQueries,
+      );
+      await batchDeleteDocuments(
+        collectionId: AppwriteConfig.itemsCollectionId,
+        queries: metaQueries,
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAllLedgerTransactions({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final user = await account.get();
+    final userId = user.$id;
+    final List<String> baseQueriesSender = [
+      Query.equal('senderId', [userId]),
+    ];
+    final List<String> baseQueriesReceiver = [
+      Query.equal('receiverId', [userId]),
+    ];
+
+    if (startDate != null) {
+      baseQueriesSender.add(
+        Query.greaterThanEqual('dateTime', startDate.toIso8601String()),
+      );
+      baseQueriesReceiver.add(
+        Query.greaterThanEqual('dateTime', startDate.toIso8601String()),
+      );
+    }
+    if (endDate != null) {
+      baseQueriesSender.add(
+        Query.lessThanEqual('dateTime', endDate.toIso8601String()),
+      );
+      baseQueriesReceiver.add(
+        Query.lessThanEqual('dateTime', endDate.toIso8601String()),
+      );
+    }
+
+    await batchDeleteDocuments(
+      collectionId: AppwriteConfig.ledgerCollectionId,
+      queries: baseQueriesSender,
+    );
+    await batchDeleteDocuments(
+      collectionId: AppwriteConfig.ledgerCollectionId,
+      queries: baseQueriesReceiver,
+    );
+  }
+
+  Future<void> deleteAllInvestments({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final user = await account.get();
+      final List<String> queries = [
+        Query.equal('userId', [user.$id]),
+      ];
+
+      if (startDate != null) {
+        queries.add(
+          Query.greaterThanEqual('dateTime', startDate.toIso8601String()),
+        );
+      }
+      if (endDate != null) {
+        queries.add(Query.lessThanEqual('dateTime', endDate.toIso8601String()));
+      }
+
+      // Delete transactions within range
+      await batchDeleteDocuments(
+        collectionId: AppwriteConfig.investmentTransactionsCollectionId,
+        queries: queries,
+      );
+
+      // Also delete the investment records themselves within the range
+      final List<String> invQueries = [Query.equal('userId', user.$id)];
+      if (startDate != null) {
+        invQueries.add(
+          Query.greaterThanEqual('lastUpdated', startDate.toIso8601String()),
+        );
+      }
+      if (endDate != null) {
+        invQueries.add(
+          Query.lessThanEqual('lastUpdated', endDate.toIso8601String()),
+        );
+      }
+
+      await batchDeleteDocuments(
+        collectionId: AppwriteConfig.investmentsCollectionId,
+        queries: invQueries,
+      );
+    } catch (e) {
+      rethrow;
     }
   }
 }

@@ -77,7 +77,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } on PlatformException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Authentication error: ${e.message}')),
+          SnackBar(
+            content: Text('Authentication error: ${e.message}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     }
@@ -103,16 +106,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (mounted) {
           try {
-            debugPrint(
-              'DEBUG: HomeScreen - Triggering initial dashboard fetch',
-            );
             context.read<TransactionProvider>().fetchData();
             context.read<LedgerProvider>().fetchLedgerTransactions();
             context.read<InvestmentProvider>().fetchInvestments();
             context.read<DutchProvider>().fetchGlobalData();
-          } catch (e) {
-            debugPrint('Error during initial dashboard fetch: $e');
-          }
+          } catch (e) {}
         }
       }
     });

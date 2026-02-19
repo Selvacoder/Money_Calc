@@ -17,9 +17,7 @@ class SoundService {
       await _player.setVolume(1.0);
       await _player.play(AssetSource('sounds/$soundName'));
     } catch (e) {
-      if (kDebugMode) {
-        print('Error playing sound $soundName: $e');
-      }
+      if (kDebugMode) {}
     }
   }
 }

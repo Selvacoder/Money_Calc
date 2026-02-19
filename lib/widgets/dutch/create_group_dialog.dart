@@ -72,9 +72,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
             _contactsLoaded = true;
           });
         }
-      } catch (e) {
-        debugPrint('Error loading contacts: $e');
-      }
+      } catch (e) {}
     }
   }
 
@@ -127,15 +125,19 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
               content: Text(
                 dutchProvider.error ?? 'Unknown error creating group',
               ),
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }
@@ -339,9 +341,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                             }
                           });
                         }
-                      } catch (e) {
-                        debugPrint('Error in remote search: $e');
-                      }
+                      } catch (e) {}
                     }
                   },
                   decoration: InputDecoration(
@@ -515,9 +515,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                                     last['name'] = user['name'] ?? last['name'];
                                   });
                                 }
-                              } catch (e) {
-                                debugPrint('Error checking registration: $e');
-                              }
+                              } catch (e) {}
                             }
                           },
                         );

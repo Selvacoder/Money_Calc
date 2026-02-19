@@ -773,9 +773,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           });
         });
       }
-    } catch (e) {
-      print('Error parsing split data in dialog: $e');
-    }
+    } catch (e) {}
 
     showModalBottomSheet(
       context: context,
@@ -1326,13 +1324,21 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                       ? 'Settlement recorded! Waiting for approval.'
                                       : 'Failed: ${provider.error}',
                                 ),
+                                backgroundColor: provider.error == null
+                                    ? null
+                                    : Theme.of(context).colorScheme.error,
                               ),
                             );
                           }
                         } catch (e) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
+                              SnackBar(
+                                content: Text('Error: $e'),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.error,
+                              ),
                             );
                             setState(() => isSubmitting = false);
                           }

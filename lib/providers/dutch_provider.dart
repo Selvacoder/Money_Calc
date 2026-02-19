@@ -174,9 +174,7 @@ class DutchProvider extends ChangeNotifier {
             }
           });
         }
-      } catch (e) {
-        print('Error parsing splitData in getMemberStats: $e');
-      }
+      } catch (e) {}
     }
 
     // Process settlements to adjust netPaid
@@ -288,7 +286,6 @@ class DutchProvider extends ChangeNotifier {
         _hasMoreGroups = false;
       }
     } catch (e) {
-      print('Error loading more groups: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -322,21 +319,22 @@ class DutchProvider extends ChangeNotifier {
       final account = AppwriteService().account;
       final user = await account.get();
       _currentUserId = user.$id;
-      print('DEBUG fetchGlobalData: Set currentUserId=$_currentUserId');
 
       final results = await Future.wait([
         _service.getAllExpenses(),
         _service.getAllSettlements(),
       ]);
       _globalExpenses = results[0];
+      final List<Map<String, dynamic>> allSettlements = results[1];
+
       if (_globalExpenses.isNotEmpty) {
         _lastExpenseId = _safeId(_globalExpenses.last);
         _hasMoreExpenses = _globalExpenses.length >= 25;
       } else {
+        _globalExpenses = [];
         _hasMoreExpenses = false;
       }
 
-      final List<Map<String, dynamic>> allSettlements = results[1];
       if (allSettlements.isNotEmpty) {
         _lastSettlementId = _safeId(allSettlements.last);
         _hasMoreSettlements = allSettlements.length >= 25;
@@ -345,18 +343,19 @@ class DutchProvider extends ChangeNotifier {
       }
 
       _mergeSettlements(allSettlements: allSettlements);
+
+      // If server returned nothing, ensure local state is cleared
+      if (_globalExpenses.isEmpty && allSettlements.isEmpty) {
+        _globalSettlements = [];
+        _globalBalances = {};
+      }
+
       _calculateGlobalBalances();
 
       // Fetch profiles for all users in global balances
       await _fetchGlobalMemberProfiles();
-
-      print(
-        'DEBUG fetchGlobalData: Loaded ${_globalExpenses.length} expenses, ${_globalSettlements.length} settlements',
-      );
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        print('Error fetching global dutch data: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
     } finally {
       _isLoading = false;
       if (_isInit) {
@@ -383,14 +382,10 @@ class DutchProvider extends ChangeNotifier {
         _globalMemberProfiles = await AppwriteService().getProfilesByIds(
           userIds.toList(),
         );
-        print(
-          'DEBUG: Fetched ${_globalMemberProfiles.length} global member profiles',
-        );
       } else {
         _globalMemberProfiles = [];
       }
     } catch (e) {
-      print('Error fetching global member profiles: $e');
       _globalMemberProfiles = [];
     }
   }
@@ -425,9 +420,7 @@ class DutchProvider extends ChangeNotifier {
           for (var uid in beneficiaries) {
             balancesMap[uid] = (balancesMap[uid] ?? 0) - perPerson;
           }
-        } catch (e) {
-          print('Error parsing splitData (equal): $e');
-        }
+        } catch (e) {}
       } else if (splitType == 'exact') {
         // splitData is a JSON map of {userId: amount}
         try {
@@ -436,9 +429,7 @@ class DutchProvider extends ChangeNotifier {
             balancesMap[uid] =
                 (balancesMap[uid] ?? 0) - (val as num).toDouble();
           });
-        } catch (e) {
-          print('Error parsing splitData (exact): $e');
-        }
+        } catch (e) {}
       }
     }
 
@@ -493,7 +484,6 @@ class DutchProvider extends ChangeNotifier {
   }
 
   Future<void> selectGroup(String groupId) async {
-    print('DEBUG: Provider selecting group: $groupId');
     _currentGroupId = groupId;
     _currentGroupExpenses = [];
     _currentGroupSettlements = [];
@@ -507,15 +497,12 @@ class DutchProvider extends ChangeNotifier {
         final user = await AppwriteService().account.get();
         _currentUserId = user.$id;
       }
-      print('DEBUG: Fetching expenses for Group: $groupId');
+
       final results = await Future.wait([
         _service.getGroupExpenses(groupId),
         _service.getGroupSettlements(groupId),
       ]);
 
-      print(
-        'DEBUG: Found ${results[0].length} expenses and ${results[1].length} settlements',
-      );
       _currentGroupExpenses = results[0];
       if (_currentGroupExpenses.isNotEmpty) {
         _lastGroupExpenseId = _safeId(_currentGroupExpenses.last);
@@ -563,7 +550,6 @@ class DutchProvider extends ChangeNotifier {
       // Auto-check if any pending expenses should be marked as completed
       _checkPendingExpensesForCompletion();
     } catch (e) {
-      print('Error fetching group details: $e');
       _error = e.toString();
     } finally {
       _isLoading = false;
@@ -588,7 +574,6 @@ class DutchProvider extends ChangeNotifier {
         _hasMoreExpenses = false;
       }
     } catch (e) {
-      print('Error loading more global expenses: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -613,7 +598,6 @@ class DutchProvider extends ChangeNotifier {
         _hasMoreSettlements = false;
       }
     } catch (e) {
-      print('Error loading more global settlements: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -645,7 +629,6 @@ class DutchProvider extends ChangeNotifier {
         _hasMoreGroupExpenses = false;
       }
     } catch (e) {
-      print('Error loading more group expenses: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -671,7 +654,6 @@ class DutchProvider extends ChangeNotifier {
         _hasMoreGroupSettlements = false;
       }
     } catch (e) {
-      print('Error loading more group settlements: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -800,9 +782,6 @@ class DutchProvider extends ChangeNotifier {
       }
     }
 
-    print(
-      'DEBUG getGlobalUserShare: totalPaid=$totalPaid, received=$settlementsReceived, paid=$settlementsPaid, expenses=${_globalExpenses.length}, settlements=${_globalSettlements.length}',
-    );
     return totalPaid - settlementsReceived + settlementsPaid;
   }
 
@@ -924,9 +903,6 @@ class DutchProvider extends ChangeNotifier {
             final k =
                 '${_safeId(optExpId)}_${_safeId(payerId)}_${_safeId(receiverId)}';
 
-            debugPrint(
-              'DEBUG: Server confirmed settlement for $k, clearing optimistic state',
-            );
             // PATCH: If server missed the expenseId, backfill it from our local knowledge
             // This ensures UI links it correctly (Green Tick)
             if (realExpId.isEmpty && optExpId.isNotEmpty) {
@@ -1179,9 +1155,6 @@ class DutchProvider extends ChangeNotifier {
 
         // FALLBACK: If expenseId is missing, try to find the expense by matching settlement details
         if (expenseId.isEmpty && settlement != null) {
-          print(
-            'DEBUG: Settlement missing expenseId, searching for matching expense',
-          );
           final sPayer = _safeId(settlement['payerId']);
           final sReceiver = _safeId(settlement['receiverId']);
           final sAmount = (settlement['amount'] as num?)?.toDouble() ?? 0.0;
@@ -1205,9 +1178,7 @@ class DutchProvider extends ChangeNotifier {
                 if (perPerson.toStringAsFixed(2) ==
                     sAmount.toStringAsFixed(2)) {
                   expenseId = _safeId(exp['id']);
-                  print(
-                    'DEBUG: Found matching expense via equal split: $expenseId',
-                  );
+
                   break;
                 }
               } else if (splitType == 'exact') {
@@ -1217,25 +1188,17 @@ class DutchProvider extends ChangeNotifier {
                     (share as num).toDouble().toStringAsFixed(2) ==
                         sAmount.toStringAsFixed(2)) {
                   expenseId = _safeId(exp['id']);
-                  print(
-                    'DEBUG: Found matching expense via exact split: $expenseId',
-                  );
+
                   break;
                 }
               }
-            } catch (e) {
-              print('DEBUG: Error parsing expense split data: $e');
-            }
+            } catch (e) {}
           }
         }
 
         if (expenseId.isNotEmpty) {
           _checkAndCompleteExpense(expenseId);
-        } else {
-          print(
-            'DEBUG: Could not determine expenseId for settlement ${settlement?['id']}',
-          );
-        }
+        } else {}
       }
     } catch (e) {
       _error = e.toString();
@@ -1293,12 +1256,6 @@ class DutchProvider extends ChangeNotifier {
       }
 
       bool allPaid = true;
-      print('DEBUG: Checking expense $expenseId for auto-completion');
-      print('DEBUG: Expected payers: $expectedPayers');
-      print('DEBUG: Share amounts: $shareAmounts');
-      print(
-        'DEBUG: Current settlements count: ${_currentGroupSettlements.length}',
-      );
 
       for (var epId in expectedPayers) {
         final expectedAmount = shareAmounts[epId] ?? 0.0;
@@ -1317,7 +1274,6 @@ class DutchProvider extends ChangeNotifier {
 
           // Strict expenseId match
           if (sExpId.isNotEmpty && sExpId == _safeId(expenseId)) {
-            print('DEBUG: Found settlement for $epId via expenseId match');
             return true;
           }
 
@@ -1326,9 +1282,6 @@ class DutchProvider extends ChangeNotifier {
             final sAmount = (s['amount'] as num).toDouble().toStringAsFixed(2);
             final targetAmount = expectedAmount.toStringAsFixed(2);
             if (sAmount == targetAmount) {
-              print(
-                'DEBUG: Found settlement for $epId via amount match ($targetAmount)',
-              );
               return true;
             }
           }
@@ -1337,23 +1290,17 @@ class DutchProvider extends ChangeNotifier {
         });
 
         if (!settled) {
-          print(
-            'DEBUG: Payer $epId has NOT settled (expected: $expectedAmount)',
-          );
           allPaid = false;
           break;
         }
       }
 
       if (allPaid && expectedPayers.isNotEmpty) {
-        print(
-          'DEBUG: Auto-completing expense $expenseId - All participants paid',
-        );
         final success = await _service.updateExpenseStatus(
           expenseId,
           'completed',
         );
-        print('DEBUG: Update expense status result: $success');
+
         if (success) {
           // Update current group expenses
           _currentGroupExpenses[expenseIndex]['status'] = 'completed';
@@ -1366,23 +1313,10 @@ class DutchProvider extends ChangeNotifier {
             _globalExpenses[globalIndex]['status'] = 'completed';
           }
 
-          print(
-            'DEBUG: Successfully marked expense $expenseId as completed in database and local state',
-          );
           notifyListeners();
-        } else {
-          print(
-            'ERROR: Failed to update expense status in database for $expenseId',
-          );
-        }
-      } else {
-        print(
-          'DEBUG: Not all participants have paid yet for expense $expenseId',
-        );
-      }
-    } catch (e) {
-      print('Error auto-completing expense: $e');
-    }
+        } else {}
+      } else {}
+    } catch (e) {}
   }
 
   Future<void> rejectSettlement(String settlementId) async {
@@ -1404,6 +1338,93 @@ class DutchProvider extends ChangeNotifier {
       }
     } catch (e) {
       _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetSplit({DateTime? startDate, DateTime? endDate}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Server-side deletion
+      await _service.deleteAllDutchData(startDate: startDate, endDate: endDate);
+
+      // 2. Clear local data
+      if (startDate == null && endDate == null) {
+        _globalExpenses = [];
+        _globalSettlements = [];
+        _globalBalances = {};
+        _groups = [];
+        _currentGroupId = null;
+        _currentGroupExpenses = [];
+        _currentGroupSettlements = [];
+        _groupBalances = {};
+      } else {
+        // Partial reset: Remove matching items from local global lists PROACTIVELY
+        final startThreshold = startDate ?? DateTime(1970);
+        final endThreshold = endDate ?? DateTime(2100);
+
+        _globalExpenses.removeWhere((e) {
+          final dtStr = e['dateTime'] ?? e['\$createdAt'];
+          if (dtStr == null) return false;
+          final dt = DateTime.parse(dtStr);
+          return dt.isAfter(
+                startThreshold.subtract(const Duration(seconds: 1)),
+              ) &&
+              dt.isBefore(endThreshold.add(const Duration(seconds: 1)));
+        });
+
+        _globalSettlements.removeWhere((s) {
+          final dtStr = s['dateTime'] ?? s['\$createdAt'];
+          if (dtStr == null) return false;
+          final dt = DateTime.parse(dtStr);
+          return dt.isAfter(
+                startThreshold.subtract(const Duration(seconds: 1)),
+              ) &&
+              dt.isBefore(endThreshold.add(const Duration(seconds: 1)));
+        });
+
+        // Prune Groups
+        _groups.removeWhere((g) {
+          final dtStr = g['\$createdAt'];
+          if (dtStr == null) return false;
+          final dt = DateTime.parse(dtStr);
+          return dt.isAfter(
+                startThreshold.subtract(const Duration(seconds: 1)),
+              ) &&
+              dt.isBefore(endThreshold.add(const Duration(seconds: 1)));
+        });
+
+        // If current group was deleted or created within range, reset view
+        if (_currentGroupId != null) {
+          final currentGroupStillExists = _groups.any(
+            (g) => _safeId(g['id']) == _currentGroupId,
+          );
+          if (!currentGroupStillExists) {
+            _currentGroupId = null;
+            _currentGroupExpenses = [];
+            _currentGroupSettlements = [];
+            _groupBalances = {};
+          } else {
+            // Refresh current group's data to reflect deleted expenses/settlements
+            await fetchGroups(); // To get actual group list sync
+            await fetchGlobalData();
+            if (_currentGroupId != null) {
+              await selectGroup(_currentGroupId!);
+            }
+          }
+        } else {
+          await fetchGlobalData();
+          await fetchGroups();
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();

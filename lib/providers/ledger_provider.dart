@@ -93,7 +93,6 @@ class LedgerProvider extends ChangeNotifier {
       if (user != null) {
         _currentUserId = user['userId'];
       } else {
-        debugPrint('DEBUG: No user for ledger, skipping network fetch');
         _isLoading = false;
         notifyListeners();
         return;
@@ -106,7 +105,7 @@ class LedgerProvider extends ChangeNotifier {
       notifyListeners();
 
       final data = await _appwriteService.getLedgerTransactions(limit: 25);
-      if (data != null) {
+      if (data != null && data.isNotEmpty) {
         final networkTx = data
             .map((e) => LedgerTransaction.fromJson(e))
             .toList();
@@ -118,12 +117,16 @@ class LedgerProvider extends ChangeNotifier {
         await _ledgerBox.clear();
         await _ledgerBox.putAll({for (var t in networkTx) t.id: t});
       } else {
+        // SERVER IS EMPTY or Error: clear local state
+        _ledgerTransactions = [];
+        _incomingRequests = [];
+        _outgoingRequests = [];
+        _notes = [];
         _hasMore = false;
+        await _ledgerBox.clear();
       }
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        debugPrint('Error fetching ledger: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
     } finally {
       _isLoading = false;
       if (_ledgerTransactions.isNotEmpty ||
@@ -219,7 +222,6 @@ class LedgerProvider extends ChangeNotifier {
         _hasMore = false;
       }
     } catch (e) {
-      debugPrint('Error loading more ledger: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -249,9 +251,6 @@ class LedgerProvider extends ChangeNotifier {
         !phone.startsWith('local:')) {
       status = 'pending';
     }
-    print(
-      'DEBUG: addLedgerTransaction - Phone: $phone, Status: $status, CustomStatus: $customStatus',
-    );
 
     // Standardize naming to avoid "Me giving to Me" messiness
     final displayOtherName =
@@ -338,7 +337,6 @@ class LedgerProvider extends ChangeNotifier {
         try {
           realTx = LedgerTransaction.fromJson(result);
         } catch (e) {
-          print('DEBUG: JSON Parse Error: $e');
           _removeFromLocal(tempId, status);
           notifyListeners();
           return 'JSON Parse Failed: $e';
@@ -372,7 +370,6 @@ class LedgerProvider extends ChangeNotifier {
         notifyListeners();
         return null;
       } else {
-        // print('DEBUG: Backend returned NULL result');
         _removeFromLocal(tempId, status);
         notifyListeners();
         return 'Failed to create transaction';
@@ -423,7 +420,6 @@ class LedgerProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint('Error accepting transaction: $e');
       // Revert if error
       _ledgerTransactions.removeWhere((t) => t.id == tx.id);
       _incomingRequests.add(tx);
@@ -459,7 +455,6 @@ class LedgerProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      debugPrint('Error rejecting transaction: $e');
       if (removedTx != null) {
         _incomingRequests.add(removedTx);
         notifyListeners();
@@ -628,9 +623,7 @@ class LedgerProvider extends ChangeNotifier {
                 Transaction.fromJson(result),
               );
             }
-          } catch (e) {
-            debugPrint("Sync Error for tx ${ledgerTx.id}: $e");
-          }
+          } catch (e) {}
         }
       }
     }
@@ -715,8 +708,44 @@ class LedgerProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+    } catch (e) {}
+  }
+
+  Future<void> resetDue({DateTime? startDate, DateTime? endDate}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _initHive();
+
+      // 1. Server-side deletion
+      await _appwriteService.deleteAllLedgerTransactions(
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // 2. Clear local data
+      if (startDate == null && endDate == null) {
+        if (_isHiveInitialized) {
+          await _ledgerBox.clear();
+        }
+        _ledgerTransactions = [];
+        _incomingRequests = [];
+        _outgoingRequests = [];
+        _notes = [];
+      } else {
+        // Partial reset: Remove matching items from local list and Hive PROACTIVELY
+        await fetchLedgerTransactions();
+      }
+      notifyListeners();
+
+      _isLoading = false;
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching participant photos: $e');
+      _isLoading = false;
+
+      notifyListeners();
+      rethrow;
     }
   }
 }

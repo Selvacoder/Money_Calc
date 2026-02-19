@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../providers/transaction_provider.dart';
 import '../providers/user_provider.dart';
 import '../providers/currency_provider.dart';
 import '../utils/formatters.dart';
@@ -14,6 +13,7 @@ import 'settings/privacy_screen.dart';
 import 'settings/help_screen.dart';
 import 'settings/about_screen.dart';
 import 'settings/bank_details_screen.dart';
+import 'settings/reset_options_screen.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
@@ -297,56 +297,19 @@ class AccountScreen extends StatelessWidget {
                   ),
                   _buildSettingItem(
                     context,
-                    icon: Icons.sync,
-                    title: 'Resync Data',
-                    subtitle: 'Clear local cache and refetch from server',
-                    onTap: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Resync Data?'),
-                          content: const Text(
-                            'This will clear your local data and re-download everything from the server. Use this if you see errors or missing items.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Resync'),
-                            ),
-                          ],
+                    icon: Icons.restore_outlined,
+                    title: 'Reset Options',
+                    subtitle: 'Granularly reset data for specific modules',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ResetOptionsScreen(),
                         ),
                       );
-
-                      if (confirmed == true && context.mounted) {
-                        try {
-                          await context
-                              .read<TransactionProvider>()
-                              .clearLocalData();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Data resynced successfully'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Resync failed: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }
                     },
                   ),
+
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
@@ -493,9 +456,9 @@ class AccountScreen extends StatelessWidget {
       if (fileSize > 5 * 1024 * 1024) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image size exceeds 5MB limit'),
-              backgroundColor: Colors.red,
+            SnackBar(
+              content: const Text('Image size exceeds 5MB limit'),
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
@@ -507,10 +470,7 @@ class AccountScreen extends StatelessWidget {
         final url = await provider.uploadProfilePhoto(image.path);
         if (url != null && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile photo updated successfully'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Profile photo updated successfully')),
           );
         }
       } catch (e) {
@@ -518,7 +478,7 @@ class AccountScreen extends StatelessWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to upload photo: $e'),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }

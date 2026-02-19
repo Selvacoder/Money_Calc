@@ -33,28 +33,23 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
 
   Future<void> _loadContacts() async {
     if (_contactsLoaded) return;
-    debugPrint('DEBUG: Requesting contact permissions...');
+
     final status = await Permission.contacts.request();
-    debugPrint('DEBUG: Contact permission status: $status');
+
     if (status.isGranted) {
       try {
-        debugPrint('DEBUG: Fetching contacts...');
         final contacts = await FastContacts.getAllContacts(
           fields: [ContactField.displayName, ContactField.phoneNumbers],
         );
-        debugPrint('DEBUG: Fetched ${contacts.length} contacts');
+
         if (mounted) {
           setState(() {
             _contacts = contacts;
             _contactsLoaded = true;
           });
         }
-      } catch (e) {
-        debugPrint('DEBUG: Error loading contacts: $e');
-      }
-    } else {
-      debugPrint('DEBUG: Contact permission denied or restricted');
-    }
+      } catch (e) {}
+    } else {}
   }
 
   // Copied Dialog Logic
@@ -153,9 +148,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                               }
                             });
                           }
-                        } catch (e) {
-                          debugPrint('Error in remote search: $e');
-                        }
+                        } catch (e) {}
                       }
                     },
                     decoration: InputDecoration(
@@ -530,13 +523,7 @@ class _LedgerDashboardState extends State<LedgerDashboard> {
                               customStatus == 'notes' &&
                               mounted) {
                             messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Added to Notes.',
-                                  style: GoogleFonts.inter(color: Colors.white),
-                                ),
-                                backgroundColor: Colors.orange.shade700,
-                              ),
+                              const SnackBar(content: Text('Added to Notes.')),
                             );
                           }
 

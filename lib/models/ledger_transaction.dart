@@ -65,7 +65,6 @@ class LedgerTransaction {
       try {
         parsedDate = DateTime.parse(dateStr).toLocal();
       } catch (e) {
-        print('DEBUG: Date Parse Error: $e');
         parsedDate = DateTime.now();
       }
     } else {

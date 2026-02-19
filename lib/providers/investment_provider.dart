@@ -103,7 +103,9 @@ class InvestmentProvider extends ChangeNotifier {
         await _investmentBox.clear();
         await _investmentBox.putAll({for (var i in _investments) i.id: i});
       } else {
+        _investments = [];
         _hasMoreInvestments = false;
+        await _investmentBox.clear();
       }
 
       if (invData.isNotEmpty) {
@@ -120,17 +122,17 @@ class InvestmentProvider extends ChangeNotifier {
           await _transactionBox.clear();
           await _transactionBox.putAll({for (var t in _transactions) t.id: t});
         } else {
+          _transactions = [];
           _hasMoreTransactions = false;
+          await _transactionBox.clear();
         }
       } else {
-        debugPrint(
-          'DEBUG: fetchInvestments - No investments found, skipping transaction fetch to avoid 401.',
-        );
+        _transactions = [];
+        _hasMoreTransactions = false;
+        await _transactionBox.clear();
       }
     } catch (e) {
-      if (e is! AppwriteException || e.code != 401) {
-        print('Error fetching investments: $e');
-      }
+      if (e is! AppwriteException || e.code != 401) {}
     } finally {
       _isLoading = false;
       Future.microtask(() => notifyListeners());
@@ -225,7 +227,6 @@ class InvestmentProvider extends ChangeNotifier {
         );
       }
     } catch (e) {
-      print('Error adding investment: $e');
       // Revert? Or Keep offline? Keeping offline for now.
     }
   }
@@ -387,17 +388,6 @@ class InvestmentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clearLocalData() async {
-    if (_isHiveInitialized) {
-      await _investmentBox.clear();
-      await _transactionBox.clear();
-    }
-    _investments = [];
-    _transactions = [];
-    notifyListeners();
-    await fetchInvestments();
-  }
-
   Future<void> loadMoreInvestmentTransactions() async {
     if (!_hasMoreTransactions || _isLoading) return;
 
@@ -429,7 +419,6 @@ class InvestmentProvider extends ChangeNotifier {
         _hasMoreTransactions = false;
       }
     } catch (e) {
-      print('Error loading more investment transactions: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -465,7 +454,83 @@ class InvestmentProvider extends ChangeNotifier {
         _hasMoreInvestments = false;
       }
     } catch (e) {
-      print('Error loading more investments: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetInvest({DateTime? startDate, DateTime? endDate}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _initHive();
+
+      // 1. Clear local data PROACTIVELY (BEFORE server call)
+      if (startDate == null && endDate == null) {
+        if (_isHiveInitialized) {
+          await _investmentBox.clear();
+          await _transactionBox.clear();
+        }
+        _investments = [];
+        _transactions = [];
+      } else {
+        // Partial reset: Remove matching items locally PROACTIVELY
+        final startThreshold = startDate ?? DateTime(1970);
+        final endThreshold = endDate ?? DateTime(2100);
+
+        // Prune Investments
+        final invToRemove = _investments.where((i) {
+          // Fallback to lastUpdated if createdAt is not in model, or check both?
+          // Using lastUpdated for local check as it's the most common "activity" date
+          return i.lastUpdated.isAfter(
+                startThreshold.subtract(const Duration(seconds: 1)),
+              ) &&
+              i.lastUpdated.isBefore(
+                endThreshold.add(const Duration(seconds: 1)),
+              );
+        }).toList();
+
+        for (var i in invToRemove) {
+          _investments.remove(i);
+          if (_isHiveInitialized) {
+            await _investmentBox.delete(i.id);
+          }
+        }
+
+        // Prune Transactions
+        final txToRemove = _transactions.where((t) {
+          return t.dateTime.isAfter(
+                startThreshold.subtract(const Duration(seconds: 1)),
+              ) &&
+              t.dateTime.isBefore(endThreshold.add(const Duration(seconds: 1)));
+        }).toList();
+
+        for (var t in txToRemove) {
+          _transactions.remove(t);
+          if (_isHiveInitialized) {
+            await _transactionBox.delete(t.id);
+          }
+        }
+      }
+
+      notifyListeners(); // Refresh UI immediately
+
+      // 2. Server-side deletion
+      await _appwriteService.deleteAllInvestments(
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // Refetch to sync any remaining server state or confirm empty
+      await fetchInvestments();
+    } catch (e) {
+      if (e is AppwriteException && e.code == 401) {
+      } else {}
+      // If server fails, we've already pruned locally.
+      // The subsequent fetchInvestments() should restore state if it was a failure to delete.
+      await fetchInvestments();
     } finally {
       _isLoading = false;
       notifyListeners();
